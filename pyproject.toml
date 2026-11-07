@@ -29,6 +29,7 @@ dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10", "pandas-stubs", "httpx"]
 
 [project.scripts]
 emsbench-baseline = "emsbench.baseline:main"
+emsbench-app = "emsbench.api.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

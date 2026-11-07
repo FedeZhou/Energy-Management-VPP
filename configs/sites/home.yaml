@@ -1,0 +1,16 @@
+# Example site: one home with rooftop solar, a home battery and one EV charger.
+# Equipment sizes are the CityLearn 2022 defaults (see each parameter's source in
+# emsbench.sim.model). Positions (ui) only place the icons on the canvas.
+label: Home with solar, battery and EV
+description: >-
+  A single home (CityLearn Building 1 load), 4 kWp of solar, a 6.4 kWh battery and
+  one 11 kW charger, on a time-of-use tariff.
+site:
+  name: Home
+  tariff: {price_profile: cl2022/tou}
+  controller: {battery: self_consumption, ev: as_fast_as_possible}
+  assets:
+    - {type: building, id: home, name: Home, load_profile: cl2022/home_1, ui: {x: 420, y: 60}}
+    - {type: pv, id: pv, name: Rooftop solar, capacity_kwp: 4.0, profile: cl2022/pv_1, ui: {x: 120, y: 60}}
+    - {type: battery, id: battery, name: Home battery, ui: {x: 120, y: 340}}
+    - {type: ev_charger, id: charger, name: Driveway charger, sessions: cl2022/charger_1_1, ui: {x: 420, y: 340}}

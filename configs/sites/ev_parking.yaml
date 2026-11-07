@@ -1,0 +1,23 @@
+# Example site: a small apartment block with a shared car park.
+# Sizes here are example scenario choices to explore, NOT sourced real-world values:
+# 10 homes, 30 kWp solar, 50 kWh / 25 kW battery, 4 chargers, 80 kW connection.
+# At 80 kW the smart controller stays within the limit while the baseline (idle battery,
+# EVs charging on arrival) exceeds it; checked with the simulator on 2026-11-07.
+# Per-unit device parameters (charger power, efficiencies) keep their sourced defaults.
+label: Apartment block with shared EV parking
+description: >-
+  Ten homes like CityLearn Building 10, 30 kWp solar, a 50 kWh battery and four 11 kW
+  chargers behind an 80 kW grid connection, on dynamic prices. Example sizes, not sourced.
+site:
+  name: Apartment block + EV parking
+  grid: {import_limit_kw: 80}
+  tariff: {price_profile: cl2022/dynamic}
+  controller: {battery: price_arbitrage, ev: spread_until_departure}
+  assets:
+    - {type: building, id: block, name: Apartment block, load_profile: cl2022/home_10, scale: 10, ui: {x: 400, y: 20}}
+    - {type: pv, id: pv, name: Roof solar, capacity_kwp: 30, profile: cl2022/pv_10, ui: {x: 100, y: 40}}
+    - {type: battery, id: battery, name: Shared battery, capacity_kwh: 50, power_kw: 25, ui: {x: 100, y: 470}}
+    - {type: ev_charger, id: c1, name: Charger 1, sessions: cl2022/charger_1_1, ui: {x: 680, y: 150}}
+    - {type: ev_charger, id: c2, name: Charger 2, sessions: cl2022/charger_4_1, ui: {x: 680, y: 275}}
+    - {type: ev_charger, id: c3, name: Charger 3, sessions: cl2022/charger_5_1, ui: {x: 680, y: 400}}
+    - {type: ev_charger, id: c4, name: Charger 4, sessions: cl2022/charger_7_1, ui: {x: 680, y: 525}}
