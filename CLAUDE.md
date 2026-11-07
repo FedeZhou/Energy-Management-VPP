@@ -77,3 +77,11 @@ UV_SYSTEM_CERTS=1 VIRTUAL_ENV="$USERPROFILE/.venvs/energy-vpp" \
 - District series have T entries, building series T+1. First step is labelled hour 24 of the
   previous day.
 - `StorageDevice.round_trip_efficiency` actually returns sqrt(efficiency), i.e. one-way.
+
+## Replay page
+
+```bash
+$PY -m emsbench.viz.export       # hourly site series per controller -> results/raw/replay.json (~5 min)
+$PY -m emsbench.viz.build_page   # injects it into web/replay.html -> results/raw/replay.html
+```
+Published privately as an Artifact: https://claude.ai/artifact/BNSTVCwDxWpTYNpaJtbrYC
