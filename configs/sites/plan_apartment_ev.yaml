@@ -10,6 +10,10 @@ description: >-
   chargers behind an 80 kW grid connection, on dynamic prices. Example sizes, not sourced.
 site:
   name: Apartment block + EV parking
+  mode: plan
+  start: 2024-08-01
+  days: 365
+  step_minutes: 60
   grid: {import_limit_kw: 80}
   tariff: {price_profile: cl2022/dynamic}
   controller: {battery: price_arbitrage, ev: spread_until_departure}

@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from emsbench.sim.engine import FloatArray, SimResult, simulate
-from emsbench.sim.model import ASSET_TYPES, ControllerSpec, GridConnection, Site, Tariff
+from emsbench.sim.model import ASSET_TYPES, MAX_STEPS, ControllerSpec, GridConnection, Site, Tariff
 from emsbench.sim.profiles import default_library
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -48,7 +48,7 @@ def _fields(model: type[Any]) -> list[dict[str, Any]]:
         out.append({
             "name": name, "label": prop.get("title", name), "type": kind,
             "enum": prop.get("enum"), "default": schema["properties"][name].get("default"),
-            "unit": prop.get("unit", ""), "help": prop.get("description", ""),
+            "unit": prop.get("unit", ""), "help": prop.get("description", ""), "format": prop.get("format", ""),
             "source": prop.get("source", ""), "options": prop.get("options", ""),
             "min": prop.get("minimum"), "max": prop.get("maximum"),
             "nullable": "anyOf" in schema["properties"][name],
@@ -66,7 +66,8 @@ def catalog() -> dict[str, Any]:
         "site": {
             "grid": _fields(GridConnection), "tariff": _fields(Tariff),
             "controller": _fields(ControllerSpec),
-            "period": [f for f in _fields(Site) if f["name"] in ("days", "start_day")],
+            "period": [f for f in _fields(Site) if f["name"] in ("start", "days", "step_minutes")],
+            "max_steps": MAX_STEPS,
         },
     }
 
@@ -74,7 +75,7 @@ def catalog() -> dict[str, Any]:
 @app.get("/api/profiles")
 def profiles() -> dict[str, Any]:
     lib = default_library()
-    return {"start_date": lib.start_date, "steps": lib.steps, **lib.catalogue()}
+    return {"warnings": lib.warnings, **lib.catalogue()}
 
 
 @app.get("/api/presets")
@@ -83,7 +84,7 @@ def presets() -> list[dict[str, Any]]:
     for path in sorted(PRESETS_DIR.glob("*.yaml")):
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         site = Site.model_validate(data["site"])
-        out.append({"id": path.stem, "label": data.get("label", path.stem),
+        out.append({"id": path.stem, "label": data.get("label", path.stem), "mode": site.mode,
                     "description": data.get("description", ""),
                     "site": site.model_dump(mode="json")})
     return out
@@ -99,6 +100,9 @@ def _result_json(r: SimResult) -> dict[str, Any]:
         "warnings": r.warnings,
         "site": {k: _series(v) for k, v in r.site.items()},
         "assets": {a: {k: _series(v) for k, v in s.items()} for a, s in r.assets.items()},
+        "sessions": r.sessions,
+        "sources": r.sources,
+        "currency": r.currency,
     }
 
 
@@ -113,12 +117,11 @@ def run_simulation(site: Site) -> dict[str, Any]:
                 update={"battery": "idle", "ev": "as_fast_as_possible"})}
         )
         baseline = simulate(baseline_site, lib)
-    except KeyError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
-    s0 = site.start_day * 24
+    except (KeyError, ValueError) as e:
+        raise HTTPException(status_code=422, detail=str(e).strip("'\"")) from e
     return {
-        "time": {"start_date": lib.start_date, "first_step": s0, "step_hours": result.step_hours,
-                 "month": result.month.tolist(), "hour": result.hour.tolist()},
+        "time": {"start": result.start.isoformat(), "step_minutes": result.step_minutes,
+                 "steps": int(result.site["grid_kw"].size)},
         "result": _result_json(result),
         "baseline": {"kpis": {k: round(v, 4) for k, v in baseline.kpis.items()},
                      "site": {"grid_kw": _series(baseline.site["grid_kw"])}},
@@ -141,6 +144,8 @@ def main() -> None:
     from emsbench.net import use_system_certificates
 
     use_system_certificates()
-    default_library()  # download/cache data before the first request
+    lib = default_library()  # download/cache data before the first request
+    for w in lib.warnings:
+        print("data warning:", w)
     print("emsbench app: http://localhost:8000")
     uvicorn.run(app, host="127.0.0.1", port=8000)

@@ -7,6 +7,10 @@ description: >-
   one 11 kW charger, on a time-of-use tariff.
 site:
   name: Home
+  mode: plan
+  start: 2024-08-01
+  days: 365
+  step_minutes: 60
   tariff: {price_profile: cl2022/tou}
   controller: {battery: self_consumption, ev: as_fast_as_possible}
   assets:

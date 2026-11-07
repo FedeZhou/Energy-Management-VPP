@@ -16,6 +16,7 @@ filelock==4.2.9
 fsspec==2026.9.0
 gymnasium==1.4.0
 h11==0.16.0
+h5py==3.16.0
 httpcore==1.0.9
 httptools==0.9.0
 httpx==0.28.1
@@ -37,12 +38,15 @@ pandas-stubs==3.1.0.261029
 pathspec==1.1.1
 platformdirs==4.14.5
 pluggy==1.7.0
+pvlib==0.16.1
+pyarrow==26.0.1
 pydantic==2.14.3
 pydantic-core==2.50.4
 pygments==2.21.0
 pytest==9.2.0
 python-dateutil==4.0.0
 python-dotenv==1.2.4
+pytz==2026.6
 pyyaml==6.0.3
 requests==2.34.2
 ruff==0.17.4

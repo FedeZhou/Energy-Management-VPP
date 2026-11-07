@@ -8,12 +8,16 @@ default value, the public source of that value.
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 CL_EVS_SCHEMA = "CityLearn citylearn_challenge_2022_phase_all_plus_evs schema.json"
 CL_P1_SCHEMA = "CityLearn citylearn_challenge_2022_phase_1 schema.json"
+# Nominal low-voltage phase-to-neutral voltage in Europe (IEC 60038: 230/400 V systems).
+PHASE_VOLTAGE = 230.0
+MAX_STEPS = 110_000  # keeps a run under ~20 s; e.g. a year at 5-minute steps
 
 
 def param(
@@ -127,6 +131,16 @@ class EVCharger(AssetBase):
         help="Which cars arrive, when they leave, and how much energy they need.",
         source="CityLearn 2022 EV dataset, charger_1_1.csv",
     )
+    phases: Literal[1, 3] = param(
+        3, "Phases", help="Three-phase chargers spread their load over L1-L3; single-phase "
+        "chargers put it all on one phase.",
+    )
+    phase: Literal["L1", "L2", "L3"] = param("L1", "Phase (single-phase chargers)")
+    min_current_a: float = param(
+        6.0, "Minimum charging current", unit="A", ge=0,
+        help="Chargers cannot charge below this current per phase; they pause instead.",
+        source="IEC 61851-1: the lowest current a charger may signal to the car is 6 A",
+    )
 
 
 Asset = Annotated[Building | SolarPV | Battery | EVCharger, Field(discriminator="type")]
@@ -137,7 +151,6 @@ ASSET_TYPES: dict[str, type[AssetBase]] = {
 
 class GridConnection(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     import_limit_kw: float | None = param(
         None, "Import limit", unit="kW", ge=0,
         help="Maximum power the site may draw (connection or transformer rating). "
@@ -148,12 +161,22 @@ class GridConnection(BaseModel):
         help="Maximum power the site may feed back. Solar is curtailed above it. "
         "Empty = unlimited.",
     )
+    fuse_a: float | None = param(
+        None, "Fuse per phase", unit="A", ge=0,
+        help="Main fuse rating per phase (three-phase, 230 V to neutral). EV charging is "
+        "slowed so no phase exceeds it. Empty = not checked.",
+    )
 
 
 class Tariff(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     price_profile: str = param("cl2022/tou", "Import price", options="price")
+    price_adder: float = param(
+        0.0, "Price adder", unit="per kWh",
+        help="Added to every import price: grid fees, taxes, supplier margin. Spot-price "
+        "profiles need this to look like a real dynamic tariff. Enter your tariff's value.",
+    )
     export_price: float = param(
         0.0, "Export price", unit="per kWh", ge=0,
         help="What exported energy earns.",
@@ -161,13 +184,13 @@ class Tariff(BaseModel):
     )
     demand_charge_per_kw_month: float = param(
         0.0, "Demand charge", unit="per kW per month", ge=0,
-        help="Charged on each month's highest hourly import. Common for commercial sites. "
+        help="Charged on each month's highest import (per time step). Common for commercial sites. "
         "Enter your tariff's value; there is no default.",
     )
 
 
 BatteryStrategy = Literal["idle", "self_consumption", "price_arbitrage", "peak_shaving"]
-EVStrategy = Literal["as_fast_as_possible", "spread_until_departure"]
+EVStrategy = Literal["as_fast_as_possible", "spread_until_departure", "cheapest_hours", "solar_surplus"]
 
 
 class ControllerSpec(BaseModel):
@@ -186,7 +209,9 @@ class ControllerSpec(BaseModel):
     ev: EVStrategy = param(
         "as_fast_as_possible", "EV charging strategy",
         help="as_fast_as_possible: full power on arrival. spread_until_departure: the "
-        "lowest constant power that still finishes by departure.",
+        "lowest steady power that still finishes by departure. cheapest_hours: charge in the "
+        "cheapest time steps before departure. solar_surplus: charge from spare solar, and at "
+        "full power only when needed to finish by departure.",
     )
 
 
@@ -194,9 +219,26 @@ class Site(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = "My site"
-    days: int = param(365, "Days to simulate", ge=1, le=365)
-    start_day: int = param(0, "Start day", ge=0, le=364)
+    mode: Literal["plan", "operate"] = param(
+        "plan", "Mode", help="plan: long periods, hourly. operate: days, minutes.",
+    )
+    start: dt.date = param(dt.date(2024, 8, 1), "Start date")
+    days: int = param(365, "Days to simulate", ge=1, le=366)
+    step_minutes: Literal[1, 5, 15, 60] = param(60, "Time step", unit="min")
     grid: GridConnection = Field(default_factory=GridConnection)
     tariff: Tariff = Field(default_factory=Tariff)
     controller: ControllerSpec = Field(default_factory=ControllerSpec)
     assets: list[Asset] = Field(default_factory=list)
+
+    @property
+    def steps(self) -> int:
+        return self.days * 24 * 60 // self.step_minutes
+
+    @model_validator(mode="after")
+    def _check_size(self) -> Site:
+        if self.steps > MAX_STEPS:
+            raise ValueError(
+                f"{self.days} days at {self.step_minutes}-minute steps is {self.steps:,} steps; "
+                f"the limit is {MAX_STEPS:,}. Use a longer step or fewer days."
+            )
+        return self
