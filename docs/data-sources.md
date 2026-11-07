@@ -39,3 +39,10 @@ Required by the CC BY licences below; also shown next to each profile in the app
   The results show the real dates used.
 - **Times.** European sources use fixed CET (UTC+1) without daylight saving, so summer clock times are one hour
   off wall-clock time. SINTEF timestamps are local Norwegian time as published.
+
+## Validation checks
+
+| Date | Check | Result |
+| --- | --- | --- |
+| 2026-11-08 | Modelled solar, Konstanz, south 30°, Nov 2025 - Oct 2026, vs PVGIS 5.3 (EU JRC, SARAH3/ERA5, 2005-2023 mean, 14% losses, horizon shading on) | Ours 1,185 kWh/kWp, PVGIS 1,130 ± 53 (interannual SD): +4.9%, about 1 SD. Monthly shape consistent (Jan 43 vs 44, Oct 73 vs 74); differences fit one real year vs a long-term mean. PVGIS includes horizon shading, our model does not. Source: https://re.jrc.ec.europa.eu/api/v5_3/PVcalc |
+| 2026-11-07 | Engine vs CityLearn, same home without battery | Grid power and cost match to 5 significant digits (automated test) |
