@@ -85,3 +85,22 @@ $PY -m emsbench.viz.export       # hourly site series per controller -> results/
 $PY -m emsbench.viz.build_page   # injects it into web/replay.html -> results/raw/replay.html
 ```
 Published privately as an Artifact: https://claude.ai/artifact/BNSTVCwDxWpTYNpaJtbrYC
+
+## Site Lab (configurable simulator app)
+
+Generic engine in `src/emsbench/sim/` (own asset model; CityLearn is only a data source and
+a cross-check), FastAPI in `src/emsbench/api/app.py`, React app in `web/app/`.
+
+```bash
+# run the app (serves the built frontend): http://localhost:8000
+"$USERPROFILE/.venvs/energy-vpp/Scripts/emsbench-app.exe"
+# frontend: build after changes (Node 22), or live-reload dev server on :5173
+cd web/app && npm run build      # or: npm run dev  (with the API running on :8000)
+```
+- `web/app/node_modules` is a junction to `%USERPROFILE%\.cache\emsbench\node_modules`
+  (keeps OneDrive from syncing it). Recreate with `mklink /J` if missing.
+- Example sites: `configs/sites/*.yaml` (read on every request). Sizes there are example
+  choices; device parameters cite their sources in `emsbench.sim.model`.
+- Add an asset type: model class in `sim/model.py` (+ `ASSET_TYPES`), physics in
+  `sim/engine.py`, tests, then `ASSET_INFO` in the API and an icon/colour in `web/app/src`.
+- Opening `http://localhost:8000/#run` runs the first example on load (demos/screenshots).

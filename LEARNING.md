@@ -114,3 +114,48 @@ We want to be able to leave CityLearn later without rewriting the benchmark. So:
 **Equivalent full cycles (EFC)** = total energy discharged / battery capacity. "One cycle" =
 emptying a full battery once. It is the simplest wear proxy; it treats ten 10% dips the same as
 one full discharge, which real chemistry does not.
+
+---
+
+## 8. Our own engine (Site Lab)
+
+From November 2026 the simulator core is our own engine (`src/emsbench/sim/`), not CityLearn.
+CityLearn remains the source of the data and a cross-check.
+
+**A site** is one grid connection (one meter) with assets on it: buildings (fixed demand),
+solar panels, batteries and EV chargers. The app edits exactly this structure, and it saves
+as JSON or YAML.
+
+**Every hour the engine:**
+1. reads the data: building demand, solar output per kWp, price, cars arriving;
+2. asks the controller what it wants: battery power, and charging power per car;
+3. applies physics: battery power and fullness limits, losses (round-trip efficiency, split
+   equally between charging and discharging), and what each car still needs;
+4. runs a **safety layer** for the grid connection. If the site would draw more than its
+   limit, it first stops charging the battery, then discharges it harder, then slows the
+   EVs, and records whatever overload is left. Above an export limit it curtails solar;
+5. records everything and bills it: energy × price, minus exports × export price, plus a
+   demand charge on each month's highest hour if you set one.
+
+A controller can therefore never break a limit. It can only ask for something the site
+can't do, and the safety layer shows the consequence.
+
+**Controllers so far** (all simple rules):
+- *Self-consumption*: store spare solar, use it when short. The default for most home batteries.
+- *Price arbitrage*: also buy at the day's cheapest hour and use it at the most expensive.
+- *Peak shaving*: keep grid import under a threshold.
+- EVs charge either as fast as possible, or at the lowest steady power that still finishes
+  by departure.
+
+**Baseline.** Every run is compared with the same site with the battery idle and EVs
+charging on arrival, i.e. "the equipment, but no smart control".
+
+**Checked how?** Unit tests on synthetic data (energy balance each hour, limits, losses,
+EV delivery, demand charges), and a test showing that for the same home without a battery
+our grid power and cost equal CityLearn's to 5 significant digits. Battery physics are
+simpler than CityLearn's (constant efficiency instead of power-dependent curves), on
+purpose: a transparent baseline first, detail later where it changes decisions.
+
+**Data caveats:** the EV sessions appear synthetic and their generation is not documented;
+the dataset's "dynamic" prices have no documented origin. The app shows these notes next to
+each profile.
