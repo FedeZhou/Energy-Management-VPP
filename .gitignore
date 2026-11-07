@@ -1,0 +1,23 @@
+# Third-party reference repos (read-only clones, never committed)
+reference/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Simulation outputs (only curated scoreboards in results/ are committed)
+results/raw/
+SimulationData/
+*.log
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
