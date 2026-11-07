@@ -138,3 +138,49 @@ select, input[type="text"], input:not([type]), input[type="number"] {
 .time-label { font: 600 13px var(--font-num); min-width: 170px; }
 .charts { position: relative; }
 .playhead { position: absolute; top: 24px; bottom: 30px; left: 0; width: 0; border-left: 2px solid var(--ink); opacity: 0.45; pointer-events: none; }
+
+/* Mode switch */
+.modes { display: inline-flex; padding: 3px; gap: 2px; border: 1px solid var(--hair); border-radius: 9px; background: var(--panel-2); }
+.mode { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; padding: 5px 12px; border-radius: 7px; cursor: pointer; font-weight: 600; color: var(--ink-2); }
+.mode.on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+.mode:hover:not(.on) { color: var(--ink); }
+
+/* Period quick buttons */
+.quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-btn { border: 1px solid var(--hair); background: var(--panel); border-radius: 99px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+.chip-btn.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+input[type="date"] { border: 1px solid var(--hair); background: var(--panel); border-radius: 6px; padding: 4px 8px; }
+
+/* Phase bars on the grid-connection node */
+.phase-bars { display: grid; gap: 3px; margin-top: 2px; }
+.phase-bar { display: grid; grid-template-columns: 22px 1fr 40px; align-items: center; gap: 6px; font-size: 11px; }
+.phase-bar span:last-child { text-align: right; }
+.pb-track { height: 5px; background: var(--hair); border-radius: 3px; overflow: hidden; }
+.pb-fill { height: 100%; background: var(--c-grid); border-radius: 3px; transition: width 0.15s; }
+.pb-fill.hot { background: var(--bad); }
+
+/* EV visit timeline */
+.gantt { display: flex; flex-direction: column; gap: 6px; }
+.gantt-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.gantt-head h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-2); }
+.gantt-grid { display: flex; flex-direction: column; gap: 4px; }
+.gantt-axis { position: relative; height: 16px; margin-left: 120px; font-size: 11px; color: var(--muted); }
+.gantt-axis span { position: absolute; transform: translateX(4px); white-space: nowrap; }
+.gantt-row { display: grid; grid-template-columns: 112px 1fr; gap: 8px; align-items: center; }
+.gantt-label { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gantt-track { position: relative; height: 24px; background: var(--panel-2); border-radius: 5px; overflow: hidden; }
+.gantt-day { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--hair); }
+.gantt-cursor { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--ink); opacity: 0.5; pointer-events: none; }
+.visit { position: absolute; top: 3px; bottom: 3px; padding: 0; border: 1px solid var(--c-ev); border-radius: 4px; background: color-mix(in srgb, var(--c-ev) 14%, transparent); overflow: hidden; cursor: pointer; min-width: 3px; }
+.visit:hover { filter: brightness(1.08); }
+.visit.short { border: 2px solid var(--bad); }
+.visit.open { border-style: dashed; }
+.visit-fill { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--c-ev) 55%, transparent); }
+.visit-text { position: relative; font: 600 10px var(--font-num); color: var(--ink); padding: 0 4px; white-space: nowrap; line-height: 16px; }
+
+/* Data sources */
+.sources summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+.sources table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+.sources th, .sources td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--hair); vertical-align: top; }
+.sources th { color: var(--muted); font-weight: 600; }
+.warn-text { color: var(--warn); font-weight: 600; }

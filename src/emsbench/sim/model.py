@@ -135,7 +135,11 @@ class EVCharger(AssetBase):
         3, "Phases", help="Three-phase chargers spread their load over L1-L3; single-phase "
         "chargers put it all on one phase.",
     )
-    phase: Literal["L1", "L2", "L3"] = param("L1", "Phase (single-phase chargers)")
+    phase: Literal["L1", "L2", "L3"] = param(
+        "L1", "Phase for single-phase charging",
+        help="Used by single-phase chargers, and by single-phase cars on a three-phase charger (they "
+        "draw from one phase only). Spread chargers over L1-L3 to balance the load.",
+    )
     min_current_a: float = param(
         6.0, "Minimum charging current", unit="A", ge=0,
         help="Chargers cannot charge below this current per phase; they pause instead.",

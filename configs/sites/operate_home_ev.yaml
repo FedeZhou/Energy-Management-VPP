@@ -1,24 +1,24 @@
-# Operate example: one German home, 15-minute steps, three summer days.
+# Operate example: one German home, 15-minute steps, one summer week.
 # Data: measured home load (OPSD home 4, EV removed), solar modelled from Konstanz weather
-# (Open-Meteo + pvlib), measured Norwegian EV sessions (SINTEF, garage ASK spot 31, ~10 kW car),
+# (Open-Meteo + pvlib), measured Norwegian EV sessions (SINTEF, garage ASK spot 7, ~7 kW car, visits most evenings),
 # German 15-minute day-ahead prices (Energy-Charts / SMARD). See each profile's source in the app.
 # Equipment sizes (8 kWp, 10 kWh / 5 kW battery, 3 x 25 A fuse) are example choices, not sourced.
 # Prices are wholesale spot prices: set a price adder for your real tariff.
 label: Home with solar, battery and EV (15-min)
 description: >-
   Measured German household on a 3 x 25 A connection with 8 kWp solar, a 10 kWh battery and an
-  11 kW charger. The car charges from solar surplus. Three days in June at 15-minute steps.
+  11 kW charger. The car charges in the cheapest hours before it leaves. One June week, 15-minute steps.
 site:
   name: Home with EV (15-min)
   mode: operate
   start: 2026-06-08
-  days: 3
+  days: 7
   step_minutes: 15
   grid: {fuse_a: 25}
   tariff: {price_profile: ec/de_lu_da}
-  controller: {battery: self_consumption, ev: solar_surplus}
+  controller: {battery: self_consumption, ev: cheapest_hours}
   assets:
     - {type: building, id: home, name: Home, load_profile: opsd/residential4, ui: {x: 420, y: 40}}
     - {type: pv, id: pv, name: Rooftop solar, capacity_kwp: 8, profile: om/konstanz_south30, ui: {x: 100, y: 40}}
     - {type: battery, id: battery, name: Home battery, capacity_kwh: 10, power_kw: 5, ui: {x: 100, y: 380}}
-    - {type: ev_charger, id: charger, name: Wallbox, sessions: sintef/ASK_Plass31, phases: 3, ui: {x: 420, y: 380}}
+    - {type: ev_charger, id: charger, name: Wallbox, sessions: sintef/ASK_Plass7, phases: 3, ui: {x: 420, y: 380}}

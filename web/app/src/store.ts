@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { api, type Asset, type AssetType, type Catalog, type Preset, type Profiles, type SimResponse, type Site } from "./api";
+import { api, type Asset, type AssetType, type Catalog, type Mode, type Preset, type Profiles, type SimResponse, type Site } from "./api";
+import { MODE_DEFAULTS, timeAt } from "./util";
 
 export const METER_ID = "__meter";
 export const UTILITY_ID = "__utility";
@@ -22,6 +23,7 @@ interface State {
   collapsed: boolean;
 
   init: () => Promise<void>;
+  setMode: (mode: Mode) => void;
   setCollapsed: (c: boolean) => void;
   loadSite: (site: Site) => void;
   updateSite: (patch: Partial<Site>) => void;
@@ -40,19 +42,34 @@ interface State {
 
 const EMPTY_SITE: Site = {
   name: "New site",
+  mode: "plan",
+  start: "2024-08-01",
   days: 365,
-  start_day: 0,
-  grid: { import_limit_kw: null, export_limit_kw: null },
-  tariff: { price_profile: "cl2022/tou", export_price: 0, demand_charge_per_kw_month: 0 },
+  step_minutes: 60,
+  grid: { import_limit_kw: null, export_limit_kw: null, fuse_a: null },
+  tariff: { price_profile: "cl2022/tou", price_adder: 0, export_price: 0, demand_charge_per_kw_month: 0 },
   controller: { battery: "self_consumption", peak_threshold_kw: 10, ev: "as_fast_as_possible" },
   assets: [],
 };
 
+/** Where to put the grid-connection box: the centre of the assets, nudged outwards until it
+ *  does not overlap any asset box (nodes are about 220 x 110 px). */
 function centroid(assets: Asset[]): { x: number; y: number } {
   if (!assets.length) return { x: 300, y: 220 };
-  const x = assets.reduce((s, a) => s + a.ui.x, 0) / assets.length;
-  const y = assets.reduce((s, a) => s + a.ui.y, 0) / assets.length;
-  return { x: Math.round(x), y: Math.round(y) };
+  const cx = assets.reduce((s, a) => s + a.ui.x, 0) / assets.length;
+  const cy = assets.reduce((s, a) => s + a.ui.y, 0) / assets.length;
+  const free = (x: number, y: number) =>
+    assets.every((a) => Math.abs(a.ui.x - x) > 240 || Math.abs(a.ui.y - y) > 125);
+  for (let r = 0; r <= 900; r += 30) {
+    for (let k = 0; k < 16; k++) {
+      const ang = (k / 16) * 2 * Math.PI + Math.PI; // try the left side first
+      const x = cx + r * Math.cos(ang);
+      const y = cy + r * Math.sin(ang) * 0.6;
+      if (free(x, y)) return { x: Math.round(x), y: Math.round(y) };
+      if (r === 0) break;
+    }
+  }
+  return { x: Math.round(cx), y: Math.round(cy) };
 }
 
 function maxPower(r: SimResponse): number {
@@ -87,10 +104,17 @@ export const useStore = create<State>((set, get) => ({
     try {
       const [catalog, profiles, presets] = await Promise.all([api.catalog(), api.profiles(), api.presets()]);
       set({ catalog, profiles, presets });
-      if (presets.length) get().loadSite(presets[0].site);
+      const first = presets.find((p) => p.mode === "plan") ?? presets[0];
+      if (first) get().loadSite(first.site);
     } catch (e) {
       set({ error: `Could not reach the simulator API. Is it running? (${(e as Error).message})` });
     }
+  },
+
+  setMode(mode) {
+    const preset = get().presets.find((p) => p.mode === mode);
+    if (preset) get().loadSite(preset.site);
+    else set((s) => ({ site: { ...s.site, mode, ...MODE_DEFAULTS[mode] }, result: null, stale: false }));
   },
 
   loadSite(site) {
@@ -120,11 +144,18 @@ export const useStore = create<State>((set, get) => ({
     while (site.assets.some((a) => a.id === `${type}_${n}`)) n++;
     const asset: Asset = { type, id: `${type}_${n}`, name: `${spec.label} ${n}`, ui: pos };
     for (const f of spec.fields) if (f.name !== "name") asset[f.name] = f.default;
-    if (type === "ev_charger" && profiles) {
-      // Give each new charger its own car sessions where possible.
-      const used = new Set(site.assets.filter((a) => a.type === "ev_charger").map((a) => a.sessions));
-      const free = profiles.ev.find((p) => !used.has(p.id));
-      if (free) asset.sessions = free.id;
+    if (profiles) {
+      // Default to data that is real at the site's time step, and give each new charger
+      // its own cars where possible.
+      const used = new Set(site.assets.map((a) => a.sessions ?? a.load_profile ?? a.profile));
+      for (const f of spec.fields) {
+        if (!f.options) continue;
+        const fits = profiles[f.options].filter((p) => p.resolution_minutes <= site.step_minutes);
+        const pool = fits.length ? fits : profiles[f.options];
+        const current = pool.find((p) => p.id === asset[f.name]);
+        const pick = (f.options === "ev" ? pool.find((p) => !used.has(p.id)) : undefined) ?? current ?? pool[0];
+        if (pick) asset[f.name] = pick.id;
+      }
     }
     set((s) => ({ site: { ...s.site, assets: [...s.site.assets, asset] }, selectedId: asset.id, stale: s.result !== null }));
   },
@@ -153,10 +184,15 @@ export const useStore = create<State>((set, get) => ({
     set({ running: true, error: null, playing: false });
     try {
       const result = await api.simulate(get().site);
-      const T = result.result.site.grid_kw.length;
-      // Start the playhead at 18:00 on the second day, when solar is gone and prices are often high.
-      const cursor = Math.min(T - 1, result.time.hour.findIndex((h, i) => i > 24 && h === 18));
-      set({ result, stale: false, running: false, cursor: Math.max(0, cursor), maxPower: maxPower(result) });
+      const { start, step_minutes: step, steps: T } = result.time;
+      // Start the playhead at 18:00 on the first (operate) or second (plan) day: evening peak.
+      const day = get().site.mode === "operate" ? 0 : 1;
+      let cursor = 0;
+      for (let i = 0; i < T; i++) {
+        const d = timeAt(start, step, i);
+        if (d.getUTCHours() === 18 && d.getUTCMinutes() === 0 && Math.floor((i * step) / 1440) === day) { cursor = i; break; }
+      }
+      set({ result, stale: false, running: false, cursor, maxPower: maxPower(result) });
     } catch (e) {
       set({ running: false, error: (e as Error).message });
     }

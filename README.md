@@ -7,7 +7,7 @@ A site (home, office building, commercial site with battery/solar/EV chargers, d
 configuration of sources, storage and loads. Controllers compared: rule-based, deterministic MPC,
 stochastic/robust MPC, hybrid, and safe RL.
 
-Status: early. **Site Lab**, a local web app where you build a site (buildings, solar, batteries, EV chargers), run a year in about a second and watch the energy flows, is working. CityLearn baseline scoreboard in [results/](results/baseline_scoreboard.md).
+Status: early. **Site Lab**, a local web app where you build a site (buildings, solar, batteries, EV chargers), run it and watch the energy flows, is working in two modes: **Plan** (hourly, up to a year: costs, savings, wear) and **Operate** (15-minute steps over days: EV visits, phase currents, fuses), on measured open data. CityLearn baseline scoreboard in [results/](results/baseline_scoreboard.md).
 
 - Research and rationale: [docs/research.md](docs/research.md)
 - How things work, in plain language: [LEARNING.md](LEARNING.md)
@@ -22,11 +22,11 @@ python3.11 -m venv .venv && . .venv/bin/activate   # Windows: .venv\Scripts\acti
 pip install -e ".[dev]"
 pytest
 python -m emsbench.baseline --end-step 167          # one-week smoke run
+python -m emsbench.data                             # download open data (~70 MB, once)
 cd web/app && npm install && npm run build && cd ../..
 emsbench-app                                        # Site Lab at http://localhost:8000
 ```
 
-Uses only public data and open source tools. Built on
-[CityLearn](https://github.com/citylearn-project/CityLearn) (MIT).
+Uses only public, openly licensed data and open source tools: see [docs/data-sources.md](docs/data-sources.md) for sources, licences and attribution (OPSD, SINTEF/Zenodo, Energy-Charts/SMARD, Open-Meteo, CityLearn).
 
 License: MIT.

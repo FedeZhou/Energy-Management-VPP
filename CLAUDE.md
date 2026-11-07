@@ -83,19 +83,26 @@ UV_SYSTEM_CERTS=1 VIRTUAL_ENV="$USERPROFILE/.venvs/energy-vpp" \
 
 ## Site Lab (configurable simulator app)
 
-Generic engine in `src/emsbench/sim/` (own asset model; CityLearn is only a data source and
-a cross-check), FastAPI in `src/emsbench/api/app.py`, React app in `web/app/`.
+Generic engine in `src/emsbench/sim/` (own asset model; CityLearn is one data source and a cross-check),
+open-data loaders in `src/emsbench/data/`, FastAPI in `src/emsbench/api/app.py`, React app in `web/app/`.
+Two modes on one engine: **Plan** (hourly, months to a year) and **Operate** (1-15 min, days; phases, fuses).
 
 ```bash
-# run the app (serves the built frontend): http://localhost:8000
-"$USERPROFILE/.venvs/energy-vpp/Scripts/emsbench-app.exe"
-# frontend: build after changes (Node 22), or live-reload dev server on :5173
-cd web/app && npm run build      # or: npm run dev  (with the API running on :8000)
+$PY -m emsbench.data             # download + process open data into %LOCALAPPDATA%\emsbench (first run ~70 MB)
+$PY -m emsbench.data --refresh   # rebuild profiles (fetches the latest price/weather months)
+"$USERPROFILE/.venvs/energy-vpp/Scripts/emsbench-app.exe"   # app at http://localhost:8000
+cd web/app && npm run build      # after frontend changes, or: npm run dev (API on :8000)
 ```
-- `web/app/node_modules` is a junction to `%USERPROFILE%\.cache\emsbench\node_modules`
-  (keeps OneDrive from syncing it). Recreate with `mklink /J` if missing.
-- Example sites: `configs/sites/*.yaml` (read on every request). Sizes there are example
-  choices; device parameters cite their sources in `emsbench.sim.model`.
-- Add an asset type: model class in `sim/model.py` (+ `ASSET_TYPES`), physics in
-  `sim/engine.py`, tests, then `ASSET_INFO` in the API and an icon/colour in `web/app/src`.
-- Opening `http://localhost:8000/#run` runs the first example on load (demos/screenshots).
+- Data sources, licences and attribution: [docs/data-sources.md](docs/data-sources.md). Never upsample data and
+  present it as finer; profiles flag "repeated (finer than the data)".
+- Profiles carry calendars: a run uses the same season and weekday from another year when needed
+  (`sim/profiles.py`). European data uses fixed CET (UTC+1).
+- Free APIs (Energy-Charts, Open-Meteo): keep requests polite (`data/cache.py` pauses and backs off on 429).
+- `web/app/node_modules` is a junction to `%USERPROFILE%\.cache\emsbench
+ode_modules` (keeps OneDrive from
+  syncing it). Recreate with `mklink /J` if missing.
+- Example sites: `configs/sites/{plan,operate}_*.yaml`. Sizes there are example choices; device parameters
+  cite sources in `sim/model.py`.
+- Add an asset type: model class in `sim/model.py` (+ `ASSET_TYPES`), physics in `sim/engine.py`, tests, then
+  `ASSET_INFO` in the API and an icon/colour in `web/app/src`.
+- Demo URLs: `#run` runs the first Plan example; `#operate-run`; `#<preset_id>-run` (e.g. `#operate_shared_garage-run`).

@@ -126,7 +126,7 @@ CityLearn remains the source of the data and a cross-check.
 solar panels, batteries and EV chargers. The app edits exactly this structure, and it saves
 as JSON or YAML.
 
-**Every hour the engine:**
+**Every time step (an hour in Plan mode, minutes in Operate mode) the engine:**
 1. reads the data: building demand, solar output per kWp, price, cars arriving;
 2. asks the controller what it wants: battery power, and charging power per car;
 3. applies physics: battery power and fullness limits, losses (round-trip efficiency, split
@@ -159,3 +159,37 @@ purpose: a transparent baseline first, detail later where it changes decisions.
 **Data caveats:** the EV sessions appear synthetic and their generation is not documented;
 the dataset's "dynamic" prices have no documented origin. The app shows these notes next to
 each profile.
+
+---
+
+## 9. Plan and Operate: two time scales, one engine
+
+**Why two modes.** A question sets its own time scale. "Is this battery worth buying?" needs a year (seasons,
+monthly demand charges, wear) and hourly steps are fine. "Will every car be charged by 7:00 without tripping the
+fuse?" needs minutes, because a fuse trips on a short peak that an hourly average hides. Same physics, different
+step and period, so the app has two modes on one engine instead of two models.
+
+**Resolution must be real.** CityLearn offers "15-second" datasets, but their metadata says they are hourly data
+spread evenly over 240 slices. That would look granular and be exactly as smooth as the hourly curve. We use
+measured 15-minute data instead (OPSD homes, Energy-Charts prices) and say so when a step is finer than its data.
+
+**Different years, same season and weekday.** Home loads are from 2015-2019, EV visits from 2018-2021, prices
+from 2025-26. A simulated Monday in June takes a Monday in June from each source. Patterns that matter (evening
+peaks, weekends, solar seasons) stay aligned; the weather on that exact day does not, which is a known limit.
+
+**Phases and fuses.** A European connection has three phases at 230 V each. A 25 A fuse allows about 5.75 kW per
+phase. Buildings, solar and batteries are treated as spread evenly; a single-phase car puts its whole load on
+one phase, which is how a home can trip one phase while the other two are idle.
+
+**Minimum charging current.** The charging standard IEC 61851-1 lets a charger signal no less than 6 A. On three
+phases that is 6 x 3 x 230 V = 4.1 kW: a three-phase charger cannot follow a 3 kW solar surplus, it has to pause.
+This is why real "solar charging" products switch to one phase.
+
+**Things the simulator showed that are worth knowing**
+- *Rebound peak.* In the shared garage, charging every car in the cheapest hours saves money but makes the
+  highest phase current go from 56 A to 63 A, right at the fuse: everyone starts at the same cheap moment. Price
+  signals alone can create the peaks they were meant to avoid. Coordination needs the grid limit in the loop
+  (MPC, task 4).
+- *Behaviour beats strategy.* Norwegian home charging happens in the evening, so a "solar surplus" strategy
+  rarely gets sun. The right controller depends on when cars are actually there, which is why real session data
+  matters.

@@ -1,15 +1,21 @@
 import { useRef } from "react";
-import { Download, Loader2, Play, Upload } from "lucide-react";
-import type { Site } from "../api";
+import { CalendarRange, Download, Gauge, Loader2, Play, Upload } from "lucide-react";
+import type { Mode, Site } from "../api";
 import { useStore } from "../store";
+
+const MODES: { id: Mode; label: string; hint: string; icon: typeof Gauge }[] = [
+  { id: "plan", label: "Plan", hint: "Months to a year, hourly. Costs, savings, wear.", icon: CalendarRange },
+  { id: "operate", label: "Operate", hint: "Hours to days, 15-minute steps. EVs, fuses, phases.", icon: Gauge },
+];
 
 export function Toolbar() {
   const presets = useStore((s) => s.presets);
+  const mode = useStore((s) => s.site.mode);
   const running = useStore((s) => s.running);
   const stale = useStore((s) => s.stale);
   const hasResult = useStore((s) => s.result !== null);
   const assets = useStore((s) => s.site.assets.length);
-  const { loadSite, run } = useStore.getState();
+  const { loadSite, run, setMode } = useStore.getState();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const exportJson = () => {
@@ -41,15 +47,22 @@ export function Toolbar() {
           <span className="muted small block">emsbench simulator</span>
         </div>
       </div>
+      <div className="modes" role="radiogroup" aria-label="Mode">
+        {MODES.map(({ id, label, hint, icon: Icon }) => (
+          <button key={id} role="radio" aria-checked={mode === id} className={`mode ${mode === id ? "on" : ""}`}
+            onClick={() => mode !== id && setMode(id)} title={hint}>
+            <Icon size={15} /> {label}
+          </button>
+        ))}
+      </div>
       <div className="toolbar-mid">
-        <label className="small muted" htmlFor="preset">Example</label>
-        <select id="preset" defaultValue="" onChange={(e) => {
+        <select id="preset" aria-label="Load an example" defaultValue="" onChange={(e) => {
           const p = presets.find((x) => x.id === e.target.value);
           if (p) loadSite(p.site);
           e.target.value = "";
         }}>
-          <option value="" disabled>Load an example site…</option>
-          {presets.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+          <option value="" disabled>Load an example…</option>
+          {presets.filter((p) => p.mode === mode).map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
         </select>
         <button className="btn ghost" onClick={() => loadSite({ ...useStore.getState().site, name: "New site", assets: [] })}>New</button>
         <button className="btn ghost" onClick={exportJson} title="Save the site as a JSON file"><Download size={15} /> Export</button>

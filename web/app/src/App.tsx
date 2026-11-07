@@ -11,9 +11,14 @@ export function App() {
   const ready = useStore((s) => s.catalog !== null);
   const error = useStore((s) => s.error);
   useEffect(() => {
-    // Opening the app with #run runs the first example straight away (handy for demos).
+    // Demo shortcuts: #operate opens Operate mode, and "run" in the hash runs the example
+    // straight away (#run, #operate-run).
     useStore.getState().init().then(() => {
-      if (location.hash === "#run") useStore.getState().run();
+      const h = location.hash;
+      if (h.includes("operate")) useStore.getState().setMode("operate");
+      const preset = useStore.getState().presets.find((p) => h.includes(p.id));
+      if (preset) useStore.getState().loadSite(preset.site);
+      if (h.includes("run")) useStore.getState().run();
     });
   }, []);
 
