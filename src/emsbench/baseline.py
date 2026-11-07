@@ -25,7 +25,7 @@ DEFAULT_DATASET = "citylearn_challenge_2022_phase_1"
 def _controller_factories() -> dict[str, Callable[[Any], Any]]:
     from citylearn.agents.rbc import BasicBatteryRBC, BasicRBC, OptimizedRBC
 
-    from emsbench.controllers.idle import IdleController
+    from emsbench.adapters.citylearn import IdleController
 
     return {
         "idle": IdleController,

@@ -13,8 +13,7 @@ STEPS = 48
 
 
 def test_load_pv_and_cost_match_citylearn_building_1() -> None:
-    from emsbench.adapters.citylearn import make_env, run_episode
-    from emsbench.controllers.idle import IdleController
+    from emsbench.adapters.citylearn import IdleController, make_env, run_episode
     from emsbench.sim.engine import simulate
     from emsbench.sim.model import Building, ControllerSpec, Site, SolarPV
     from emsbench.sim.profiles import default_library

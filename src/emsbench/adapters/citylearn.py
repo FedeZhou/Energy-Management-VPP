@@ -34,6 +34,17 @@ class Controller(Protocol):
     def predict(self, observations: Any, deterministic: bool | None = None) -> Any: ...
 
 
+class IdleController:
+    """Always commands zero battery power. A sanity check: its result must match
+    CityLearn's "without storage" baseline (KPI ratios of 1.0)."""
+
+    def __init__(self, env: Any) -> None:
+        self._dims = [space.shape[0] for space in env.action_space]
+
+    def predict(self, observations: Any, deterministic: bool | None = None) -> list[list[float]]:
+        return [[0.0] * d for d in self._dims]
+
+
 def make_env(dataset: str, **kwargs: Any) -> CityLearnEnv:
     """Create a CityLearn environment with a single central controller."""
     kwargs.setdefault("central_agent", True)

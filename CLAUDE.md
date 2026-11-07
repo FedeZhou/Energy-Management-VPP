@@ -25,7 +25,7 @@ language, and flag uncertainty.
 
 ## Working rules
 
-- **Never invent numbers.** Every parameter in `configs/` cites its source in a comment
+- **Never invent numbers.** Every default parameter cites its source (`source=` in `sim/model.py`, comments in `configs/`)
   (URL + what it says). Items marked [K] in docs/research.md are unverified: check before use.
 - Before big design choices, present 2-3 options with trade-offs and a recommendation.
 - Say when something contradicts docs/research.md.
@@ -62,8 +62,10 @@ UV_SYSTEM_CERTS=1 VIRTUAL_ENV="$USERPROFILE/.venvs/energy-vpp" \
 - `src/emsbench/benchmark/` simulator-independent KPIs (`EpisodeTrace` -> `EpisodeKPIs`), later
   the forecast-error harness. Must not import CityLearn.
 - `src/emsbench/adapters/citylearn.py` the only place that knows CityLearn internals.
-- `src/emsbench/controllers/` controllers. `baseline.py` runs the scoreboard.
-- `configs/` site and device YAML with sourced parameters. `results/` curated scoreboards.
+- `src/emsbench/sim/` the generic engine (model, profiles, controllers, engine).
+- `src/emsbench/api/` FastAPI app; `web/app/` the React frontend (Site Lab).
+- `src/emsbench/baseline.py` runs the CityLearn baseline scoreboard.
+- `configs/sites/` example sites (YAML); device parameters cite sources in `sim/model.py`. `results/` curated scoreboards.
 - `docs/` research and notes. `tests/` tests. `reference/` third-party clones (gitignored).
 
 ## CityLearn gotchas (3.2.0)
@@ -78,13 +80,6 @@ UV_SYSTEM_CERTS=1 VIRTUAL_ENV="$USERPROFILE/.venvs/energy-vpp" \
   previous day.
 - `StorageDevice.round_trip_efficiency` actually returns sqrt(efficiency), i.e. one-way.
 
-## Replay page
-
-```bash
-$PY -m emsbench.viz.export       # hourly site series per controller -> results/raw/replay.json (~5 min)
-$PY -m emsbench.viz.build_page   # injects it into web/replay.html -> results/raw/replay.html
-```
-Published privately as an Artifact: https://claude.ai/artifact/BNSTVCwDxWpTYNpaJtbrYC
 
 ## Site Lab (configurable simulator app)
 
