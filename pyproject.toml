@@ -16,13 +16,16 @@ dependencies = [
     "numpy<2",
     "pandas",
     "tabulate",  # pandas.DataFrame.to_markdown
+    "pydantic>=2.7",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
     # Lets Python use the operating system's certificate store. Needed on
     # machines where antivirus or a proxy re-signs HTTPS traffic.
     "truststore>=0.10",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10", "pandas-stubs"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10", "pandas-stubs", "httpx"]
 
 [project.scripts]
 emsbench-baseline = "emsbench.baseline:main"
