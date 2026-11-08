@@ -21,9 +21,10 @@
 .dp-card-head h4 { font-size: 13px; font-weight: 600; }
 .dp-provider { color: var(--muted); font-size: 12px; }
 .dp-kind { flex: none; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--ink-2); background: var(--surface-2); white-space: nowrap; }
-.dp-kind.measured { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
-.dp-kind.modelled { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
-.dp-kind.mixed { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.dp-kind.measured { color: var(--primary-ink); background: var(--primary); border-color: var(--primary); }
+.dp-kind.modelled { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.dp-kind.statistics { color: var(--ink-2); }
+.dp-kind.mixed { color: var(--muted); border-style: dashed; }
 .dp-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin: 0; font-size: 12px; }
 .dp-facts div { min-width: 0; }
 .dp-facts dt { color: var(--muted); }
