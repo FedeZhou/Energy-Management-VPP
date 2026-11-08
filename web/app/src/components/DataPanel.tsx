@@ -44,6 +44,11 @@ export function DataPanel() {
   const [data, setData] = useState<DataSources | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // A link ending in #data opens the panel directly.
+  useEffect(() => {
+    if (location.hash.includes("data")) setOpen(true);
+  }, [setOpen]);
+
   useEffect(() => {
     if (!open || data) return;
     api.datasources().then(setData).catch((e: Error) => setError(e.message));

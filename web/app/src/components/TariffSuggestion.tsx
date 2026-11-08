@@ -11,7 +11,7 @@ const SPOT_COUNTRY: Record<string, string> = {
 let cache: Promise<TariffComponents[]> | null = null;
 const loadTariffs = () => (cache ??= api.tariffs().catch(() => { cache = null; return []; }));
 
-const eur = (v: number) => `€${v.toFixed(3)}`;
+const eur = (v: number) => `${v < 0 ? "−" : ""}€${Math.abs(v).toFixed(3)}`;
 
 /** Suggests a realistic price adder (network costs + taxes) for the chosen spot-price zone,
  *  from Eurostat's published price components, and explains flat or non-European tariffs. */
@@ -62,6 +62,9 @@ export function TariffSuggestion() {
         {tariff.price_adder !== 0 && <button className="btn" onClick={() => updateSection("tariff", { price_adder: 0 })}>Spot only</button>}
       </div>
       {applied && <span className="ts-applied">Using the {applied.consumer} add-on ({eur(applied.adder)}/kWh).</span>}
+      {options.some((r) => r.taxes < 0) && (
+        <p>Taxes below zero: a fixed annual tax refund, spread over each kWh in Eurostat's average.</p>
+      )}
       <p className="ts-source">
         Approximation: the supplier's margin is not included, and VAT is averaged. Source: {shown.source}, {shown.band}; CC BY 4.0.
       </p>
