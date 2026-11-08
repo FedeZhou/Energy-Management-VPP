@@ -21,10 +21,12 @@ interface State {
   speed: number; // simulated hours per second
   maxPower: number;
   collapsed: boolean;
+  dataPanelOpen: boolean;
 
   init: () => Promise<void>;
   setMode: (mode: Mode) => void;
   setCollapsed: (c: boolean) => void;
+  setDataPanel: (open: boolean) => void;
   loadSite: (site: Site) => void;
   updateSite: (patch: Partial<Site>) => void;
   updateSection: <K extends "grid" | "tariff" | "controller">(key: K, patch: Partial<Site[K]>) => void;
@@ -53,13 +55,13 @@ const EMPTY_SITE: Site = {
 };
 
 /** Where to put the grid-connection box: the centre of the assets, nudged outwards until it
- *  does not overlap any asset box (nodes are about 220 x 110 px). */
+ *  leaves a gap for wiring around every asset box (nodes are about 240 x 70-130 px). */
 function centroid(assets: Asset[]): { x: number; y: number } {
   if (!assets.length) return { x: 300, y: 220 };
   const cx = assets.reduce((s, a) => s + a.ui.x, 0) / assets.length;
   const cy = assets.reduce((s, a) => s + a.ui.y, 0) / assets.length;
   const free = (x: number, y: number) =>
-    assets.every((a) => Math.abs(a.ui.x - x) > 240 || Math.abs(a.ui.y - y) > 125);
+    assets.every((a) => Math.abs(a.ui.x - x) > 300 || Math.abs(a.ui.y - y) > 150);
   for (let r = 0; r <= 900; r += 30) {
     for (let k = 0; k < 16; k++) {
       const ang = (k / 16) * 2 * Math.PI + Math.PI; // try the left side first
@@ -95,9 +97,14 @@ export const useStore = create<State>((set, get) => ({
   speed: 4,
   maxPower: 1,
   collapsed: false,
+  dataPanelOpen: false,
 
   setCollapsed(c) {
     set({ collapsed: c });
+  },
+
+  setDataPanel(open) {
+    set({ dataPanelOpen: open });
   },
 
   async init() {

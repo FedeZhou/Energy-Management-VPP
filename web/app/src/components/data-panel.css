@@ -1,0 +1,62 @@
+/* Data sources dialog and tariff suggestion. Uses the app's design tokens (styles.css). */
+.dp-overlay {
+  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px;
+  background: rgba(10, 12, 16, 0.42);
+}
+.dp-dialog {
+  width: min(1040px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+}
+.dp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 18px 20px 14px; border-bottom: 1px solid var(--border); }
+.dp-head h2 { font-size: 16px; font-weight: 600; }
+.dp-head p { color: var(--ink-2); margin-top: 4px; max-width: 70ch; }
+.dp-body { overflow: auto; padding: 16px 20px 22px; display: flex; flex-direction: column; gap: 22px; }
+.dp-body h3 { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+
+.dp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.dp-card { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); min-width: 0; }
+.dp-card p { color: var(--ink-2); }
+.dp-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.dp-card-head h4 { font-size: 13px; font-weight: 600; }
+.dp-provider { color: var(--muted); font-size: 12px; }
+.dp-kind { flex: none; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--ink-2); background: var(--surface-2); white-space: nowrap; }
+.dp-kind.measured { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+.dp-kind.modelled { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.dp-kind.mixed { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.dp-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin: 0; font-size: 12px; }
+.dp-facts div { min-width: 0; }
+.dp-facts dt { color: var(--muted); }
+.dp-facts dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.dp-flag { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 600; color: var(--warn); }
+.dp-caveat { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; color: var(--warn) !important; }
+.dp-caveat svg { flex: none; margin-top: 2px; }
+.dp-attrib { font-size: 11px; color: var(--muted) !important; overflow-wrap: anywhere; }
+.dp-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--accent); text-decoration: none; margin-top: auto; }
+.dp-link:hover { text-decoration: underline; }
+
+.dp-checks, .dp-rules, .dp-excluded { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; color: var(--ink-2); }
+.dp-checks li { display: flex; gap: 8px; align-items: flex-start; }
+.dp-checks .ok { color: var(--good); flex: none; margin-top: 2px; }
+.dp-rules li, .dp-excluded li { padding-left: 14px; position: relative; }
+.dp-rules li::before, .dp-excluded li::before { content: ""; position: absolute; left: 3px; top: 8px; width: 4px; height: 4px; border-radius: 50%; background: var(--faint); }
+.dp-table-wrap { overflow-x: auto; margin-top: 10px; }
+.dp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dp-table caption { text-align: left; color: var(--muted); padding-bottom: 6px; }
+.dp-table th, .dp-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.dp-table th { color: var(--muted); font-weight: 500; }
+.dp-table td.num { font-variant-numeric: tabular-nums; }
+.dp-table td.warn { color: var(--warn); }
+.dp-error { color: var(--bad); display: flex; gap: 6px; align-items: center; }
+
+/* Tariff suggestion (inspector) */
+.ts-box { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); }
+.ts-box p { color: var(--ink-2); font-size: 12px; }
+.ts-title { font-weight: 600; font-size: 12px; color: var(--ink); }
+.ts-breakdown { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ts-breakdown span:nth-child(even) { text-align: right; }
+.ts-breakdown .ts-sum { font-weight: 600; color: var(--ink); border-top: 1px solid var(--border); padding-top: 3px; }
+.ts-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ts-actions .btn { padding: 4px 10px; font-size: 12px; }
+.ts-applied { font-size: 12px; color: var(--good); }
+.ts-source { font-size: 11px; color: var(--muted) !important; }

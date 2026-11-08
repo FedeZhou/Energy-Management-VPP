@@ -108,6 +108,62 @@ export interface SimResponse {
   runtime_s: number;
 }
 
+export interface DataSource {
+  id: string;
+  name: string;
+  provider: string;
+  kind: "measured" | "modelled" | "statistics" | "mixed";
+  what: string;
+  used_for: string;
+  resolution: string;
+  coverage: string;
+  licence: string;
+  commercial_use: boolean;
+  attribution: string;
+  url: string;
+  caveats: string;
+  profiles: number;
+}
+
+export interface PvCheck {
+  profile: string;
+  place: string;
+  orientation: string;
+  ours_last_12_months: number;
+  pvgis_mean: number;
+  pvgis_sd: number;
+  difference_pct: number;
+  within_2_sd: boolean;
+}
+
+export interface DataSources {
+  sources: DataSource[];
+  excluded: { name: string; why: string }[];
+  rules: string[];
+  checks: { what: string; result: string }[];
+  pv_checks: PvCheck[];
+  warnings: string[];
+}
+
+export interface TariffComponents {
+  id: string;
+  country: string;
+  country_name: string;
+  consumer: "household" | "business";
+  band: string;
+  year: string;
+  currency: string;
+  energy_supply: number;
+  network: number;
+  taxes: number;
+  vat_included: boolean;
+  vat: number;
+  total: number;
+  adder: number;
+  source: string;
+  licence: string;
+}
+
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(path);
   if (!r.ok) throw new Error(`${path}: ${r.status} ${await r.text()}`);
@@ -118,6 +174,8 @@ export const api = {
   catalog: () => get<Catalog>("/api/catalog"),
   profiles: () => get<Profiles>("/api/profiles"),
   presets: () => get<Preset[]>("/api/presets"),
+  datasources: () => get<DataSources>("/api/datasources"),
+  tariffs: () => get<TariffComponents[]>("/api/tariffs"),
   async simulate(site: Site): Promise<SimResponse> {
     const r = await fetch("/api/simulate", {
       method: "POST",
