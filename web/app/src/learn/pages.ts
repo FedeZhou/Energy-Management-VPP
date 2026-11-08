@@ -221,6 +221,7 @@ export const PAGES: Page[] = [
         ["Newer and larger sites", "1.48 for facilities commissioned within the last five years; 1.44 for sites of 20 MW and above; 15% of respondents report 1.3 or better {uptime_2025}."],
       ] },
       { kind: "p", text: "PUE leaves out other aspects of efficiency, such as facility water use or IT efficiency {uptime_2025}. A PUE of 1.54 means that for every 1 kW of IT load the whole site draws about 1.54 kW, so roughly 0.54 kW goes to cooling and other overheads." },
+      { kind: "note", tone: "info", text: "Built in Site Lab: the Data center element draws IT load × scale × PUE, where the IT load comes from the ESIF measurements and PUE defaults to the 2025 industry average of 1.54 {code_model}. The engine reports the IT part and the overhead (cooling and other losses) separately {code_engine}." },
       { kind: "h", text: "Open measured data" },
       { kind: "p", text: "The National Laboratory of the Rockies publishes time series from its ESIF high-performance computing data center under CC BY 4.0, with separate fields for IT power, cooling, HVAC, pumps, lights and PUE {esif_pue}." },
       { kind: "h", text: "Flexibility" },
