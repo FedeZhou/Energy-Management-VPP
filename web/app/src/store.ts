@@ -22,11 +22,13 @@ interface State {
   maxPower: number;
   collapsed: boolean;
   dataPanelOpen: boolean;
+  page: "lab" | "learn";
 
   init: () => Promise<void>;
   setMode: (mode: Mode) => void;
   setCollapsed: (c: boolean) => void;
   setDataPanel: (open: boolean) => void;
+  setPage: (page: "lab" | "learn") => void;
   loadSite: (site: Site) => void;
   updateSite: (patch: Partial<Site>) => void;
   updateSection: <K extends "grid" | "tariff" | "controller">(key: K, patch: Partial<Site[K]>) => void;
@@ -98,6 +100,8 @@ export const useStore = create<State>((set, get) => ({
   maxPower: 1,
   collapsed: false,
   dataPanelOpen: false,
+  // #learn or #learn-<page> opens the Learn page directly.
+  page: /^#learn(-|$)/.test(location.hash) ? "learn" : "lab",
 
   setCollapsed(c) {
     set({ collapsed: c });
@@ -105,6 +109,10 @@ export const useStore = create<State>((set, get) => ({
 
   setDataPanel(open) {
     set({ dataPanelOpen: open });
+  },
+
+  setPage(page) {
+    set({ page });
   },
 
   async init() {
