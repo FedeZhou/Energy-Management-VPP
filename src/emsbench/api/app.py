@@ -78,6 +78,26 @@ def profiles() -> dict[str, Any]:
     return {"warnings": lib.warnings, **lib.catalogue()}
 
 
+@app.get("/api/datasources")
+def datasources() -> dict[str, Any]:
+    from emsbench.data.openmeteo_pv import load_validations
+    from emsbench.data.registry import EXCLUDED, RULES, SOURCES, STATIC_CHECKS
+
+    lib = default_library()
+    ids = list(lib.profiles) + list(lib.ev_sets)
+    sources = [{**s, "profiles": sum(1 for i in ids if i.startswith(s["prefix"]))} for s in SOURCES]
+    return {"sources": sources, "excluded": EXCLUDED, "rules": RULES, "checks": STATIC_CHECKS,
+            "pv_checks": load_validations(), "warnings": lib.warnings}
+
+
+@app.get("/api/tariffs")
+def tariffs() -> list[dict[str, Any]]:
+    from emsbench.data.eurostat import load_tariffs
+
+    default_library()  # make sure the data has been prepared
+    return load_tariffs()
+
+
 @app.get("/api/presets")
 def presets() -> list[dict[str, Any]]:
     out = []

@@ -64,7 +64,8 @@ class Building(AssetBase):
     )
     scale: float = param(
         1.0, "Scale factor", ge=0,
-        help="Multiplies the profile. 20 means twenty buildings like this one.",
+        help="Multiplies the profile. Homes: number of similar homes. Commercial profiles given per "
+        "1,000 m²: floor area in m² divided by 1,000 (e.g. 2.5 for 2,500 m²).",
     )
 
 

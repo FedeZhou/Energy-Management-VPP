@@ -17,14 +17,17 @@ log = logging.getLogger(__name__)
 
 
 def _sources() -> dict[str, Callable[[], tuple[list[Profile], list[EVSessionSet]]]]:
-    from emsbench.data import citylearn, energycharts, openmeteo_pv, opsd, sintef
+    from emsbench.data import citylearn, comstock, energycharts, eurostat, openmeteo_pv, opsd, sintef, utwente
 
     return {
         "citylearn": citylearn.build,
         "opsd": lambda: (opsd.build(), []),
+        "comstock": lambda: (comstock.build(), []),
         "energycharts": lambda: (energycharts.build(), []),
+        "eurostat": lambda: (eurostat.build(), []),
         "openmeteo_pv": lambda: (openmeteo_pv.build(), []),
         "sintef": lambda: ([], sintef.build()),
+        "utwente": lambda: ([], utwente.build()),
     }
 
 

@@ -1,0 +1,36 @@
+# Operate example: an office with workplace charging, 15-minute steps, one working week.
+# Data: office load shape from NREL ComStock (California medium office, per 1,000 m², modelled),
+# measured workplace EV sessions of 10 regular drivers (University of Twente / ElaadNL office car park,
+# Utrecht; CC BY-NC-SA: non-commercial), solar modelled from Amsterdam weather (Open-Meteo + pvlib),
+# Dutch 15-minute day-ahead prices (Energy-Charts / SMARD).
+# Mixing note: no open measured European office load was found, so the load shape is Californian.
+# Sizes (3,000 m², 60 kWp, 100 kWh / 50 kW battery, 10 chargers, 120 kW limit) are example choices.
+# Price adder: Eurostat 2025 Dutch business network costs (0.0936) + taxes excl. VAT (0.0504) =
+# 0.1440 EUR/kWh (nrg_pc_205_c, band IB 20-499 MWh/yr).
+label: Office with workplace charging (15-min)
+description: >-
+  A 3,000 m² office with 60 kWp of solar, a 100 kWh battery and ten chargers used by real commuters,
+  behind a 120 kW connection on Dutch spot prices. One working week at 15-minute steps.
+site:
+  name: Office with workplace charging (15-min)
+  mode: operate
+  start: 2026-06-08
+  days: 5
+  step_minutes: 15
+  grid: {import_limit_kw: 120}
+  tariff: {price_profile: ec/nl_da, price_adder: 0.144}
+  controller: {battery: peak_shaving, peak_threshold_kw: 90, ev: spread_until_departure}
+  assets:
+    - {type: building, id: office, name: "Office (3,000 m²)", load_profile: comstock/ca_mediumoffice, scale: 3, ui: {x: 80, y: 0}}
+    - {type: pv, id: pv, name: Roof solar, capacity_kwp: 60, profile: om/amsterdam_south30, ui: {x: 80, y: 200}}
+    - {type: battery, id: battery, name: Battery, capacity_kwh: 100, power_kw: 50, ui: {x: 80, y: 400}}
+    - {type: ev_charger, id: c1, name: Bay 1, sessions: utwente/EV351, ui: {x: 760, y: -40}}
+    - {type: ev_charger, id: c2, name: Bay 2, sessions: utwente/EV176, ui: {x: 760, y: 80}}
+    - {type: ev_charger, id: c3, name: Bay 3, sessions: utwente/EV156, ui: {x: 760, y: 200}}
+    - {type: ev_charger, id: c4, name: Bay 4, sessions: utwente/EV3, ui: {x: 760, y: 320}}
+    - {type: ev_charger, id: c5, name: Bay 5, sessions: utwente/EV164, ui: {x: 760, y: 440}}
+    - {type: ev_charger, id: c6, name: Bay 6, sessions: utwente/EV273, ui: {x: 1020, y: -40}}
+    - {type: ev_charger, id: c7, name: Bay 7, sessions: utwente/EV99, ui: {x: 1020, y: 80}}
+    - {type: ev_charger, id: c8, name: Bay 8, sessions: utwente/EV518, ui: {x: 1020, y: 200}}
+    - {type: ev_charger, id: c9, name: Bay 9, sessions: utwente/EV462, ui: {x: 1020, y: 320}}
+    - {type: ev_charger, id: c10, name: Bay 10, sessions: utwente/EV104, ui: {x: 1020, y: 440}}

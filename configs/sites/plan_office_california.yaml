@@ -1,0 +1,25 @@
+# Plan example: a California office with solar, a battery and an EV fleet, one year, hourly.
+# Data: NREL ComStock medium office (California, per 1,000 m², modelled, CC BY 4.0), solar modelled from
+# Los Angeles weather (Open-Meteo + pvlib, checked against PVGIS), CityLearn time-of-use tariff and EV
+# schedules (hourly). Sizes (5,000 m², 150 kWp, 200 kWh / 100 kW, 4 chargers) are example choices.
+# Demand charge left at 0: enter your utility's value (no sourced default).
+label: Office with solar, battery and EV fleet (California)
+description: >-
+  A 5,000 m² office (NREL ComStock load shape) with 150 kWp of solar, a 200 kWh battery and four fleet
+  chargers on a California time-of-use tariff. One year, hourly.
+site:
+  name: California office
+  mode: plan
+  start: 2025-10-06
+  days: 364
+  step_minutes: 60
+  tariff: {price_profile: cl2022/tou}
+  controller: {battery: price_arbitrage, ev: spread_until_departure}
+  assets:
+    - {type: building, id: office, name: "Office (5,000 m²)", load_profile: comstock/ca_mediumoffice, scale: 5, ui: {x: 420, y: 0}}
+    - {type: pv, id: pv, name: Roof solar, capacity_kwp: 150, profile: om/losangeles_south30, ui: {x: 80, y: 0}}
+    - {type: battery, id: battery, name: Battery, capacity_kwh: 200, power_kw: 100, ui: {x: 80, y: 380}}
+    - {type: ev_charger, id: c1, name: Fleet charger 1, sessions: cl2022/charger_1_1, ui: {x: 760, y: 120}}
+    - {type: ev_charger, id: c2, name: Fleet charger 2, sessions: cl2022/charger_4_1, ui: {x: 760, y: 240}}
+    - {type: ev_charger, id: c3, name: Fleet charger 3, sessions: cl2022/charger_5_1, ui: {x: 760, y: 360}}
+    - {type: ev_charger, id: c4, name: Fleet charger 4, sessions: cl2022/charger_7_1, ui: {x: 760, y: 480}}

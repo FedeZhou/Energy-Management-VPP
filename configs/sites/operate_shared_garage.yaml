@@ -14,7 +14,9 @@ site:
   days: 2
   step_minutes: 15
   grid: {fuse_a: 63}
-  tariff: {price_profile: ec/de_lu_da}
+  # Price adder: Eurostat 2025 German household network costs (0.1130) + taxes incl. VAT (0.1241) =
+  # 0.2371 EUR/kWh (nrg_pc_204_c, band DC). Spot + adder approximates a dynamic tariff without supplier margin.
+  tariff: {price_profile: ec/de_lu_da, price_adder: 0.2371}
   controller: {battery: idle, ev: cheapest_hours}
   assets:
     - {type: building, id: flats, name: Eight flats, load_profile: opsd/residential6, scale: 8, ui: {x: 80, y: 40}}

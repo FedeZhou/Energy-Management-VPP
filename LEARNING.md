@@ -193,3 +193,22 @@ This is why real "solar charging" products switch to one phase.
 - *Behaviour beats strategy.* Norwegian home charging happens in the evening, so a "solar surplus" strategy
   rarely gets sun. The right controller depends on when cars are actually there, which is why real session data
   matters.
+
+---
+
+## 10. Can I trust this data? Lessons from adding sources
+
+- **"Open" is not one thing.** The same price API serves Germany under CC BY and Norway under "private use only".
+  Check the licence of every slice you use, not just the website. The data layer now rejects non-CC-BY price zones
+  automatically, and the app flags the one non-commercial source (the Utrecht office car park).
+- **Measured, modelled, statistics.** Meter data (OPSD homes, EV sessions, market prices) is the most realistic but
+  sparse. Models (ComStock buildings, pvlib solar) cover any size and place but are smoother than reality. Statistics
+  (Eurostat tariffs) are averages. The app labels each so you know what you are looking at.
+- **Check against an independent reference.** Our solar model is compared with PVGIS (EU JRC) for every location;
+  the engine is compared with CityLearn; Eurostat's components are checked against its own published totals.
+- **Read the small print of a dataset.** Eurostat's "taxes" already include VAT; adding VAT again would have
+  overstated German household prices by about €0.06/kWh. One "driver" in the Utrecht data charged 6.6 times a day:
+  a shared card, not a person.
+- **Why bills look so different from spot prices.** A German household pays about €0.39/kWh all-in, of which only
+  about €0.15 is energy and supply; network costs (€0.11) and taxes (€0.12) are the rest (Eurostat 2025). That is why
+  a dynamic tariff saves less than the spot price swings suggest: the fixed part does not move.

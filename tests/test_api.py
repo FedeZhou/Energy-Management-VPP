@@ -66,3 +66,22 @@ def test_period_without_data_is_explained() -> None:
     r = client.post("/api/simulate", json=site)
     assert r.status_code == 422
     assert "covers 2016-05" in r.text
+
+
+def test_datasources_describe_every_source_and_licence() -> None:
+    body = client.get("/api/datasources").json()
+    ids = {s["id"] for s in body["sources"]}
+    assert {"opsd", "sintef", "energycharts", "eurostat", "comstock", "openmeteo_pv", "citylearn"} <= ids
+    for s in body["sources"]:
+        assert s["licence"] and s["attribution"] and s["url"].startswith("http")
+        assert s["kind"] in {"measured", "modelled", "statistics", "mixed"}
+    assert any(not s["commercial_use"] for s in body["sources"])  # non-commercial data is flagged
+    assert body["excluded"] and body["rules"] and body["checks"]
+
+
+def test_tariffs_are_consistent() -> None:
+    rows = client.get("/api/tariffs").json()
+    assert rows, "Eurostat tariffs missing"
+    for r in rows:
+        assert r["total"] == pytest.approx(r["energy_supply"] + r["network"] + r["taxes"], abs=2e-4)
+        assert r["adder"] == pytest.approx(r["network"] + r["taxes"], abs=2e-4)

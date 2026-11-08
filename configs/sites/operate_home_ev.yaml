@@ -3,7 +3,6 @@
 # (Open-Meteo + pvlib), measured Norwegian EV sessions (SINTEF, garage ASK spot 7, ~7 kW car, visits most evenings),
 # German 15-minute day-ahead prices (Energy-Charts / SMARD). See each profile's source in the app.
 # Equipment sizes (8 kWp, 10 kWh / 5 kW battery, 3 x 25 A fuse) are example choices, not sourced.
-# Prices are wholesale spot prices: set a price adder for your real tariff.
 label: Home with solar, battery and EV (15-min)
 description: >-
   Measured German household on a 3 x 25 A connection with 8 kWp solar, a 10 kWh battery and an
@@ -15,7 +14,9 @@ site:
   days: 7
   step_minutes: 15
   grid: {fuse_a: 25}
-  tariff: {price_profile: ec/de_lu_da}
+  # Price adder: Eurostat 2025 German household network costs (0.1130) + taxes incl. VAT (0.1241) =
+  # 0.2371 EUR/kWh (nrg_pc_204_c, band DC). Spot + adder approximates a dynamic tariff without supplier margin.
+  tariff: {price_profile: ec/de_lu_da, price_adder: 0.2371}
   controller: {battery: self_consumption, ev: cheapest_hours}
   assets:
     - {type: building, id: home, name: Home, load_profile: opsd/residential4, ui: {x: 420, y: 40}}

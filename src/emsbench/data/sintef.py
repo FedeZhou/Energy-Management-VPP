@@ -39,7 +39,12 @@ def build() -> list[EVSessionSet]:
     users = download(f"{BASE}/Dataset2_user_predictions.csv?download=1",
                      RAW / "sintef" / "Dataset2_user_predictions.csv")
     d = pd.read_csv(reports, sep=";", decimal=",", parse_dates=["plugin_time", "plugout_time"])
-    d = d.dropna(subset=["plugin_time", "plugout_time", "energy_session"]).sort_values("plugin_time")
+    d = d.dropna(subset=["plugin_time", "plugout_time", "energy_session"])
+    from emsbench.data.utwente import to_cet  # local time with summer time -> fixed CET
+
+    d["plugin_time"] = to_cet(d["plugin_time"], "Europe/Oslo")
+    d["plugout_time"] = to_cet(d["plugout_time"], "Europe/Oslo")
+    d = d.dropna(subset=["plugin_time", "plugout_time"]).sort_values("plugin_time")
     est = _estimates(str(users))
     out: list[EVSessionSet] = []
     for user, g in d.groupby("user_id"):
@@ -57,7 +62,7 @@ def build() -> list[EVSessionSet]:
             + (f", car ~{kw:.1f} kW)" if kw else ")"),
             SOURCE, sessions, sessions[0].arrival.replace(hour=0, minute=0, second=0),
             sessions[-1].departure, licence=LICENCE, resolution_minutes=1,
-            note="Measured sessions (local Norwegian time). Car power and battery size are estimates "
+            note="Measured sessions, converted to CET (UTC+1). Car power and battery size are estimates "
                  "by the dataset authors.",
         ))
     return out
