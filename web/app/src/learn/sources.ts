@@ -3,7 +3,7 @@
 // "code" = this repository; "data" = our own computation on the cited open data;
 // "secondary" = consistent secondary sources (primary text paywalled); "metadata" = title/venue only.
 
-export type ReadDepth = "abstract" | "docs" | "code" | "data" | "secondary" | "metadata";
+export type ReadDepth = "report" | "abstract" | "docs" | "code" | "data" | "secondary" | "metadata";
 
 export interface Source {
   id: string;
@@ -17,6 +17,7 @@ export interface Source {
 }
 
 export const READ_LABEL: Record<ReadDepth, string> = {
+  report: "Primary report read",
   abstract: "Abstract read",
   docs: "Documentation read",
   code: "This repository",
@@ -58,10 +59,16 @@ const list: Source[] = [
     url: "https://nemo-committee.eu/assets/files/15-minute-mtu-in-sdac-was-implemented.pdf" },
   { id: "iso30134", title: "ISO/IEC 30134-2: Data centres, key performance indicators, Part 2: Power usage effectiveness (PUE)",
     read: "secondary", url: "https://committee.iso.org/standard/85172.html",
-    note: "Scope confirmed; the ratio (total facility energy / IT energy) is the commonly cited definition." },
-  { id: "uptime_2025", title: "Uptime Institute Global Data Center Survey 2025", authors: "Uptime Institute", year: 2025,
-    read: "docs", url: "https://intelligence.uptimeinstitute.com/resource/uptime-institute-global-data-center-survey-2025",
-    note: "Public summary only: 'average PUE levels show little change for the sixth consecutive year'." },
+    note: "Scope confirmed from the ISO page; the ratio itself is quoted from the Uptime report." },
+  { id: "uptime_2025", title: "Uptime Institute Global Data Center Survey 2025 (UII Keynote Report 180)", authors: "Uptime Institute",
+    year: 2025, read: "report", url: "https://datacenter.uptimeinstitute.com/rs/711-RIA-145/images/2025.Annual.Survey.Report.pdf",
+    note: "Pages 5-8 read: survey April-May 2025, 800+ owners and operators; PUE section and Figure 2 (n=681)." },
+  { id: "esif_pue", title: "NLR HPC Facility Power Usage Effectiveness (PUE) Data (ESIF data center)",
+    authors: "Clark, Strelka (National Laboratory of the Rockies)", year: 2026, venue: "OpenEI", read: "docs",
+    url: "https://data.openei.org/submissions/8616", note: "Dataset page read: CC BY 4.0; fields for IT power, cooling, HVAC, pumps, lights and PUE." },
+  { id: "urdb_xcel_pg", title: "Public Service Co of Colorado, Primary General Service (Schedule PG), 2024", venue: "U.S. Utility Rate Database (OpenEI)",
+    read: "docs", url: "https://apps.openei.org/USURDB/rate/view/6616db7196839681b20553db",
+    note: "Rate page read. Prices confirmed; which hours and months each period covers could not be confirmed from the page text." },
 
   // ---------- Papers ----------
   { id: "ruddick2024", title: "Real-world validation of safe reinforcement learning, model predictive control and decision tree-based home energy management systems",

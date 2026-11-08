@@ -197,6 +197,7 @@ export const PAGES: Page[] = [
       { kind: "p", text: "Eurostat, band 2,500-4,999 kWh/yr {eurostat_check}. Eurostat's taxes component already includes VAT; adding VAT again would double-count it {eurostat_check}. Because network costs and taxes do not move with the market, a dynamic tariff saves less than the spot swings suggest. Site Lab's tariff settings offer these add-ons per country." },
       { kind: "h", text: "Demand charges" },
       { kind: "p", text: "A demand charge bills each month's highest import power. Site Lab adds rate × the sum of monthly peaks (per time step) to the energy cost {code_engine}. Without one, a battery that shaves peaks earns nothing for it (see Battery strategies)." },
+      { kind: "p", text: "A real example: Public Service Co of Colorado's Schedule PG (industrial, 2024) charges a flat $4.23 + $3.68 adjustment per kW of monthly peak, plus time-of-use demand charges of $10.03 or $14.97 + $3.68 per kW in its charged periods, on top of an energy rate of $0.00778/kWh plus adjustments of $0.04113 or $0.02539 by period {urdb_xcel_pg}." },
     ],
   },
   {
@@ -215,9 +216,13 @@ export const PAGES: Page[] = [
     summary: "Load = IT plus cooling and losses; PUE measures the overhead; flexibility comes from deferring or moving compute.",
     blocks: [
       { kind: "facts", rows: [
-        ["PUE", "Power usage effectiveness: total facility energy ÷ IT equipment energy, standardised in ISO/IEC 30134-2 {iso30134}."],
-        ["Trend", "Average PUE showed little change for the sixth consecutive year in Uptime Institute's 2025 survey {uptime_2025}."],
+        ["PUE", "Power usage effectiveness: total facility power divided by the power consumption of IT equipment; introduced by The Green Grid in 2007 {uptime_2025}, standardised in ISO/IEC 30134-2 {iso30134}."],
+        ["Industry average", "1.54 in 2025 (weighted average, n=681), the sixth consecutive year it has virtually stood still; it fell from 2.50 in 2007 to 1.65 in 2014 {uptime_2025}."],
+        ["Newer and larger sites", "1.48 for facilities commissioned within the last five years; 1.44 for sites of 20 MW and above; 15% of respondents report 1.3 or better {uptime_2025}."],
       ] },
+      { kind: "p", text: "PUE leaves out other aspects of efficiency, such as facility water use or IT efficiency {uptime_2025}. A PUE of 1.54 means that for every 1 kW of IT load the whole site draws about 1.54 kW, so roughly 0.54 kW goes to cooling and other overheads." },
+      { kind: "h", text: "Open measured data" },
+      { kind: "p", text: "The National Laboratory of the Rockies publishes time series from its ESIF high-performance computing data center under CC BY 4.0, with separate fields for IT power, cooling, HVAC, pumps, lights and PUE {esif_pue}." },
       { kind: "h", text: "Flexibility" },
       { kind: "p", text: "A capacity-expansion study found that letting AI data centers shift compute in time and location can reduce grid investment and operating costs by 3-21%, that more flexibility does not automatically mean less generation capacity, and that longer deferral windows have diminishing returns {chen2026}." },
     ],
