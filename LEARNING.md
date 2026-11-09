@@ -212,3 +212,53 @@ This is why real "solar charging" products switch to one phase.
 - **Why bills look so different from spot prices.** A German household pays about €0.39/kWh all-in, of which only
   about €0.15 is energy and supply; network costs (€0.11) and taxes (€0.12) are the rest (Eurostat 2025). That is why
   a dynamic tariff saves less than the spot price swings suggest: the fixed part does not move.
+
+## 11. Data centers: what is different
+
+- **The load is big and flat.** Our measured example (NREL's ESIF supercomputer centre) averages about 2.9 MW and
+  hardly changes between day and night. Homes peak in the evening; data centers are busy all the time. What does move
+  the load is jobs starting and stopping: steps of 650 kW or more in 15 minutes happen.
+- **PUE = total power / IT power.** Everything above 1.0 is cooling, fans, pumps, lights and losses. The industry
+  average is 1.54 (Uptime Institute 2025); ESIF, with warm-water liquid cooling, is about 1.07. Our example uses the
+  measured IT load and adds cooling as IT x 0.54, a constant ratio. Real cooling rises on hot afternoons, so our
+  summer peaks are, if anything, too low.
+- **The UPS battery is for backup first.** It only has to carry the site for the minutes until the diesel generators
+  start (often 5 minutes today). We model it as a normal battery with a minimum state of charge (`soc_min`) equal to
+  that reserve: the energy above it can be used for peak shaving, the reserve never is. That is the
+  "grid-interactive UPS" idea Microsoft piloted in Dublin.
+- **Large customers pay for peaks.** On Xcel Colorado's primary-voltage tariff, about half of a data center's bill is
+  demand charges: $7.91 per kW of the month's highest 15-minute import, plus $18.65 per kW (summer) of the highest
+  import between 14:00 and 18:00. The engine now supports such peak-window demand charges (`demand_charge_profile`).
+- **Surprise: the battery barely helps here.** A 4 MWh battery with a simple "keep import under X" rule saved about
+  1% of the June bill. With a flat load, high stretches last for hours and the battery runs empty before the peak
+  arrives; the rule also wastes energy outside the expensive 14-18 h window. Two lessons: (1) for high-load-factor sites
+  the real levers are moving compute jobs and cooling, which is what Google and Emerald AI do; (2) this is exactly where
+  a controller that forecasts the next day should beat a rule, which is what our benchmark is for.
+- **Time zones again.** The tariff's 14:00-18:00 is local time with summer time; our US data runs on fixed Mountain
+  Standard Time, so in summer the window sits at 13:00-17:00 on the simulation clock. Getting this wrong shifts the
+  expensive window by an hour.
+
+
+## 12. Residential flexibility: heat pumps, cars that give back, and the grid operator
+
+- **A heat pump is a battery for heat, if it has a tank.** Electricity = heat / COP, and the COP falls when it is
+  cold outside and when radiators need hot water (air-source with radiators averages about 3.2 over the year in the
+  German When2Heat data, but dips to 1.5 on the coldest hours). Without a tank, a heat pump must run when the heat is
+  needed. With a tank and some spare power it can heat earlier, when power is cheap or solar is spare. An auto-sized
+  heat pump (just big enough for the coldest hour) has no spare power, so "cheap hours" barely helps; a 6 kW unit with
+  a 14 kWh tank does.
+- **Lending a car's energy only pays with a margin.** Every kWh lent comes back with losses both ways (about 10% at
+  95% one-way efficiency), so the price now must beat the cheapest price before departure by that much. And if the car
+  lends all its spare time, it must later recharge at full power whatever the price, which loses money. Our first
+  rule did exactly that and raised the bill; the fixed rule keeps half the remaining stay free for cheap recharging.
+- **The 6 A rule bites when you share power.** Splitting a dimmed allowance equally between two three-phase chargers
+  gave each 3.8 kW, below the 4.14 kW a three-phase charger needs (6 A x 230 V x 3), so both paused and nothing
+  charged. A real energy manager hands the allowance out in order (heat, then cars, then battery) so one car charges.
+- **What §14a really says** (BNetzA BK6-22-300, Anlage 1): devices above 4.2 kW (private chargers, heat pumps, air
+  conditioning, batteries charging) can be dimmed, but each keeps 4.2 kW (heat pumps above 11 kW keep 40%); with an
+  energy manager the whole group keeps 4.2 kW + (n - 1) x a simultaneity factor x 4.2 kW. Grid operators must also offer
+  a three-tier network fee by time of day (Modul 3); in Düsseldorf the 2026 spread is small (3.16 to 8.19 ct/kWh), in
+  Mosbach larger (3.65 to 11.90 ct/kWh), and only in winter quarters.
+- **Smart control can raise the peak.** In our January home example, pre-heating and car charging both chase the same
+  cheap hours: the bill fell about 4% but the peak rose from 11.6 to 13.8 kW. Cheap-hour rules need a peak limit
+  alongside, or an optimiser that sees both.

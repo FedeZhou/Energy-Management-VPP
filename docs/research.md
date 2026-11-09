@@ -140,6 +140,9 @@ Curated lists: [best-of-ps](https://github.com/ps-wiki/best-of-ps), [Awesome Mic
 
 **Pattern:** big players own scale and market access. Gaps sit in **trust, honest performance verification, and hardware-agnostic mid-market control**.
 
+Full 2026 landscape, capability gaps versus emsbench, and the plan for residential at several scales:
+[market-landscape.md](market-landscape.md) (checked 2026-11-08).
+
 ---
 
 ## 7. Best papers and reviews to read, in order
@@ -207,3 +210,52 @@ Audiences:
 7. **Phase 6, user scenarios:** let visitors upload or configure their own site.
 
 **Before going public:** get a short written okay from your manager or HR that the project is generic, uses open data, and is unrelated to ABB products.
+
+---
+
+## 11. Data centers: deep dive (checked 2026-11-08)
+
+**Why they matter.** US data centers used about 4.4% of US electricity in 2023 and could use 6.7 to 12% by 2028
+(LBNL, *2024 United States Data Center Energy Usage Report*, LBNL-2001637, via DOE) \[S\]. Grid connection queues,
+not chips, are now a main limit on new AI capacity, which is why "flexible" data centers get faster connections
+(Chen and Zheng, arXiv 2604.05376: flexible AI load cuts grid investment and operating cost by 3 to 21% depending on
+location) \[S\].
+
+**Consumption.**
+
+- *IT load* (servers, storage, network) is most of it. Cloud and HPC halls run at a high, fairly flat level; AI
+  training adds large, fast swings as jobs start and stop. Measured: the NLR/NREL ESIF HPC data center averaged
+  2.9 MW in Apr-Aug 2024, varied by only about ±1% over the day on average, but 0.1% of 15-min steps jumped by more
+  than 650 kW (our analysis of the open dataset) \[S\].
+- *Cooling and overhead* = IT x (PUE - 1). The 2025 weighted average PUE is **1.54** and has barely moved for six
+  years (Uptime Institute Global Data Center Survey 2025, Fig. 2, n=681) \[S\]. Best-in-class liquid cooling is
+  near 1.05 (ESIF measured 1.07-1.08) \[S\]. Cooling rises with outdoor temperature, so summer afternoons are the peak.
+- *Load factor* (average / peak) is high: 0.81 for ESIF IT load with typical cooling in June 2024 (our analysis). A
+  high load factor leaves little "peak" to shave.
+
+**Electrical layout** (typical, varies by tier): utility feed at medium voltage -> transformers -> switchgear with an
+automatic transfer switch to **diesel generators** -> **UPS** (battery, now mostly lithium-ion LFP) -> power
+distribution units -> racks. Tier III sites commonly use N+1 for supply and generation and 2N for UPS and distribution
+(arXiv 2602.01013) \[S\]. The UPS only bridges until the generators take over: generators "can usually start up and
+come online in under 50 seconds" and "many data centers are operating with a 5 minute runtime" (ZincFive white
+paper, 2024, vendor source) \[S\]. Fuel is commonly stored for 24 to 72 hours (vendor guide, unverified) \[K\].
+
+**What operators and researchers do today (energy management):**
+
+| Lever | Time scale | Who / evidence | In our engine |
+| --- | --- | --- | --- |
+| Peak shaving / demand-charge management with a battery | minutes to hours | Standard C&I practice; joint peak shaving + frequency regulation for a 1 MW data center gives more than the sum of both (Microsoft Research, arXiv 1702.08065) \[S\] | Yes: battery with a reserve floor, flat + peak-window demand charges |
+| Grid-interactive UPS for fast frequency response | sub-second to seconds | Microsoft + Eaton at Grange Castle, Dublin, bid into EirGrid DS3 by Enel X; "the most lucrative services are related to fast frequency response" (Vertiv) \[S\] | No: below our time step (assume the plan is executed) |
+| Shifting compute in time ("carbon-intelligent computing") | hours to a day | Google: day-ahead per-cluster power caps ("virtual capacity curves") (Radovanović et al., arXiv 2106.11750); demand response pilots in Taiwan, Oregon, Nebraska (Google Cloud blog, 2023) \[S\] | Not yet: needs a deferrable-load asset |
+| Demand response by job orchestration | hours | Emerald AI field test: 25% less cluster power for 3 hours on a 256-GPU cluster in Phoenix, with QoS kept (arXiv 2507.00909) \[S\] | Not yet |
+| Cooling flexibility (thermal mass, setpoints, thermal storage) | minutes to hours | Integrated IT + UPS + cooling MILP, 15-min day-ahead schedule, 10% cost cut for a 1 MW model site (Takci, Day, Qadrdan, arXiv 2511.07159; review in *Energy Reports* 13, 2025) \[S\] | Not yet |
+| Generators for demand response | hours | Possible but limited by emissions permits (not researched here) \[K\] | No |
+
+**What we learned from our own scenario** (`configs/sites/operate_data_center.yaml`, June, Xcel Colorado Schedule PG
+tariff from OpenEI URDB): demand charges are about 48% of the bill, yet a 4 MWh / 1 MW battery with a simple
+constant-threshold rule cuts the bill by only about 1.1%. Below a threshold of 5.3 MW the rule runs the battery down on
+long high-load stretches (up to 14 hours) and the monthly peak is not cut at all. **This contradicts the general
+claim in section 2 that demand charges make peak shaving "very valuable": for a high-load-factor site, a battery
+alone is worth little; the bigger levers are moving compute and cooling.** It is also a clean benchmark case, because
+a forecast-based controller should beat the rule clearly (spend energy only in the 14-18 h window that costs 2.4 times
+more, and pre-charge before long high stretches).

@@ -88,7 +88,7 @@ open-data loaders in `src/emsbench/data/`, FastAPI in `src/emsbench/api/app.py`,
 Two modes on one engine: **Plan** (hourly, months to a year) and **Operate** (1-15 min, days; phases, fuses).
 
 ```bash
-$PY -m emsbench.data             # download + process open data into %LOCALAPPDATA%\emsbench (first run ~70 MB)
+$PY -m emsbench.data             # download + process open data into %LOCALAPPDATA%\emsbench (first run ~400 MB, When2Heat is ~330 MB)
 $PY -m emsbench.data --refresh   # rebuild profiles (fetches the latest price/weather months)
 "$USERPROFILE/.venvs/energy-vpp/Scripts/emsbench-app.exe"   # app at http://localhost:8000
 cd web/app && npm run build      # after frontend changes, or: npm run dev (API on :8000)
@@ -104,5 +104,10 @@ ode_modules` (keeps OneDrive from
 - Example sites: `configs/sites/{plan,operate}_*.yaml`. Sizes there are example choices; device parameters
   cite sources in `sim/model.py`.
 - Add an asset type: model class in `sim/model.py` (+ `ASSET_TYPES`), physics in `sim/engine.py`, tests, then
-  `ASSET_INFO` in the API and an icon/colour in `web/app/src`.
+  `ASSET_INFO` in the API and an icon/colour in `web/app/src` plus an illustration in
+  `web/app/src/components/scene/Art.tsx`.
+- Site view has two styles: **Scene** (isometric illustrations, auto-laid-out on an iso grid by `sceneLayout` in
+  `web/app/src/view.ts`, not draggable) and **Diagram** (one-line diagram at the saved `ui` positions, draggable).
 - Demo URLs: `#run` runs the first Plan example; `#operate-run`; `#<preset_id>-run` (e.g. `#operate_shared_garage-run`).
+  `#guide` (or `#guide-5`) opens the guided tour (at step 5); `#help-<topic>` opens one "?" explanation
+  (topics in `web/app/src/help.tsx`, which must stay in sync with the engine's behaviour).
