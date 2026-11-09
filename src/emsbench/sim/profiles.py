@@ -12,7 +12,8 @@ answers with values resampled to that step and says which real dates it used:
   data, values are repeated and the window is flagged "repeated".
 
 Sign/units: load = average kW per step; pv = average kW per kWp installed;
-price = currency per kWh.
+price = currency per kWh; heat = kW per kWh of annual heat demand; cop = kWh heat per kWh
+electricity; netfee = currency per kWh.
 """
 
 from __future__ import annotations
@@ -70,7 +71,7 @@ def _locate(start: dt.datetime, duration: dt.timedelta, first: dt.datetime, last
 @dataclass(frozen=True)
 class Profile:
     id: str
-    kind: str  # "load" | "pv" | "price"
+    kind: str  # "load" | "pv" | "price" | "demand" | "heat" | "cop" | "netfee"
     label: str
     source: str
     values: FloatArray
@@ -211,7 +212,8 @@ class ProfileLibrary:
         return self.ev_sets[set_id]
 
     def catalogue(self) -> dict[str, list[dict[str, object]]]:
-        out: dict[str, list[dict[str, object]]] = {"load": [], "pv": [], "price": [], "ev": []}
+        out: dict[str, list[dict[str, object]]] = {"load": [], "pv": [], "price": [], "demand": [], "heat": [],
+                                                  "cop": [], "netfee": [], "ev": []}
         for p in self.profiles.values():
             out[p.kind].append(p.summary())
         out["ev"] = [s.summary() for s in self.ev_sets.values()]

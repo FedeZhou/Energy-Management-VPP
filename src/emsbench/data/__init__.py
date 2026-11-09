@@ -1,6 +1,6 @@
 """Open data sources, downloaded and processed into a local cache.
 
-`python -m emsbench.data`             prepare everything (first run downloads ~70 MB)
+`python -m emsbench.data`             prepare everything (first run downloads ~400 MB, incl. When2Heat ~330 MB)
 `python -m emsbench.data --refresh`   rebuild processed profiles (re-downloads recent months)
 """
 
@@ -17,7 +17,20 @@ log = logging.getLogger(__name__)
 
 
 def _sources() -> dict[str, Callable[[], tuple[list[Profile], list[EVSessionSet]]]]:
-    from emsbench.data import citylearn, comstock, energycharts, eurostat, openmeteo_pv, opsd, sintef, utwente
+    from emsbench.data import (
+        citylearn,
+        comstock,
+        energycharts,
+        esif,
+        eurostat,
+        netfees,
+        openmeteo_pv,
+        opsd,
+        sintef,
+        tariffs_us,
+        utwente,
+        when2heat,
+    )
 
     return {
         "citylearn": citylearn.build,
@@ -28,6 +41,10 @@ def _sources() -> dict[str, Callable[[], tuple[list[Profile], list[EVSessionSet]
         "openmeteo_pv": lambda: (openmeteo_pv.build(), []),
         "sintef": lambda: ([], sintef.build()),
         "utwente": lambda: ([], utwente.build()),
+        "esif": lambda: (esif.build(), []),
+        "tariffs_us": lambda: (tariffs_us.build(), []),
+        "when2heat": lambda: (when2heat.build(), []),
+        "netfees": lambda: (netfees.build(), []),
     }
 
 

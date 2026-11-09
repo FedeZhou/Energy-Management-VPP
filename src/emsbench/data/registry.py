@@ -102,6 +102,67 @@ SOURCES: list[dict[str, Any]] = [
         "url": "https://github.com/citylearn-project/CityLearn",
         "caveats": "Location and year not documented. EV schedules look synthetic. 'Dynamic' price origin unknown.",
     },
+    {
+        "id": "esif", "prefix": "esif/", "name": "Data center load, Colorado (HPC)",
+        "provider": "National Laboratory of the Rockies (formerly NREL), ESIF data center", "kind": "measured",
+        "what": "IT power and whole-facility power (IT + cooling + pumps + HVAC + lights) of a ~2.5 MW "
+                "liquid-cooled supercomputer data center.",
+        "used_for": "Data center sites (Operate mode)", "resolution": "15 min (averaged from ~1-min samples)",
+        "coverage": "2024-2025, uninterrupted stretches of 90+ days",
+        "licence": "CC BY 4.0", "commercial_use": True,
+        "attribution": "Clark, S. and Strelka, J. NLR HPC Facility Power Usage Effectiveness (PUE) Data. National "
+                       "Laboratory of the Rockies, 2026. https://data.openei.org/submissions/8616",
+        "url": "https://data.openei.org/submissions/8616",
+        "caveats": "One facility. Cooling is best-in-class (PUE about 1.05, industry average 1.54), so the "
+                   "facility profile understates cooling for a typical site. HPC jobs, not a cloud or AI-inference "
+                   "mix.",
+    },
+    {
+        "id": "tariffs_us", "prefix": "urdb/", "name": "US large-customer tariff (Xcel Colorado)",
+        "provider": "OpenEI Utility Rate Database (U.S. DOE / NREL)", "kind": "statistics",
+        "what": "Xcel Energy Colorado Schedule PG 2024: seasonal energy price and a 14-18 h peak-window demand "
+                "charge, as 15-minute profiles.",
+        "used_for": "Data center and large commercial tariffs", "resolution": "15 min (tariff schedule, exact)",
+        "coverage": "tariff effective 2024, repeated 2015-2035",
+        "licence": "Public domain (U.S. government data)", "commercial_use": True,
+        "attribution": "OpenEI Utility Rate Database, rate 6616db7196839681b20553db",
+        "url": "https://apps.openei.org/IURDB/rate/view/6616db7196839681b20553db",
+        "caveats": "One utility, one year. Weekend peak window and the demand interval taken from URDB as listed "
+                   "(not checked against Xcel's tariff book). Fixed monthly charge not modelled.",
+    },
+    {
+        "id": "when2heat", "prefix": "w2h/", "name": "Heat demand and heat pump efficiency, Europe",
+        "provider": "When2Heat (Open Power System Data)", "kind": "modelled",
+        "what": "Hourly heat demand for space heating and hot water (single- and multi-family houses) and the "
+                "coefficient of performance (COP) of air- and ground-source heat pumps, for Germany, the "
+                "Netherlands, France and Denmark.",
+        "used_for": "Heat pump assets", "resolution": "1 hour", "coverage": "2008-2022",
+        "licence": "CC BY 4.0", "commercial_use": True,
+        "attribution": "Ruhnau, O., Hirth, L., Praktiknjo, A. (2019). Time series of heat demand and heat pump "
+                       "efficiency for energy system modeling. Scientific Data 6, 189. "
+                       "https://doi.org/10.1038/s41597-019-0199-y. Data: Open Power System Data, When2Heat "
+                       "2023-07-27.",
+        "url": "https://data.open-power-system-data.org/when2heat/2023-07-27/",
+        "caveats": "National synthetic profiles from gas standard load profiles and weather, not a measured "
+                   "house: smoother than any single home. The space / hot-water split and the effective COP for "
+                   "the mix are our computation from the dataset's columns. One missing hour per year is "
+                   "interpolated.",
+    },
+    {
+        "id": "netfees", "prefix": "netfee/", "name": "Time-variable network fees, Germany (§14a Modul 3)",
+        "provider": "Netzgesellschaft Düsseldorf; Stadtwerke Mosbach (published price sheets)", "kind": "statistics",
+        "what": "The three-tier network fee (low / standard / high) German grid operators must offer to homes "
+                "with a controllable device and a smart meter since April 2025.",
+        "used_for": "Optional network fee on top of the import price", "resolution": "15 min (schedule)",
+        "coverage": "2026 price sheets, applied to every year",
+        "licence": "Public tariff information", "commercial_use": True,
+        "attribution": "Netzgesellschaft Düsseldorf mbH, Netzentgelte Strom gültig ab 01.01.2026 (18.12.2025); "
+                       "Stadtwerke Mosbach GmbH, Preise für die Nutzung des Stromverteilnetzes, gültig ab 1. "
+                       "Januar 2026 (status October 2025).",
+        "url": "https://a.storyblok.com/f/274773/x/dc3a61c884/2025-12-12_finales-preisblatt-nne-strom-2026.pdf",
+        "caveats": "Each grid operator sets its own tiers and windows; these are two examples. Net of VAT. The "
+                   "fixed Modul 1 reduction is not modelled.",
+    },
 ]
 
 EXCLUDED: list[dict[str, str]] = [
@@ -119,7 +180,8 @@ RULES: list[str] = [
     "No fake resolution: if the time step is finer than the data, values are repeated and the run says so.",
     "Same season, same weekday: sources from different years are aligned on season and weekday; each run lists "
     "the real dates used.",
-    "European times use CET (UTC+1) without summer time; California data uses Pacific standard time.",
+    "European times use CET (UTC+1) without summer time; California data uses Pacific standard time; Colorado "
+    "data (data center, US tariff) uses Mountain standard time.",
     "Every default parameter cites its source; example sizes in the example sites are marked as choices.",
 ]
 
