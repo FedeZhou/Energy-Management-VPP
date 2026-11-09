@@ -61,3 +61,14 @@
   .ln-root { grid-template-columns: 1fr; }
   .ln-nav { border-right: 0; border-bottom: 1px solid var(--border); max-height: 40vh; }
 }
+
+/* Formulas (KaTeX). Generous space around and inside each formula box; display equations scroll sideways
+   on narrow screens instead of overflowing. Row spacing inside multi-line formulas comes from the TeX
+   (\[10pt] between rows) plus a slightly taller line height here. */
+.ln-math { margin: 14px 0 16px; padding: 22px 20px 18px; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r-md); color: var(--ink); overflow-x: auto; overflow-y: hidden; }
+.ln-math .katex-display { margin: 0 0 4px; padding: 4px 0; }
+.ln-math .katex { font-size: 1.1em; line-height: 1.5; }
+.ln-math-cap { margin: 16px 0 0; padding-top: 12px; border-top: 1px dashed var(--border); font-size: 13px; line-height: 1.65; color: var(--ink-2); }
+.ln-inner .katex { color: var(--ink); }
+.ln-inner p .katex, .ln-inner li .katex { padding: 0 1px; }

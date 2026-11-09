@@ -3,38 +3,61 @@ import { ArrowLeft, BookOpen, ExternalLink, Search } from "lucide-react";
 import { PAGES, SECTIONS, type Block, type Page } from "../learn/pages";
 import { READ_LABEL, SOURCES } from "../learn/sources";
 import { useStore } from "../store";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import "./learn.css";
 
 const CITE = /\{([a-z0-9_]+)\}/g;
+// Inline math is written \( ... \) inside any text; display math uses a "math" block.
+const INLINE_MATH = /\\\((.+?)\\\)/g;
 
 function citationOrder(page: Page): string[] {
   const order: string[] = [];
   const texts = page.blocks.flatMap((b): string[] => {
     if (b.kind === "p" || b.kind === "note" || b.kind === "h" || b.kind === "code") return [b.text];
+    if (b.kind === "math") return b.caption ? [b.caption] : [];
     if (b.kind === "list" || b.kind === "steps") return b.items;
     return b.rows.flat();
   });
-  for (const t of texts) for (const m of t.matchAll(CITE)) if (!order.includes(m[1])) order.push(m[1]);
+  for (const t of texts) for (const m of t.replace(INLINE_MATH, "").matchAll(CITE)) if (!order.includes(m[1])) order.push(m[1]);
   return order;
 }
 
-function Rich({ text, order }: { text: string; order: string[] }) {
+/** KaTeX rendering of trusted, repository-authored TeX. Errors show the source in red instead of throwing. */
+function Tex({ tex, display = false }: { tex: string; display?: boolean }) {
+  const html = useMemo(() => katex.renderToString(tex, { displayMode: display, throwOnError: false, output: "htmlAndMathml" }), [tex, display]);
+  return <span dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+function Cited({ text, order, k }: { text: string; order: string[]; k: string }) {
   const parts: React.ReactNode[] = [];
   let last = 0;
   for (const m of text.matchAll(CITE)) {
     const before = text.slice(last, m.index).replace(/\s+$/, "");
-    parts.push(<Fragment key={`t${m.index}`}>{before}</Fragment>);
+    parts.push(<Fragment key={`${k}t${m.index}`}>{before}</Fragment>);
     const n = order.indexOf(m[1]) + 1;
     const src = SOURCES[m[1]];
     parts.push(
-      <a key={`c${m.index}`} className="ln-cite" href={`#src-${m[1]}`} title={src ? src.title : m[1]}
+      <a key={`${k}c${m.index}`} className="ln-cite" href={`#src-${m[1]}`} title={src ? src.title : m[1]}
         onClick={(e) => { e.preventDefault(); document.getElementById(`src-${m[1]}`)?.scrollIntoView({ behavior: "smooth", block: "center" }); }}>
         {n}
       </a>,
     );
     last = (m.index ?? 0) + m[0].length;
   }
-  parts.push(<Fragment key="end">{text.slice(last)}</Fragment>);
+  parts.push(<Fragment key={`${k}end`}>{text.slice(last)}</Fragment>);
+  return <>{parts}</>;
+}
+
+function Rich({ text, order }: { text: string; order: string[] }) {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(INLINE_MATH)) {
+    parts.push(<Cited key={`s${m.index}`} k={`s${m.index}`} text={text.slice(last, m.index)} order={order} />);
+    parts.push(<Tex key={`m${m.index}`} tex={m[1]} />);
+    last = (m.index ?? 0) + m[0].length;
+  }
+  parts.push(<Cited key="rest" k="rest" text={text.slice(last)} order={order} />);
   return <>{parts}</>;
 }
 
@@ -45,6 +68,13 @@ function BlockView({ b, order }: { b: Block; order: string[] }) {
     case "list": return <ul>{b.items.map((t) => <li key={t}><Rich text={t} order={order} /></li>)}</ul>;
     case "steps": return <ol>{b.items.map((t) => <li key={t}><Rich text={t} order={order} /></li>)}</ol>;
     case "code": return <pre className="ln-code"><code>{b.text}</code></pre>;
+    case "math":
+      return (
+        <div className="ln-math">
+          <Tex tex={b.tex} display />
+          {b.caption && <p className="ln-math-cap"><Rich text={b.caption} order={order} /></p>}
+        </div>
+      );
     case "note": return <p className={`ln-note ${b.tone}`}><Rich text={b.text} order={order} /></p>;
     case "facts":
       return (

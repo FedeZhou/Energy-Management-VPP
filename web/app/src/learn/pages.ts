@@ -1,3 +1,6 @@
+// Market and roadmap pages live in market.ts (kept apart so parallel edits do not collide).
+import { MARKET_PAGES } from "./market";
+
 // Learn pages. Text may cite sources inline with {sourceId}; every id must exist in sources.ts.
 // Rule: only statements backed by a cited source (or by this repository / our own runs, labelled as such).
 
@@ -7,12 +10,13 @@ export type Block =
   | { kind: "steps"; items: string[] }
   | { kind: "facts"; rows: [string, string][] }
   | { kind: "code"; text: string }
+  | { kind: "math"; tex: string; caption?: string }
   | { kind: "note"; tone: "info" | "warn"; text: string }
   | { kind: "h"; text: string };
 
 export interface Page {
   id: string;
-  section: "lab" | "systems" | "research";
+  section: "lab" | "systems" | "research" | "market";
   title: string;
   summary: string;
   status?: "built" | "planned";
@@ -23,6 +27,7 @@ export const SECTIONS: Record<Page["section"], { title: string; intro: string }>
   lab: { title: "How Site Lab works", intro: "What the simulator does, step by step, and how each control strategy is implemented." },
   systems: { title: "How the systems behave", intro: "Batteries, solar, EV charging, grid connections, tariffs, buildings and data centers." },
   research: { title: "Research digests", intro: "Recent papers, what they found, and what it means for Site Lab. Summaries are based on abstracts unless stated." },
+  market: { title: "Market and roadmap", intro: "Who builds virtual power plants and home energy systems in 2026, what Site Lab cannot simulate yet, and the steps to get there. Company figures are their own claims." },
 };
 
 export const PAGES: Page[] = [
@@ -57,62 +62,355 @@ export const PAGES: Page[] = [
     ],
   },
   {
-    id: "battery-strategies", section: "lab", title: "Battery strategies", status: "built",
-    summary: "Four rules: idle, self-consumption, price arbitrage and peak shaving. Simple, transparent, and each with a known failure mode.",
+    id: "battery-strategies", section: "lab", title: "Rule-based battery control", status: "built",
+    summary: "The simplest way to run a battery: fixed if-then rules. How they work, the battery physics underneath, what the literature says about them, and where they break.",
     blocks: [
-      { kind: "p", text: "All four are rule-based: they decide from the current step only, except price arbitrage, which looks 24 hours ahead at prices {code_ctrl}. A real-hardware study found that simple rules, decision trees and MPC achieved costs within 0.6% of each other on four house reproductions {ruddick2024}, so rules are a serious baseline, not a straw man." },
+      { kind: "p", text: "In plain words: a rule-based controller looks at what is happening right now (is there spare solar? is the price high? is the site drawing too much?) and applies a fixed rule, such as 'store spare solar' or 'discharge when import exceeds 50 kW'. It does not plan ahead and needs no forecast. Almost every home battery and many commercial systems start here, because rules are easy to understand, cheap to run and safe to certify. The cost is that a rule cannot anticipate: it may spend the battery too early, or miss a peak it could have seen coming." },
+      { kind: "h", text: "Why rules are still the baseline" },
+      { kind: "p", text: "Rules are not a straw man. On real hardware, four house reproductions run with rules, decision trees and MPC ended within 0.6% of each other in cost, while a reinforcement-learning agent still in training cost 25.5% more {ruddick2024}. CityLearn, the reference benchmark for building energy control, ships rule-based controllers as its baselines {vazquez2019} {nagy2025}. Optimisation pays off when the site has something to plan for, such as a demand charge, a price spread worth chasing or a limit that binds; that is why the same research field that built MPC still reports rules alongside it {drgona2020}." },
+      { kind: "h", text: "Notation" },
+      { kind: "math", tex: String.raw`\text{net}_t = L_t + \sum_i P^{\mathrm{EV}}_{i,t} - S_t, \qquad g_t = \text{net}_t + P_t`,
+        caption: String.raw`At each time step \(t\) of length \(\Delta t\) hours: \(L_t\) is building demand, \(S_t\) solar output and \(P^{\mathrm{EV}}_{i,t}\) the charging power of car \(i\), all in kW. \(\text{net}_t\) is what the site needs before the battery. The battery power \(P_t\) is positive when charging and negative when discharging, so the grid power \(g_t\) is import when positive and export when negative {code_engine}.` },
+      { kind: "h", text: "The battery model every strategy shares" },
+      { kind: "math", tex: String.raw`\eta = \sqrt{\eta_{\mathrm{rt}}}, \qquad E_{t+1} = \begin{cases} E_t + \eta\, P_t\, \Delta t & P_t \ge 0 \ \text{(charging)} \\[8pt] E_t + P_t\, \Delta t / \eta & P_t < 0 \ \text{(discharging)} \end{cases}`,
+        caption: String.raw`\(E_t\) is the energy stored (kWh). The round-trip efficiency \(\eta_{\mathrm{rt}}\) is split evenly between the way in and the way out, so each direction loses \(1-\eta\). With the default \(\eta_{\mathrm{rt}} = 0.9\) {code_model}, \(\eta \approx 0.949\): 1 kWh from the grid adds 0.949 kWh to the battery, and taking 1 kWh out removes 1.054 kWh {code_engine}.` },
+      { kind: "math", tex: String.raw`\bar P^{\mathrm{ch}}_t = \min\!\Big(P_{\mathrm{nom}},\ \frac{E_{\max} - E_t}{\eta\, \Delta t}\Big), \qquad \bar P^{\mathrm{dis}}_t = \min\!\Big(P_{\mathrm{nom}},\ \frac{(E_t - E_{\min})\,\eta}{\Delta t}\Big), \qquad -\bar P^{\mathrm{dis}}_t \le P_t \le \bar P^{\mathrm{ch}}_t`,
+        caption: String.raw`Whatever a strategy asks for is clipped to these limits: the inverter's rated power \(P_{\mathrm{nom}}\), and the room left between the minimum and maximum charge \(E_{\min} = \text{soc}_{\min}\cdot\text{capacity}\) and \(E_{\max} = \text{soc}_{\max}\cdot\text{capacity}\) {code_engine}. The minimum charge is also how a backup reserve is kept: in the data center example the UPS's 5 minutes of backup energy sits below \(E_{\min}\), where no strategy can reach it {code_engine}.` },
       { kind: "h", text: "Idle" },
-      { kind: "p", text: "Never uses the battery. Used for the baseline {code_ctrl}." },
+      { kind: "math", tex: String.raw`P_t = 0`, caption: "Never uses the battery. This is the baseline every run is compared with {code_ctrl}." },
       { kind: "h", text: "Self-consumption" },
-      { kind: "code", text: "net = demand + EV - solar\nbattery_power = -net        # spare solar -> charge, shortfall -> discharge" },
-      { kind: "p", text: "Stores spare solar and uses it when the site is short. It never charges from the grid {code_ctrl}. EMHASS offers a comparable self-consumption objective in its optimiser {emhass_lp}." },
+      { kind: "math", tex: String.raw`P_t = -\,\text{net}_t \quad\Longrightarrow\quad g_t = 0 \ \text{whenever the battery can follow}`,
+        caption: String.raw`Spare solar (\(\text{net}_t < 0\)) charges the battery; any shortfall (\(\text{net}_t > 0\)) is covered from it. The goal is zero exchange with the grid, and the battery never charges from the grid {code_ctrl}.` },
+      { kind: "p", text: "Where it fits: homes and small businesses with solar, where buying a kWh costs much more than selling one, so every kWh of solar used on site is worth the purchase price. EMHASS offers a comparable self-consumption objective in its optimiser, weighting grid purchases more heavily than export revenue {emhass_lp}. Where it fails: it ignores prices and time, so on a dynamic tariff it may empty the battery at noon, when power is cheap, and have nothing left for the expensive evening." },
       { kind: "h", text: "Price arbitrage" },
-      { kind: "code", text: "if net < 0:                       charge with the spare solar\nelif price == max(next 24 h):     discharge to cover the site\nelif price == min(next 24 h):     charge at full power from the grid\nelse:                             wait" },
-      { kind: "note", tone: "warn", text: "In our one-year California office example it cut the bill by 13% but raised the peak import from 158 to 218 kW, because the battery charges from the grid on top of the office load. With a demand charge this would backfire {runs_2026_11}." },
+      { kind: "math", tex: String.raw`P_t = \begin{cases} -\,\text{net}_t & \text{if } \text{net}_t < 0 \quad \text{(store spare solar first)} \\[6pt] -\,\text{net}_t & \text{if } p_t = \max_{\tau \in W_t} p_\tau \quad \text{(cover the site at the dearest step)} \\[6pt] \bar P^{\mathrm{ch}}_t & \text{if } p_t = \min_{\tau \in W_t} p_\tau \quad \text{(fill up at the cheapest step)} \\[6pt] 0 & \text{otherwise} \end{cases}`,
+        caption: String.raw`\(p_t\) is the import price and \(W_t\) the next 24 hours of prices, which Site Lab knows exactly {code_ctrl}.` },
+      { kind: "math", tex: String.raw`\text{buying at } p_{\text{low}} \text{ to replace a purchase at } p_{\text{high}} \text{ pays only if } \quad p_{\text{high}}\, \eta^2 > p_{\text{low}}`,
+        caption: String.raw`1 kWh bought brings back \(\eta^2 \approx 0.9\) kWh. The rule never checks this, and it acts in only one cheapest and one dearest step of the window: at 15-minute steps, a battery that needs two hours to fill gets one 15-minute slot {code_ctrl}.` },
+      { kind: "note", tone: "warn", text: "Where it backfires: in our one-year California office example it cut the energy bill by 12.7% (USD 156,671 to 136,782) but raised the peak import from 158 to 218 kW, because the battery charges from the grid on top of the office load. With a demand charge, the extra 59 kW of peak would be billed every month {runs_2026_11}." },
       { kind: "h", text: "Peak shaving" },
-      { kind: "code", text: "battery_power = threshold - net   # discharge above the threshold, recharge below it" },
-      { kind: "note", tone: "warn", text: "In our office example it lowered the peak from 98 to 90 kW but cost slightly more (€1,744 vs €1,721 for the week): the tariff had no demand charge, so a lower peak earned nothing while battery losses still cost money {runs_2026_11}." },
+      { kind: "math", tex: String.raw`P_t = \theta - \text{net}_t \quad\Longrightarrow\quad g_t = \theta \ \text{ while } -\bar P^{\mathrm{dis}}_t \le \theta - \text{net}_t \le \bar P^{\mathrm{ch}}_t`,
+        caption: String.raw`Above the threshold \(\theta\) the battery discharges the excess; below it, it recharges using only the headroom \(\theta - \text{net}_t\), so recharging never creates a new peak {code_ctrl}.` },
+      { kind: "p", text: "Peak shaving is one of the oldest battery applications in the literature. Oudalov, Cherkaoui and Béguin sized a battery to maximise a customer's benefit from lower demand payments with the smallest possible capacity, and operated it with dynamic programming, an optimisation over the whole day rather than a fixed threshold {oudalov2007}. Commercial EMSs ship the threshold version as a standard controller: OpenEMS, the open-source EMS behind FENECON's commercial systems, has a 'Symmetric Peak-Shaving' controller that works at the grid connection {openems_intro} {openems_peak}." },
+      { kind: "note", tone: "warn", text: "Two failure modes from our runs. Office week, no demand charge in the tariff: the peak fell from 98 to 90 kW but the bill rose from €1,721 to €1,744, because a lower peak earned nothing while battery losses still cost money {runs_2026_11}. Data center month, demand charges about half the bill: the best fixed threshold cut the bill by only 1.1% (USD 307,079 to 303,637). Below 5.3 MW the battery ran empty during high-load stretches of up to 14 hours and the monthly peak was not reduced at all {runs_2026_11}." },
+      { kind: "h", text: "Making rules behave on real hardware" },
+      { kind: "list", items: [
+        "Hysteresis and delays: real controllers wait until a condition has held for a while before switching, so devices are not turned on and off too often; evcc makes these delays configurable for exactly that reason {evcc_solar}. Site Lab's rules switch instantly.",
+        "Priorities: when several rules compete (charge the car or the home battery first?), products expose an explicit priority setting; evcc, for example, lets the user decide how far the home battery may be used for the car {evcc_solar}.",
+        "Fallback role: even sites run by optimisers or learned controllers keep rules underneath as the safe default; Google's AI cooling control hands back to the site's rules and heuristics whenever operators leave AI mode {deepmind2018}.",
+      ] },
       { kind: "h", text: "What all four lack" },
-      { kind: "p", text: "None of them plans: they cannot save battery energy for a peak that is coming, or weigh price against wear. That is the job of MPC (see Planned controllers)." },
+      { kind: "p", text: "None of them plans: they cannot save energy for a peak that is coming, refill before a long high stretch, or weigh price against wear. Commercial systems add a planning layer for exactly this: OpenEMS's time-of-use controller recomputes a 24-hour battery schedule in 15-minute intervals from forecasts and day-ahead prices, on a rolling basis {openems_tou}. That planning layer is model predictive control, the subject of the next pages." },
+      { kind: "h", text: "Go deeper" },
+      { kind: "facts", rows: [
+        ["Rules vs optimisation on real hardware", "Ruddick et al. 2024 compare rules, decision trees, MPC and safe RL on physical house reproductions {ruddick2024}."],
+        ["Optimal peak shaving", "Oudalov et al. 2007: sizing a battery for demand charges and operating it with dynamic programming {oudalov2007}."],
+        ["Benchmarks with rule baselines", "CityLearn: the environment {vazquez2019} and four years of its challenge {nagy2025}."],
+      ] },
     ],
   },
   {
-    id: "ev-strategies", section: "lab", title: "EV charging strategies", status: "built",
-    summary: "As fast as possible, spread until departure, cheapest hours, and solar surplus, all limited by the car, the charger and the 6 A minimum.",
+    id: "ev-strategies", section: "lab", title: "EV smart charging", status: "built",
+    summary: "Why uncontrolled charging is a problem, how smart charging is classified in the literature, the four strategies Site Lab implements as formulas, and how real controllers and aggregators do it.",
     blocks: [
+      { kind: "p", text: "In plain words: an electric car plugged in for ten hours usually needs only two or three hours of charging. Smart charging decides when, and how fast, to use those hours: when power is cheap, when the sun shines, or when the building's connection has room. Done well, the car is still full at departure and the site pays less and stays within its limits; done naively, many cars start at the same moment and create a new peak." },
+      { kind: "h", text: "Why it matters" },
+      { kind: "p", text: "Uncontrolled charging affects the local distribution grid through its voltage profile, power losses, phase unbalance, transformer ageing and harmonic distortion {alogaili2019}. Early work set out the framework that still structures the field: integrating EVs touches both the grid's technical operation and the electricity market, with a cast of players (car owners, aggregators, distribution and transmission operators, suppliers) {lopes2010}. An aggregator, the commercial middleman between the market and EV owners, can buy energy and sell reserve for a whole fleet; its bids depend on forecasts of how cars will arrive, leave and charge {bessa2011}." },
+      { kind: "h", text: "How the literature classifies smart charging" },
       { kind: "facts", rows: [
-        ["As fast as possible", "Full power from arrival until the car is full or leaves {code_ctrl}."],
-        ["Spread until departure", "The lowest steady power that still finishes by departure, never below the charger's minimum {code_ctrl}."],
-        ["Cheapest hours", "Ranks the coming time steps before departure by price and charges at full power in the cheapest ones {code_ctrl}."],
-        ["Solar surplus", "Charges from spare solar only, and switches to full power when there is no slack left to finish by departure {code_ctrl}."],
+        ["Scheduling", "Decide each car's charging power over time from prices, limits and departure times; the strategies below are simple scheduling rules {alogaili2019}."],
+        ["Clustering", "Group sessions or users with similar behaviour so they can be planned together {alogaili2019}."],
+        ["Forecasting", "Predict arrivals, departures and energy needs, which scheduling then relies on {alogaili2019}."],
       ] },
-      { kind: "h", text: "Limits every strategy respects" },
-      { kind: "list", items: [
-        "The charger's maximum power, and the car's own maximum where the data gives one {code_engine}.",
-        "The minimum current: under IEC 61851-1 a charger cannot offer less than 6 A, so it pauses instead {iec61851}. On three phases that is 6 A × 3 × 230 V = 4.14 kW; on one phase 1.38 kW {code_model}.",
-        "A car whose maximum is below a three-phase charger's minimum is treated as charging on one phase {code_engine}.",
-      ] },
+      { kind: "p", text: "Open datasets made this measurable. ACN-Data, from charging networks at Caltech and JPL, records real sessions, and its authors showed how such data serves both analysis and control research {lee2019acn}; ACN-Sim turns it into an open-source simulator for testing charging algorithms {lee2020acnsim}. Norwegian residential data show a large potential to shift charging from afternoon and evening to night {sorensen2023}." },
+      { kind: "h", text: "Quantities every strategy uses" },
+      { kind: "math", tex: String.raw`n_t = \frac{E_t}{\eta_c\,\Delta t}, \qquad \hat P_t = \min\big(\bar P,\ n_t\big), \qquad k_t = \Big\lceil \frac{n_t}{\bar P} \Big\rceil, \qquad \text{no slack} \iff k_t \ge N_t`,
+        caption: String.raw`\(E_t\) is the energy the car still needs (kWh, at its battery), \(\eta_c\) the charger efficiency (default 0.95), \(\bar P\) the smaller of the charger's and the car's maximum power, and \(N_t\) the number of steps until departure. \(n_t\) is the power that would finish in one step, \(\hat P_t\) the most the car can usefully take now, and \(k_t\) the number of full-power steps still needed {code_ctrl}.` },
+      { kind: "p", text: String.raw`The no-slack rule is the safety net: whatever the strategy, a car that would otherwise miss its departure target charges at full power \(\hat P_t\). Every strategy re-decides every step from the energy still missing, so a car slowed by a fuse or the import limit is caught up later {code_ctrl}.` },
+      { kind: "h", text: "The four strategies in Site Lab" },
+      { kind: "math", tex: String.raw`\begin{aligned}
+\text{as fast as possible:}\quad & P_t = \hat P_t \\[10pt]
+\text{spread until departure:}\quad & P_t = \min\!\Big(\hat P_t,\ \max\!\big(P_{\min},\ \tfrac{E_t}{\eta_c\,\Delta t\,N_t}\big)\Big) \\[10pt]
+\text{cheapest hours:}\quad & P_t = \begin{cases} \hat P_t & t \text{ among the } k_t \text{ cheapest of the next } N_t \text{ steps} \\[4pt] 0 & \text{otherwise} \end{cases} \\[10pt]
+\text{solar surplus:}\quad & P_t = \begin{cases} \min(\hat P_t,\ s_t) & \text{if } \ge P_{\min} \\[4pt] 0 & \text{otherwise} \end{cases}
+\end{aligned}`,
+        caption: String.raw`\(s_t\) is the solar surplus left after building demand and after chargers earlier in the list have taken their share {code_ctrl}.` },
+      { kind: "h", text: "The minimum current" },
+      { kind: "math", tex: String.raw`P_{\min} = I_{\min} \cdot 230\ \mathrm{V} \cdot n_\phi, \qquad I_{\min} = 6\ \mathrm{A} \ \Rightarrow\ P_{\min} = 4.14\ \mathrm{kW}\ (3\ \text{phases}),\ 1.38\ \mathrm{kW}\ (1\ \text{phase})`,
+        caption: String.raw`Under IEC 61851-1 a charger cannot offer less than 6 A per phase {iec61851}; below that it pauses instead {code_model}. A car whose own maximum is below the three-phase minimum is treated as charging on one phase {code_engine}.` },
       { kind: "note", tone: "info", text: "Consequence found in our tests: a three-phase charger cannot follow a 3 kW solar surplus, because its minimum is 4.14 kW. It has to wait {code_engine}." },
+      { kind: "note", tone: "info", text: "Site Lab knows each car's departure time and energy need exactly, because they come from recorded sessions. Real chargers usually do not: evcc can plan to a target charge level only if it can read the car's charge level and battery size (for example through the car maker's online service); otherwise the user enters an energy amount in kWh {evcc_plans}. This gap is one of the forecast errors the benchmark will add." },
+      { kind: "h", text: "How a real charging controller does it: evcc" },
+      { kind: "p", text: "evcc is an open-source charging controller for homes and small sites {evcc_solar}. Its behaviour maps closely onto the strategies above, plus details that matter on real hardware:" },
+      { kind: "list", items: [
+        "Solar surplus ('Smart' mode): charging starts once the surplus covers the minimum charging power and is adjusted continuously so that, if possible, no grid power is drawn; it pauses when the surplus drops {evcc_solar}.",
+        "Start and stop delays: charging starts only after the surplus has stayed above the minimum for a while, and stops only after it has stayed below for a while, because some cars refuse to restart after too many interruptions {evcc_solar}.",
+        "Phase switching: with a charger that can switch between one and three phases, charging can start at just 1.4 kW (one phase at 6 A) instead of the three-phase minimum {evcc_solar}.",
+        "Solar share: a slider lets part of the minimum power come from the grid or the home battery, so charging is not blocked in winter, when surplus rarely reaches the minimum {evcc_solar}.",
+        "Cheap grid charging: on a dynamic tariff the user sets a price limit, and fast charging is enabled in the hours below it {evcc_tariffs}.",
+        "Charging plans: given a departure time and a target, the planner charges in the cheapest hours before departure, or the lowest-CO₂ hours if a CO₂ forecast is configured; it can pick the cheapest slots or one continuous block, and can move part of the charging to just before departure {evcc_plans}.",
+      ] },
+      { kind: "p", text: "OpenEMS has the same building blocks for commercial sites: its EV charging controller runs modes such as 'Force-Charge' and 'Surplus Energy Charging' {openems_evcs}." },
       { kind: "h", text: "The rebound peak" },
-      { kind: "p", text: "In our shared-garage example, moving every car to the cheapest hours saved about 4% (at spot prices, before tariff add-ons) but raised the highest phase current from 56 A to 63 A, right at the fuse, because everyone started at the same cheap moment {runs_2026_11}. The literature calls this an avalanche effect: synchronised charging creates new demand peaks; capacity-based pricing is one proposed fix {valogianni2025}." },
-      { kind: "h", text: "When cars are actually there" },
-      { kind: "p", text: "Norwegian residential data show a large potential to shift charging from afternoon and evening to night {sorensen2023}. That also explains why a solar-surplus strategy rarely gets sun for home chargers: the cars are home in the evening." },
+      { kind: "p", text: "Price signals move load, and if everyone sees the same signal, everyone moves together. In our shared-garage example, moving every car to the cheapest hours saved 1.4% over two winter days (€169.85 to €167.52, with the household tariff add-on) but raised the highest phase current from 56 A to 63 A, right at the fuse {runs_2026_11}. The literature calls this an avalanche effect, and capacity-based pricing is one proposed fix {valogianni2025}. A review of reinforcement learning for demand response makes the same point from the other side: when prices depend on demand, controllers risk shifting the peak instead of shaving it {vazquezcanteli2019review}. Coordinated approaches avoid it; in a game-theoretic scheme, each household best-responds to the total load and tariff, and the resulting equilibrium both minimises total cost and lowers the peak-to-average ratio {mohsenianrad2010}." },
+      { kind: "h", text: "Go deeper" },
+      { kind: "facts", rows: [
+        ["The framework", "Lopes, Soares and Almeida 2010: EVs in grid operation and markets, and who does what {lopes2010}."],
+        ["Review of control strategies", "Al-Ogaili et al. 2019: scheduling, clustering and forecasting with real-world data {alogaili2019}."],
+        ["Fleets in the market", "Bessa et al. 2011: an EV aggregator bidding energy and reserve {bessa2011}."],
+        ["Open data and simulation", "ACN-Data {lee2019acn} and ACN-Sim {lee2020acnsim}; Norwegian residential sessions {sorensen2023}."],
+        ["Coordination and pricing", "Game-theoretic scheduling {mohsenianrad2010}; capacity-based pricing against avalanches {valogianni2025}."],
+      ] },
     ],
   },
   {
     id: "planned", section: "lab", title: "Planned controllers", status: "planned",
-    summary: "Not built yet: deterministic MPC, stochastic MPC, learning-based hybrids and safe reinforcement learning, in that order.",
+    summary: "Deterministic MPC is built; stochastic MPC, learning-based hybrids and safe reinforcement learning follow, in that order.",
     blocks: [
-      { kind: "note", tone: "info", text: "Nothing on this page is implemented in Site Lab yet. It describes the plan and the published methods it will follow." },
-      { kind: "h", text: "Deterministic MPC (next)" },
-      { kind: "p", text: "Model predictive control optimises over a forecast horizon, applies only the first step, and repeats. EMHASS implements this as a linear program: maximise profit, minus cost, or self-consumption, subject to a power balance in every step and battery state-of-charge limits with separate charge and discharge efficiencies; its MPC mode re-optimises frequently, for example every 5 minutes, and applies only the first element {emhass_lp}. EMHASS builds the problem with CVXPY and solves it with HiGHS by default {emhass_home}." },
-      { kind: "code", text: "maximise   Σ_t  -price_t · grid_import_t · Δt            (cost objective)\nsubject to pv_t - load_t + grid_t + battery_out_t - battery_in_t = 0\n           SoC limits from Σ (out/η_dis - η_ch · in) · Δt\n           power limits on battery and grid" },
+      { kind: "note", tone: "info", text: "Only deterministic MPC on this page is implemented in Site Lab so far {code_mpc}. The rest is the plan; the theory is on 'Model predictive control', 'Planning under uncertainty' and 'Reinforcement learning'." },
+      { kind: "h", text: "Deterministic MPC (built)" },
+      { kind: "p", text: "Model predictive control optimises over a forecast horizon, applies only the first step, and repeats. EMHASS implements this as a linear program and re-optimises frequently, for example every 5 minutes {emhass_lp}, building the problem with CVXPY and solving it with HiGHS by default {emhass_home}. Site Lab's version is described on 'Model predictive control' {code_mpc}." },
       { kind: "h", text: "Stochastic MPC" },
       { kind: "p", text: "Plans against forecast uncertainty instead of a single forecast. One study combined an LSTM forecaster with a constraint-tightened stochastic optimisation and cut a German company's peak grid draw by a further 99 kW (5.8%) compared with standard MPC {li2025smpc}." },
       { kind: "h", text: "Learning-based hybrids" },
       { kind: "p", text: "Across four years of the CityLearn Challenge, hybrid approaches combining forecasting, optimisation and learning proved effective {nagy2025}." },
       { kind: "h", text: "Safe reinforcement learning (last)" },
       { kind: "p", text: "Model-free RL explores with largely random decisions that can violate safety constraints, so deploying it directly is considered unacceptable without safety mechanisms {yu2024saferl}. In a real home test, an RL agent still in training cost 25.5% more than rules, decision trees and MPC {ruddick2024}; in a real industrial heating network, RL ran stably but performed significantly worse than in simulation {lademann2026}." },
+    ],
+  },
+  {
+    id: "layers", section: "lab", title: "Control layers and time scales",
+    summary: "Real energy management is a stack: day-ahead plans, re-planning every few minutes, fast local control in seconds, and hard safety limits underneath.",
+    blocks: [
+      { kind: "p", text: "In plain words: a site's energy management is not one algorithm but a chain of them, each on its own clock. Once a day a planner decides roughly when to buy, store and use energy; every few minutes that plan is refreshed with new measurements; within seconds, local controllers react to the grid and to breakers; and underneath everything, hard limits stop any decision that would be unsafe. Each layer hands its decision down as a target for the next." },
+      { kind: "p", text: "Reviews of microgrid energy management describe the same building blocks: decision-making strategies and their solution methods, ways to quantify the uncertainty of renewables and load, and the communication technology that links them {zia2018}. Reviews of virtual power plants add the time dimension: optimisation runs day-ahead, intra-day and in real time, with centralised, distributed or hybrid control {huang2026vpp}." },
+      { kind: "facts", rows: [
+        ["Day ahead (once a day)", "Plan tomorrow from price and load forecasts. European day-ahead prices are set per 15 minutes since 1 October 2025 {sdac_15min}. Google plans each data center cluster's hourly capacity for flexible jobs one day ahead {google_vcc}."],
+        ["Re-planning (every 5-15 min)", "Re-run the plan with fresh measurements and forecasts, apply only the next step. EMHASS's MPC mode re-optimises, for example, every 5 minutes {emhass_lp}; OpenEMS's time-of-use controller rebuilds a 24-hour schedule in 15-minute intervals on a rolling basis {openems_tou}; Google's autonomous cooling control acts every five minutes {deepmind2018}."],
+        ["Fast local control (seconds)", "React to the grid frequency or a breaker limit without waiting for the planner. Below Site Lab's time step, so Site Lab assumes this layer executes the plan perfectly."],
+        ["Safety limits (always)", "Hard limits checked locally before anything is executed. In Site Lab this is the safety layer (import limit, fuses, export limit) {code_engine}; in Google's cooling system the local control system re-verifies every instruction from the cloud against its own constraints {deepmind2018}."],
+      ] },
+      { kind: "h", text: "Site Lab's safety layer, as a formula" },
+      { kind: "math", tex: String.raw`\text{if } g_t > G^{\mathrm{imp}}: \quad P^{\mathrm{EV}}_{i,t} \leftarrow P^{\mathrm{EV}}_{i,t}\Big(1 - \frac{x_t}{\sum_j P^{\mathrm{EV}}_{j,t}}\Big), \qquad x_t = \text{excess left after the battery}`,
+        caption: String.raw`When the site would import more than its limit \(G^{\mathrm{imp}}\), the battery first stops charging, then discharges harder; whatever excess \(x_t\) remains is taken from the cars in proportion to their power, and any overload still left is recorded {code_engine}. Fuses are handled the same way, per phase {code_engine}.` },
+      { kind: "h", text: "Fast layer example: frequency containment reserve (FCR)" },
+      { kind: "p", text: "Batteries can be paid to help stabilise the grid frequency {shi2017}. EU rules require FCR to be activated by a proportional governor reacting to frequency deviations, or by a monotonic piecewise-linear power-frequency curve {sogl2017}. In continental Europe the full reserve must be delivered for a deviation of ±200 mHz within 30 seconds, with a dead band of at most 10 mHz {sogl2017}:" },
+      { kind: "math", tex: String.raw`P^{\mathrm{FCR}}_t = -\,P^{\mathrm{res}} \cdot \operatorname{clip}\!\Big(\frac{f_t - 50\ \mathrm{Hz}}{0.2\ \mathrm{Hz}},\ -1,\ 1\Big), \qquad P^{\mathrm{battery}}_t = P^{\mathrm{plan}}_t + P^{\mathrm{FCR}}_t`,
+        caption: String.raw`\(f_t\) is the measured grid frequency and \(P^{\mathrm{res}}\) the reserve sold. Frequency too high: the battery charges; too low: it discharges, proportionally, reaching the full reserve at 49.8 or 50.2 Hz {sogl2017}.` },
+      { kind: "p", text: "This is why the layers matter for planning: power and energy reserved for FCR are not available for peak shaving, so the planner must hold them back. Research on using one battery for both, with degradation and uncertainty in load and regulation signals in the model, found the joint saving is often larger than the sum of the two alone, that a simple threshold real-time rule captures that gain, and that bills fell by up to 15% on real data {shi2017}." },
+      { kind: "h", text: "Why Site Lab models only part of the stack" },
+      { kind: "p", text: "Site Lab simulates the re-planning and safety layers at 1-60 minute steps {code_engine}. Second-by-second services like FCR, and the inverter control that delivers them, need a different simulator; we treat them as executed exactly as planned and say so." },
+    ],
+  },
+  {
+    id: "mpc", section: "lab", title: "Model predictive control (MPC)", status: "built",
+    summary: "Planning ahead with a model and a forecast, re-planned every few minutes: the idea, the optimisation Site Lab solves, the design choices, what reviews and field tests report, and where it is used.",
+    blocks: [
+      { kind: "note", tone: "info", text: "Built in Site Lab as the battery strategy 'mpc': it plans the battery and every EV charger together {code_mpc}. Forecasts are perfect for now (the true future load, solar, prices and car visits), so results are an upper bound on what a real MPC with imperfect forecasts can reach {code_mpc}." },
+      { kind: "p", text: "In plain words: MPC is how a careful driver uses the road ahead. With a model of how the site behaves and a forecast of the next day (prices, load, sun, cars), it works out the best plan for the whole horizon, carries out only the first step, then looks again with fresh information and re-plans. The model makes it plan; the re-planning makes it forgive wrong forecasts. Its strength is that goals (cost, peaks, wear) and limits (fuses, battery size, departure times) are written down explicitly and traded off by a solver rather than by hand-tuned rules." },
+      { kind: "h", text: "Where it comes from" },
+      { kind: "p", text: "MPC's appeal, in the words of one overview, is its conceptual simplicity and its ability to handle systems with many inputs and outputs, constraints on inputs and states, and conflicting objectives {mesbah2016}. Mayne reviews its recent developments and future promise {mayne2014}. In buildings, reviews report that MPC can notably reduce energy use and emissions, but that practical applications are still at an early stage {drgona2020}; it has been applied to building thermal mass, to active storage and to on-site renewables, and its ability to handle constraints, disturbance forecasts and conflicting goals such as comfort and cost is its main advantage {serale2018}." },
+      { kind: "h", text: "The loop (receding horizon)" },
+      { kind: "steps", items: [
+        "Measure the current state, above all the battery's charge (the optimiser's initial state of charge) {emhass_lp}.",
+        "Take forecasts for the next H steps: load and solar, plus the price for each step {emhass_lp}.",
+        "Solve one optimisation over the whole horizon {emhass_lp}.",
+        "Apply only the first step's decisions, then repeat at the next step with new data {emhass_lp}.",
+      ] },
+      { kind: "h", text: "The optimisation Site Lab solves at every re-plan" },
+      { kind: "p", text: "The structure follows EMHASS's linear program (power balance per step, battery charge and discharge with their own efficiencies) {emhass_lp}, extended with EV charging, the site's limits and demand charges {code_mpc}. Each re-plan covers the next 24 hours by default and is repeated every 60 minutes, and immediately when a car plugs in; both are settings {code_mpc} {code_model}. It is solved with HiGHS through SciPy {code_mpc}." },
+      { kind: "math", tex: String.raw`\min\ \ \underbrace{\sum_{t=0}^{H-1}\big(p_t\, g^{+}_t - p^{\mathrm{exp}}\, g^{-}_t\big)\Delta t}_{\text{energy bill}} \;+\; \underbrace{c^{\mathrm{flat}}\, \hat g \;+\; \sum_{w} c_w\, \hat g_w}_{\text{demand charges}} \;-\; \underbrace{v\, e_H}_{\text{energy left at the end}} \;+\; \underbrace{M \sum_{k} s_k \;+\; 100M \sum_t o_t}_{\text{penalties}} \;+\; \underbrace{\epsilon \sum_t (c_t + d_t)\Delta t}_{\text{tie-break}}`,
+        caption: String.raw`Variables for every step \(t\) of the horizon \(H\): battery charge \(c_t\) and discharge \(d_t\); grid import \(g^{+}_t\) and export \(g^{-}_t\); curtailed solar \(u_t\); charging power \(P_{k,t}\) for each car visit \(k\), plugged in now or expected inside the horizon; peaks \(\hat g\) (monthly) and \(\hat g_w\) (one per time-of-use demand window); a shortfall \(s_k\) per visit and an overload \(o_t\) for the import limit and each phase's fuse, all \(\ge 0\) {code_mpc}. \(p_t\) is the import price, \(p^{\mathrm{exp}}\) the export price, \(c^{\mathrm{flat}}\) and \(c_w\) the demand charges per kW. Energy left in the battery at the end is valued at \(v = \eta \cdot \max(\min_t p_t,\ p^{\mathrm{exp}},\ 0)\), the cheapest price ahead after losses: enough to store free solar rather than export it for nothing, never enough to buy from the grid just to fill up, since charging costs \(p/\eta > p\,\eta\). EMHASS instead can force the battery to end where it started {emhass_lp}. The penalty \(M\) is 10 times the largest price or demand rate (at least 10), so missing car energy is always worse than paying for it, and breaking a limit worse still. \(\epsilon = 10^{-4}\) per kWh stops pointless cycling when costs tie; there is no battery wear cost yet {code_mpc}.` },
+      { kind: "math", tex: String.raw`\begin{aligned}
+& g^{+}_t - g^{-}_t = L_t - S_t + u_t + \textstyle\sum_k P_{k,t} + c_t - d_t && \text{power balance} \\[10pt]
+& e_{t+1} = e_t + \big(\eta\, c_t - d_t/\eta\big)\Delta t, \quad E_{\min} \le e_t \le E_{\max}, \quad c_t, d_t \le P_{\mathrm{nom}} && \text{battery} \\[10pt]
+& g^{+}_t \le G^{\mathrm{imp}} + o_t, \quad g^{-}_t \le G^{\mathrm{exp}}, \quad u_t \le S_t && \text{grid connection} \\[10pt]
+& \tfrac13 (L_t - S_t + u_t + c_t - d_t) + \textstyle\sum_{k \in \phi} P_{k,t} + \tfrac13 \sum_{k \in 3\phi} P_{k,t} \le F + o^{\phi}_t && \text{each phase } \phi \text{ and its fuse} \\[10pt]
+& P_{k,t} = 0 \ \text{ or } \ P^{\min}_k \le P_{k,t} \le P^{\max}_k, \quad P_{k,t} = 0 \text{ when car } k \text{ is away} && \text{charger off or at least 6 A} \\[10pt]
+& \textstyle\sum_{t} \eta_c\, P_{k,t}\, \Delta t + s_k \ge E_k && \text{energy by departure} \\[10pt]
+& \hat g \ge \max(g^{+}_t,\ \text{peak so far this month}), \quad \hat g_w \ge g^{+}_t \ \ \forall\, t \in w && \text{peaks}
+\end{aligned}`,
+        caption: String.raw`\(L_t\) and \(S_t\) are the forecast load and solar, \(F\) the fuse limit per phase in kW, \(P^{\min}_k\) the charger's minimum (6 A per phase, or less for the final top-up), \(E_k\) the energy a car still needs (only the part that cannot wait until after the horizon) {code_mpc}. The peak lines are the standard trick for a 'maximum' inside a linear program: \(\hat g\) can only be as low as the highest import, and the objective pushes it down, so the optimiser trades energy cost against peak cost. The 'off or at least 6 A' line is not linear. Modelled exactly it needs an on/off variable per car and step (a mixed-integer program), which was too slow for year-long runs, so Site Lab uses relax-and-fix instead. It solves the linear version; where a car's plan falls between 0 and its minimum, it re-solves once with those steps off and once with the largest forced up to the minimum, keeps the cheaper plan, and repeats until no step is left in between {code_mpc}. On the test cases it matches the exact solution to within 2% {code_mpc}.` },
+      { kind: "h", text: "What we learned building it" },
+      { kind: "list", items: [
+        "A planner is only as good as what it is told. With a perfect forecast of load, solar and prices but blind to car visits, our MPC exported free solar at midday and then charged the evening car from the grid; on a German home it cost more than a simple 'store all spare solar' rule. Telling it the upcoming visits fixed that {code_mpc}.",
+        "End-of-horizon value matters. Without a value for energy left at the end, storing solar today looks worthless whenever tomorrow's sun will refill the battery anyway {code_mpc}.",
+        "Rounding a continuous plan is not harmless. Rounding a trickle of planned charging up to the 6 A minimum made the grid pay the difference, and switching small remainders off made cars leave short {code_mpc}.",
+        "Without a demand charge in the tariff, MPC has no reason to keep peaks low and will charge up to the import limit when that is cheapest; the objective only contains peaks when the tariff bills them {code_mpc}.",
+      ] },
+      { kind: "h", text: "Design choices that decide whether MPC works" },
+      { kind: "p", text: "A review of MPC for heating and cooling systems lists the factors that drive performance: the control configuration, the type of process, the model, the optimisation technique, the prediction and control horizons, the constraints and the cost function {afram2014}. Three of them matter most for energy sites:" },
+      { kind: "list", items: [
+        "The model. Building MPC uses physics-based, data-driven or hybrid models, and the choice drives both accuracy and solve time {drgona2020}. Developing control-oriented models for each individual building is a major hurdle, which is why data-driven predictive control, with models learned from measurements, is attracting attention {kathirgamanathan2020}. Battery and EV models, as on this page, are simple and linear, which is why storage is a natural first target.",
+        "The problem class. With on/off decisions (a generator started, a device switched) the problem becomes a mixed-integer linear program; a microgrid MPC formulated this way was solved efficiently with commercial solvers and run on an experimental microgrid in Athens {parisio2014}. Pure battery and charging problems can usually stay linear, and open-source solvers such as HiGHS handle them {emhass_home}.",
+        "The horizon and replan interval. Longer horizons see further but need forecasts further out; EMHASS re-plans, for example, every 5 minutes {emhass_lp}, OpenEMS rebuilds a 24-hour schedule in 15-minute steps {openems_tou}.",
+      ] },
+      { kind: "h", text: "Pricing battery wear" },
+      { kind: "list", items: [
+        "Cycle-ageing cost modelled as a piecewise-linear function, usable in electricity-market clearing {xu2017}.",
+        "EMHASS adds virtual costs that steer behaviour without changing the reported bill: an inverter 'stress cost' that grows with the square of power (approximated piecewise-linearly; recommended 0.05-0.20 per kWh at full power) to prefer running 'low and slow', and a cost per kWh per hour spent above a high state-of-charge threshold, because sitting full accelerates calendar ageing {emhass_lp}.",
+        "Batteries are not uniform: optimising each string's ageing separately gave 21% more revenue per unit of health lost {graner2025}.",
+      ] },
+      { kind: "h", text: "What field tests and reviews report" },
+      { kind: "list", items: [
+        "On real hardware, MPC, simple rules and decision trees ended within 0.6% of each other in cost on four house reproductions {ruddick2024}: the gain depends on the site.",
+        "On an experimental microgrid, an MILP-based MPC was feasible and effective in real operation {parisio2014}.",
+        "Adding forecast uncertainty explicitly helped: a stochastic MPC cut a company's peak grid draw by a further 99 kW (5.8%) compared with standard MPC {li2025smpc}. See 'Planning under uncertainty'.",
+        "Practical deployment needs more than the optimiser: building MPC reviews stress control architectures, communication with the site's SCADA system, implementation workflows and standardised performance assessment {drgona2020}.",
+      ] },
+      { kind: "h", text: "Where it is used" },
+      { kind: "p", text: "Open source: EMHASS runs this kind of optimisation for Home Assistant households {emhass_lp}. Commercial: OpenEMS, the software behind FENECON's systems, runs a rolling 24-hour time-of-use schedule {openems_intro} {openems_tou}. Research: microgrids {parisio2014} and building climate control {drgona2020} {serale2018}. How the formulation specialises for a home, a garage, an office and a data center is on 'Control by use case'." },
+      { kind: "h", text: "Go deeper" },
+      { kind: "facts", rows: [
+        ["Start here", "Drgoňa et al. 2020, 'All you need to know about model predictive control for buildings': formulations, models, solvers, implementation {drgona2020}."],
+        ["Formulation and taxonomy", "Serale et al. 2018: a common dictionary and formulation framework for building MPC {serale2018}."],
+        ["What drives performance", "Afram and Janabi-Sharifi 2014: horizons, models, constraints, cost functions {afram2014}."],
+        ["Microgrids", "Parisio et al. 2014: MILP-based MPC tested on a real microgrid {parisio2014}."],
+        ["Data-driven models", "Kathirgamanathan et al. 2020: predictive control with learned models {kathirgamanathan2020}."],
+        ["Theory", "Mayne 2014: developments and future of MPC {mayne2014}."],
+      ] },
+    ],
+  },
+  {
+    id: "uncertainty", section: "lab", title: "Planning under uncertainty",
+    summary: "Forecasts are always wrong. Re-planning, stochastic MPC, chance constraints and robust optimisation are four ways to live with that, each with a different price.",
+    blocks: [
+      { kind: "p", text: "In plain words: every plan rests on forecasts of load, sun, prices and cars, and every forecast is wrong. A planner can react in four ways: trust one forecast but re-plan often; plan for many possible futures at once and do well on average; demand that limits hold with a chosen probability; or plan for the worst case. Each step along that list buys safety and costs performance. Measuring that trade-off on real data, with forecast errors added on purpose, is the core of this benchmark." },
+      { kind: "h", text: "Where the uncertainty comes from" },
+      { kind: "list", items: [
+        "Renewables and load: reviews of microgrid energy management treat their volatility and intermittency as the central difficulty, and summarise several ways to quantify it {zia2018}.",
+        "People: when cars arrive and leave, and how much energy they need, has to be forecast; an EV aggregator's bids depend on exactly these forecasts {bessa2011}.",
+        "Prices: day-ahead prices are set in an auction the day before, per 15 minutes since October 2025 {sdac_15min}; any energy bought or sold closer to real time is still uncertain when the plan is made.",
+      ] },
+      { kind: "h", text: "Four ways to plan" },
+      { kind: "math", tex: String.raw`\begin{aligned}
+\text{deterministic (certainty equivalence):}\quad & \min_x\ J(x, \hat\xi) \\[12pt]
+\text{stochastic (scenarios):}\quad & \min_x\ \frac{1}{S}\sum_{s=1}^{S} J(x, \xi_s) \\[12pt]
+\text{chance-constrained:}\quad & \min_x\ \mathbb{E}\big[J(x,\xi)\big] \ \ \text{s.t.}\ \ \Pr\big[g^{+}_t(x,\xi) \le G^{\mathrm{imp}}\big] \ge 1-\varepsilon \\[12pt]
+\text{robust:}\quad & \min_x\ \max_{\xi \in \Xi}\ J(x, \xi)
+\end{aligned}`,
+        caption: String.raw`\(x\) are the decisions, \(J\) the cost (as on the MPC page) and \(\xi\) the uncertain inputs. Deterministic MPC plans for one forecast \(\hat\xi\) and relies on re-planning. Stochastic MPC optimises the average over \(S\) scenarios. A chance constraint lets a limit fail with probability at most \(\varepsilon\). Robust optimisation plans for the worst case in an uncertainty set \(\Xi\).` },
+      { kind: "h", text: "Stochastic MPC" },
+      { kind: "p", text: "Stochastic MPC brings the probability of disturbances into the optimisation itself; an overview of the past decade's work presents the general stochastic optimal control problem and the main algorithms for linear and nonlinear systems, along with the open theoretical challenges {mesbah2016}. The scenario approach is a framework for designing controllers from a finite set of sampled scenarios {campi2009}. For energy sites, one study combined an LSTM forecaster with a constraint-tightened stochastic optimisation and cut a company's peak grid draw by a further 99 kW (5.8%) compared with standard MPC {li2025smpc}; another applied stochastic programming with probabilistic forecasts to peak shaving {rafayal2024}." },
+      { kind: "h", text: "Robust optimisation and the price of robustness" },
+      { kind: "math", tex: String.raw`\sum_j \bar a_j x_j \;+\; \max_{\{S:\ |S| \le \Gamma\}} \sum_{j \in S} \hat a_j\, |x_j| \;\le\; b`,
+        caption: String.raw`Bertsimas and Sim's idea in one line: each uncertain coefficient \(a_j\) may deviate from its nominal value \(\bar a_j\) by up to \(\hat a_j\), but at most \(\Gamma\) of them at the same time. \(\Gamma = 0\) is the nominal plan, a large \(\Gamma\) the full worst case. Choosing \(\Gamma\) sets the level of conservatism through probabilistic bounds on constraint violation, and the robust problem stays a linear program {bertsimas2004}.` },
+      { kind: "p", text: "The concern with robust plans is that they may be too conservative: they accept a worse result for the nominal forecast so that the plan stays feasible and near-optimal when the data changes {bertsimas2004}. For a battery that means holding back energy that would have been worth using on most days." },
+      { kind: "h", text: "Better forecasts instead of more caution" },
+      { kind: "p", text: "The other lever is the forecast itself. Probabilistic load forecasting, which gives a range rather than a single number, has its own tutorial review {hongfan2016}. Pretrained 'foundation' models now forecast many time series without site-specific training {chronos1} {chronos2}, and a 2026 benchmark tested them for load forecasting under uncertain inputs {kaljevic2026}. See the 'Forecasting' page." },
+      { kind: "h", text: "What Site Lab will measure" },
+      { kind: "p", text: "Today Site Lab's controllers see the future exactly: prices 24 hours ahead, and each car's departure and energy need {code_ctrl}. The planned benchmark feeds the same controllers forecasts with controlled amounts of error and records how much of their advantage survives, which is the comparison this page is about." },
+      { kind: "h", text: "Go deeper" },
+      { kind: "facts", rows: [
+        ["Stochastic MPC", "Mesbah 2016: overview and research directions {mesbah2016}; the scenario approach {campi2009}."],
+        ["Robust optimisation", "Bertsimas and Sim 2004: tunable conservatism that stays linear {bertsimas2004}."],
+        ["Energy applications", "Stochastic MPC for peak shaving with battery health {li2025smpc}; uncertainty in microgrid EMS {zia2018}."],
+        ["Forecasting", "Probabilistic load forecasting review {hongfan2016}; foundation models {chronos2} {kaljevic2026}."],
+      ] },
+    ],
+  },
+  {
+    id: "learning", section: "lab", title: "Reinforcement learning",
+    summary: "Learning a control policy from experience instead of solving an optimisation each step: the formulation, what reviews find, what has worked in real facilities, and what still stands in the way.",
+    blocks: [
+      { kind: "note", tone: "info", text: "Not built in Site Lab. This page summarises the method, reviews and published deployments." },
+      { kind: "p", text: "In plain words: reinforcement learning (RL) learns a control policy by trial and error. An agent sees the state of the site, takes an action, receives a reward (minus the cost, minus penalties) and, over many episodes, learns which actions pay off. It needs no explicit model of the site, which is its promise: it can adapt to a building as it is, including to the people in it. The price is data, training time and safety, because a learning agent must try things, and some of those things are bad." },
+      { kind: "h", text: "The formulation" },
+      { kind: "math", tex: String.raw`\pi^{*} = \arg\max_{\pi}\ \mathbb{E}\Big[\sum_{t=0}^{\infty} \gamma^{t}\, r(s_t, a_t)\Big], \qquad a_t \sim \pi(\cdot \mid s_t), \qquad r_t = -\big(p_t\, g^{+}_t\, \Delta t + \lambda \cdot \text{violation}_t\big)`,
+        caption: String.raw`The state \(s_t\) holds measurements and forecasts (charge level, load, prices, time); the action \(a_t\) holds setpoints (battery power, charging power); the reward \(r_t\) is minus the cost, with a penalty \(\lambda\) for breaking limits; \(\gamma < 1\) discounts the future. This is the standard Markov decision process of RL textbooks {suttonbarto2018}. Deep RL represents the policy or value function with a neural network; a landmark paper reached human-level control with deep reinforcement learning {mnih2015}.` },
+      { kind: "h", text: "The five design choices" },
+      { kind: "p", text: "A review of RL for building controls breaks every study into the same five components: the algorithm, the state, the action, the reward and the environment it is trained in {wanghong2020}. In energy terms: which learning method; what the agent sees (forecasts or only measurements); what it controls (one battery or many devices); how cost, comfort and limits are weighted in the reward; and whether it trains in a simulator, on recorded data or on the real site." },
+      { kind: "h", text: "What reviews find" },
+      { kind: "list", items: [
+        "RL has been used to control electric vehicles, heating and cooling, smart appliances and batteries for demand response {vazquezcanteli2019review}.",
+        "Most studies consider a single agent, prices that do not depend on demand and a stationary environment; when prices depend on demand, controllers risk shifting the peak instead of shaving it, so coordinating many agents is a key open need {vazquezcanteli2019review}.",
+        "RL for building controls is still mostly research: only 11% of the reviewed studies were applied in real buildings {wanghong2020}.",
+        "Three barriers stand in the way: training is time-consuming and data-hungry, control security and robustness must improve, and controllers generalise poorly to new buildings without methods such as transfer learning {wanghong2020}.",
+        "Model-free RL explores with largely random decisions that can violate safety constraints, so deploying it without safety mechanisms is considered unacceptable {yu2024saferl}.",
+      ] },
+      { kind: "h", text: "Benchmarks" },
+      { kind: "p", text: "CityLearn was built as an open environment for training and comparing RL agents for building demand response {vazquez2019}. Four years of its challenge found that hybrid approaches, combining forecasting, optimisation and learning, did well {nagy2025}. Site Lab's goal is the same kind of honest comparison, on its own engine and with real data." },
+      { kind: "h", text: "Deployed example: Google data center cooling" },
+      { kind: "list", items: [
+        "2016, recommendations: ensembles of deep neural networks trained on historical data from thousands of sensors (temperatures, power, pump speeds, setpoints) predicted future PUE, temperature and pressure {deepmind2016}; operators vetted and implemented the recommended actions {deepmind2018}. Cooling energy fell by up to 40%, equal to a 15% reduction in PUE overhead {deepmind2016}.",
+        "2018, autonomous control: every five minutes the system reads thousands of sensors, predicts how candidate actions affect future energy use, and picks the one that minimises energy within safety constraints {deepmind2018}.",
+        "Safety design: actions with low confidence are discarded; every action is checked against operator-defined constraints in the cloud and again by the local control system; operators can leave AI mode at any time and fall back to the site's rules {deepmind2018}.",
+        "Trade-off: the operating range was deliberately narrowed for safety, accepting smaller savings; savings grew from 12% at launch to about 30% on average over nine months {deepmind2018}.",
+      ] },
+      { kind: "math", tex: String.raw`a_t = \arg\min_{a \in \mathcal{A}_{\text{safe}}}\ \widehat{\text{PUE}}(s_t, a) \quad \text{s.t.}\ \ \widehat{T}(s_t, a) \le T^{\max},\ \ \text{confidence}(a) \ge \kappa`,
+        caption: String.raw`A sketch of that loop: a learned model \(\widehat{\text{PUE}}\) predicts efficiency, learned models \(\widehat T\) predict temperatures and pressures, and only confident actions inside the operator-defined safe set \(\mathcal{A}_{\text{safe}}\) are allowed {deepmind2016} {deepmind2018}. The notation is ours; the blog posts describe the steps in words. Note that this is learned models plus optimisation, closer to MPC with learned models than to model-free RL.` },
+      { kind: "h", text: "Real-world tests of RL itself" },
+      { kind: "list", items: [
+        "Real home hardware: an RL agent still in training cost 25.5% more than rules, decision trees and MPC {ruddick2024}.",
+        "Real industrial heating network: RL ran stably but performed significantly worse than in simulation {lademann2026}.",
+        "Homes with several batteries and uncertain conditions remain an active research topic {yuan2026}.",
+      ] },
+      { kind: "p", text: "This matches what safe-RL reviews call for: learning only with safety mechanisms around it {yu2024saferl}. It is also the same split as Site Lab's controller plus safety layer {code_engine}." },
+      { kind: "h", text: "Go deeper" },
+      { kind: "facts", rows: [
+        ["The basics", "Sutton and Barto, the standard RL textbook {suttonbarto2018}; human-level control with deep RL {mnih2015}."],
+        ["RL for demand response", "Vázquez-Canteli and Nagy 2019: algorithms and modelling, and the peak-shifting risk {vazquezcanteli2019review}."],
+        ["RL for buildings", "Wang and Hong 2020: five components, 11% real-building share, three barriers {wanghong2020}."],
+        ["Safety", "Safe RL for power system control {yu2024saferl}."],
+        ["Reality checks", "Real hardware {ruddick2024}; real industrial network {lademann2026}; CityLearn {nagy2025}."],
+      ] },
+    ],
+  },
+  {
+    id: "use-cases", section: "lab", title: "Control by use case",
+    summary: "How the algorithms are applied to a home, a shared garage, an office or C&I site, a data center and a portfolio of sites: what is optimised, what limits bind, what our runs show and what real systems do.",
+    blocks: [
+      { kind: "p", text: "In plain words: a home, a garage, an office and a data center all have the same ingredients (a grid connection, loads, maybe solar, a battery and cars) but they pay for electricity differently and hit different limits first. A home cares about the price of each kWh; a shared garage about its fuse; an office about its monthly peak; a data center about never touching its backup reserve while its peaks are billed heavily. The algorithm that wins depends on which of these dominates, so this page writes the cost and the binding limit down for each kind of site and then looks at what each controller does with it." },
+      { kind: "p", text: "The same engine and the same algorithms run every site; what changes is the cost the site pays, the limit that binds first, and which devices can move {code_engine}. All numbers from our runs come from the example sites, compared with the same equipment without smart control (battery idle, cars charging on arrival) {runs_2026_11}." },
+      { kind: "facts", rows: [
+        ["Home", "Cost: energy at a fixed or dynamic price. Binding limit: the house fuse. Flexible: home battery, one car."],
+        ["Shared garage / apartment block", "Cost: energy. Binding limit: the shared fuse or connection. Flexible: many cars, maybe a shared battery."],
+        ["Office / C&I", "Cost: energy plus demand charges. Binding limit: the connection, and the monthly peak on the bill. Flexible: battery, workplace charging."],
+        ["Data center", "Cost: dominated by demand charges and a flat, high load. Binding limit: the backup reserve, which must never be touched. Flexible: battery above the reserve, deferrable compute, cooling."],
+      ] },
+
+      { kind: "h", text: "1. Home with solar, battery and EV" },
+      { kind: "math", tex: String.raw`J_{\text{home}} = \sum_t \big[(p_t + a)\, g^{+}_t - p^{\mathrm{exp}}\, g^{-}_t\big]\,\Delta t, \qquad I_{\phi,t} \le I^{\mathrm{fuse}}`,
+        caption: String.raw`On a dynamic tariff the household pays the spot price \(p_t\) plus a fixed add-on \(a\) for network costs and taxes; the example uses \(a = €0.237/\mathrm{kWh}\), derived from Eurostat's 2025 averages for Germany {eurostat_check}. Exports earn \(p^{\mathrm{exp}}\) (zero in the example) {code_engine}.` },
+      { kind: "p", text: "Rules in our example: self-consumption for the battery, cheapest hours for the car. Over one June week the bill fell from €33.70 to €13.45 (−60%), the share of consumption covered on site rose from 31% to 73%, every car reached its target, and the battery did 5.2 equivalent full cycles in the week {runs_2026_11}." },
+      { kind: "p", text: "Real systems do the same with more care: evcc combines solar surplus, a price limit and charging plans at one charging point {evcc_solar} {evcc_tariffs} {evcc_plans}; EMHASS runs the full linear program for Home Assistant households, including deferrable appliances {emhass_lp}. What MPC adds at home: deciding whether battery energy is worth more tonight or tomorrow morning, and charging the car from the battery or from the grid, using the wear cost to avoid cycling for tiny gains." },
+
+      { kind: "h", text: "2. Shared garage or apartment block" },
+      { kind: "math", tex: String.raw`I_{\phi,t} = \frac{1000}{230}\Big(\frac{B_t}{3} + \sum_{i \in \phi} P_{i,t} + \sum_{i \in 3\phi} \frac{P_{i,t}}{3}\Big) \le I^{\mathrm{fuse}} \quad \text{for each phase } \phi \in \{L1, L2, L3\}`,
+        caption: String.raw`\(B_t\) is the building load in kW, assumed balanced over the three phases; single-phase chargers add all their power to their own phase, three-phase chargers a third to each. When a phase would exceed the fuse, the safety layer slows the chargers on that phase in proportion, and a charger squeezed below its minimum pauses {code_engine}.` },
+      { kind: "p", text: "Rules in our garage example (eight chargers behind a 3 × 63 A fuse, two winter days): cheapest hours saved 1.4% but pushed the highest phase current from 56 A to the full 63 A, because all cars started at the same cheap moment {runs_2026_11}. In the one-year apartment example (price arbitrage, spread until departure, 80 kW limit) the bill fell 4.3% (USD 21,792 to 20,850) and the peak stayed at the 80 kW limit instead of 86 kW {runs_2026_11}." },
+      { kind: "note", tone: "warn", text: "Caveat on the garage: its building load is one measured home's profile multiplied by eight, so the eight 'flats' peak at the same moment; real flats peak at different times. This overstates how close the fuse is {runs_2026_11}." },
+      { kind: "p", text: "What MPC adds here: the fuse becomes a constraint inside the plan instead of a correction afterwards, so cars are staggered across the cheap hours before they would collide. The avalanche of synchronised charging is a known effect, and capacity-based pricing is one proposed fix {valogianni2025}." },
+
+      { kind: "h", text: "3. Office or commercial and industrial (C&I) site" },
+      { kind: "math", tex: String.raw`J_{\text{C\&I}} = \sum_t p_t\, g^{+}_t\, \Delta t + c_d \cdot \max_{t \in \text{month}} g^{+}_t`,
+        caption: String.raw`Many commercial tariffs add a demand charge \(c_d\) per kW of the month's highest import {code_engine}. One kW avoided at the peak saves \(c_d\) every month, which is why peak shaving matters here and arbitrage can backfire.` },
+      { kind: "p", text: String.raw`Our office runs show both sides. Price arbitrage over a year cut the energy bill by 12.7% but raised the peak from 158 to 218 kW; peak shaving over a week cut the peak from 98 to 90 kW but cost 1.4% more, because that tariff had no demand charge {runs_2026_11}. The right rule depends on the tariff, which is what an optimiser handles automatically through \(c_d\).` },
+      { kind: "p", text: "Real systems: OpenEMS runs peak shaving and a rolling 24-hour time-of-use schedule on commercial sites {openems_peak} {openems_tou}. Batteries on such sites can also sell grid services; doing peak shaving and frequency regulation jointly beat doing either alone in published research {shi2017}." },
+
+      { kind: "h", text: "4. Data center" },
+      { kind: "p", text: "Why data centers are a topic of their own: they use about 1.7% of the world's electricity, and their consumption was projected to roughly double between 2022 and 2026, to about 1,000 TWh. A 2025 review argues that their large but controllable consumption makes them a significant source of flexibility, provided quality-of-service agreements are respected and market rules allow them to take part {takci2025}." },
+      { kind: "math", tex: String.raw`P^{\mathrm{fac}}_t = \text{PUE} \cdot \alpha\, P^{\mathrm{IT}}_t, \qquad E_{\min} = \tau_{\mathrm{UPS}}\, \hat P^{\mathrm{fac}} = \tfrac{5}{60}\,\mathrm{h} \times 5{,}820\ \mathrm{kW} \approx 485\ \mathrm{kWh}`,
+        caption: String.raw`Facility power is the measured IT load \(P^{\mathrm{IT}}_t\), scaled by \(\alpha\), times the PUE (1.54 is the 2025 industry average) {code_engine} {uptime_2025}. The battery doubles as the UPS: its minimum charge holds \(\tau_{\mathrm{UPS}} = 5\) minutes of backup at the peak facility load, the runtime many data centers now operate with {zincfive2024} {code_engine}.` },
+      { kind: "math", tex: String.raw`J_{\mathrm{DC}} = \sum_t p_t\, g^{+}_t\, \Delta t \;+\; 7.91 \max_{t \in \text{month}} g^{+}_t \;+\; 18.65 \max_{t \in \text{month},\ 14\text{-}18\,\mathrm{h}} g^{+}_t \qquad [\mathrm{USD}]`,
+        caption: String.raw`The example uses Xcel Energy Colorado's large-customer tariff: 7.91 USD per kW of the month's highest 15-minute import, plus 18.65 USD per kW (summer) of the highest import between 14:00 and 18:00 local time {urdb_xcel_pg} {code_tariffs}. Demand charges are about half of the bill {runs_2026_11}.` },
+      { kind: "p", text: "Rule in our example: peak shaving with a fixed threshold. It cut the June bill by 1.1% (USD 307,079 to 303,637) and the peak from 5,618 to 5,400 kW, using 0.5 equivalent full cycles {runs_2026_11}. The load is flat and high, so peaks last hours; the rule empties the battery on long high stretches and spends energy outside the window that costs most {runs_2026_11}." },
+      { kind: "p", text: String.raw`What MPC adds: with \(J_{\mathrm{DC}}\) in the objective it keeps energy for the 14-18 h window, refills before long high stretches, and never touches the reserve because \(E_{\min}\) is a constraint. Beyond the battery, real data centers move other things:` },
+      { kind: "list", items: [
+        "Compute in time: Google's day-ahead 'virtual capacity curves' cap each cluster's hourly capacity for flexible jobs while keeping the daily total, so the jobs move to cleaner or cheaper hours but still finish within the day {google_vcc}. In symbols: \\(\\sum_h C_h = C^{\\text{day}},\\ C_h \\le \\bar C_h\\).",
+        "Compute on demand: a software-only field test on a 256-GPU cluster cut cluster power by 25% for three hours during peak grid events, keeping AI quality-of-service guarantees and without hardware changes or storage {emerald2025}.",
+        "Cooling: learned models chose cooling setpoints every five minutes within safety constraints, saving about 30% of cooling energy on average {deepmind2018}.",
+        "Grid services: a battery doing peak shaving and frequency regulation jointly saved more than the sum of both in published research {shi2017}; in Europe the fast part must follow the FCR rule on the 'Control layers' page {sogl2017}.",
+      ] },
+
+      { kind: "h", text: "5. Many sites: virtual power plants" },
+      { kind: "p", text: "In plain words: one home battery cannot move the market, but ten thousand of them can. A virtual power plant (VPP) bundles many small sites and runs them as if they were one power plant, selling their combined flexibility to the grid. Each site keeps its own controller and limits; an aggregator above them forecasts what the fleet can offer, bids it, and splits the targets back to the sites." },
+      { kind: "p", text: "Reviews describe VPPs as optimisation on several time scales, day-ahead, intra-day and real time, with centralised, distributed or hybrid control, and with market participation and revenue allocation as part of the problem {huang2026vpp}. Machine learning is being applied to forecasting, scheduling, bidding and aggregation, with data quality, interpretability and multi-agent scalability among the open issues {li2026aivpp}. Two classic results show the two ways of coordinating:" },
+      { kind: "list", items: [
+        "Central: an EV aggregator buys energy and sells secondary reserve in the day-ahead market for a whole fleet, and its bids depend on forecasting the fleet's behaviour {bessa2011}.",
+        "Distributed: in a game-theoretic scheme, each household schedules its own appliances as the best response to the total load and the tariff; the equilibrium reaches the global cost optimum, lowers the peak-to-average ratio, and households keep their schedules private {mohsenianrad2010}.",
+      ] },
+      { kind: "p", text: "Site Lab simulates one site at a time; coordinating several is a later step." },
     ],
   },
 
@@ -344,4 +642,5 @@ export const PAGES: Page[] = [
       ] },
     ],
   },
+  ...MARKET_PAGES,
 ];
