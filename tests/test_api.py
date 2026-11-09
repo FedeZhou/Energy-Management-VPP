@@ -11,7 +11,9 @@ client = TestClient(app)
 
 def test_catalog_lists_assets_with_sourced_fields() -> None:
     cat = client.get("/api/catalog").json()
-    assert set(cat["assets"]) == {"building", "pv", "battery", "ev_charger"}
+    assert set(cat["assets"]) == {"building", "data_center", "heat_pump", "pv", "battery", "ev_charger"}
+    hp = {f["name"]: f for f in cat["assets"]["heat_pump"]["fields"]}
+    assert "Heizspiegel" in hp["annual_heat_kwh"]["source"] and "When2Heat" in hp["cop_profile"]["source"]
     battery = {f["name"]: f for f in cat["assets"]["battery"]["fields"]}
     assert battery["capacity_kwh"]["unit"] == "kWh"
     assert "CityLearn" in battery["capacity_kwh"]["source"]

@@ -1,0 +1,40 @@
+# Operate example: a ~3-6 MW data center on a US large-customer tariff, 15-minute steps, one summer month.
+#
+# Data (see each profile's source in the app):
+# - IT load: measured, NLR/NREL ESIF HPC data center, Colorado (esif/it_202404, Apr-Aug 2024, avg 2.9 MW).
+# - Cooling and building overhead: the data center component multiplies IT by its PUE, default 1.54, the
+#   2025 industry weighted average (Uptime Institute Global Data Center Survey 2025, p. 7, Fig. 2, n=681).
+#   A constant ratio: real cooling rises on hot afternoons, so this understates summer peaks. ESIF's own
+#   measured liquid cooling is PUE ~1.08 (try pue: 1.08).
+# - Tariff: Xcel Energy Colorado Schedule PG 2024 (OpenEI URDB, see emsbench.data.tariffs_us): energy
+#   0.049 USD/kWh in summer, demand charge 4.23 + 3.68 = 7.91 USD/kW-month on the month's highest
+#   15-min import, plus 18.65 USD/kW-month (summer) on the highest import in the 14-18 h local window.
+#
+# Battery: one lithium-ion system that is both the UPS and a peak-shaving battery ("grid-interactive
+# UPS", as in Microsoft's Dublin pilot with Eaton). Size 4,000 kWh / 1,000 kW is an example choice, not
+# sourced. soc_min keeps the backup reserve: 5 minutes ("many data centers are operating with a 5 minute
+# runtime", ZincFive, Runtime Optimization white paper, 2024) at the peak facility load
+# 3,780 kW x 1.54 = 5,820 kW -> 485 kWh = 12.1% of 4,000 kWh, rounded up to 12.5%.
+# Peak-shaving threshold: an example value chosen by trying a few (see LEARNING.md); a forecast-based
+# controller (MPC) would choose it each month.
+# Not modelled: the diesel generator (only runs in outages), cooling flexibility, deferring compute jobs.
+label: Data center, 6 MW, peak shaving with the UPS battery (15-min)
+description: >-
+  Measured HPC data center IT load (Colorado) with typical cooling (PUE 1.54), on a US large-customer
+  tariff where demand charges are about half the bill. A 4 MWh battery that doubles as the UPS keeps a
+  5-minute backup reserve and shaves monthly peaks. June, 15-minute steps.
+site:
+  name: Data center (15-min)
+  mode: operate
+  start: 2026-06-01
+  days: 30
+  step_minutes: 15
+  tariff:
+    price_profile: urdb/xcel_co_pg
+    demand_charge_per_kw_month: 7.91
+    demand_charge_profile: urdb/xcel_co_pg_demand
+  controller: {battery: peak_shaving, peak_threshold_kw: 5400}
+  assets:
+    - {type: data_center, id: dc, name: Data center, it_load_profile: esif/it_202404, ui: {x: 420, y: 40}}
+    - {type: battery, id: ups, name: UPS + peak-shaving battery, capacity_kwh: 4000, power_kw: 1000,
+       soc_min: 0.125, soc_initial: 1.0, ui: {x: 420, y: 380}}

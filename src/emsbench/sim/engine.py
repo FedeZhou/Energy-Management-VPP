@@ -5,10 +5,14 @@ One electrical bus behind one three-phase grid meter. Each step:
 2. ask the controller for battery and EV setpoints,
 3. clip them to physical limits (power, state of charge, energy still needed,
    minimum charging current),
-4. safety layer: enforce the site import/export limits, then the per-phase fuse,
+4. grid-operator dimming (§14a, optional), then the safety layer: site import limit, per-phase fuse,
+   export limit,
 5. update states and record everything.
 
-Phases: buildings, solar and batteries are treated as balanced over L1-L3.
+Heat pumps draw heat / COP from the bus and can store heat in a tank; unmet heat is recorded. Cars on
+bidirectional chargers can supply the bus (negative power) while they can still reach their target.
+
+Phases: buildings, solar, heat pumps and batteries are treated as balanced over L1-L3.
 Three-phase chargers split their power equally; single-phase chargers put it on
 their phase. A car whose own maximum is below a three-phase charger's minimum
 (6 A x 3 phases) is assumed to charge single-phase on the charger's phase.
@@ -24,8 +28,23 @@ import numpy as np
 from numpy.typing import NDArray
 
 from emsbench.benchmark.kpis import EpisodeTrace, compute_kpis
-from emsbench.sim.controllers import EVState, Observation, decide
-from emsbench.sim.model import PHASE_VOLTAGE, Battery, Building, EVCharger, Site, SolarPV
+from emsbench.sim.controllers import EVState, HPState, Observation, RuleController
+from emsbench.sim.model import (
+    DIM_GZF,
+    DIM_GZF_MANY,
+    DIM_LARGE_FACTOR,
+    DIM_LARGE_KW,
+    DIM_MIN_KW,
+    DIM_THRESHOLD_KW,
+    PHASE_VOLTAGE,
+    Battery,
+    Building,
+    DataCenter,
+    EVCharger,
+    HeatPump,
+    Site,
+    SolarPV,
+)
 from emsbench.sim.profiles import ProfileLibrary
 
 FloatArray = NDArray[np.float64]
@@ -56,6 +75,18 @@ def _split(total: float, weights: list[float]) -> list[float]:
     return [total * w / s for w in weights] if s > EPS else [0.0 for _ in weights]
 
 
+def tou_demand_cost(import_kw: FloatArray, rate: FloatArray, bill_month: NDArray[np.int_]) -> float:
+    """Time-of-use demand charges: per billing month, each positive rate (currency per kW per month) is
+    charged on the highest import during the steps that carry that rate. Steps with equal rates form
+    one period, so two different windows with the same price are billed as one."""
+    cost = 0.0
+    for m in np.unique(bill_month):
+        in_month = bill_month == m
+        for r in np.unique(rate[in_month & (rate > 0)]):
+            cost += float(r) * float(import_kw[in_month & (rate == r)].max())
+    return cost
+
+
 def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     step_s = site.step_minutes * 60
     dth = step_s / 3600.0
@@ -75,17 +106,41 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     pvs = [a for a in site.assets if isinstance(a, SolarPV)]
     bats = [a for a in site.assets if isinstance(a, Battery)]
     chargers = [a for a in site.assets if isinstance(a, EVCharger)]
+    centers = [a for a in site.assets if isinstance(a, DataCenter)]
 
     load = {b.id: window(b.id, b.load_profile, "load") * b.scale for b in buildings}
+    # Data centers: facility power = IT power x PUE (constant PUE: cooling follows IT, not weather).
+    it_kw = {d.id: window(d.id, d.it_load_profile, "load") * d.it_scale for d in centers}
+    load.update({d.id: it_kw[d.id] * d.pue for d in centers})
     pv_avail = {p.id: window(p.id, p.profile, "pv") * p.capacity_kwp for p in pvs}
+
+    # Heat pumps: heat demand (kW) = shape (kW per kWh/yr) x annual demand; electricity = heat / COP.
+    hps = [a for a in site.assets if isinstance(a, HeatPump)]
+    n_hp = len(hps)
+    hp_heat = [window(h.id, h.heat_profile, "heat") * h.annual_heat_kwh for h in hps]
+    hp_cop = [np.maximum(window(h.id, h.cop_profile, "cop"), 1.0) for h in hps]
+    hp_need = [q / c for q, c in zip(hp_heat, hp_cop, strict=True)]  # electric kW to heat on demand
+    # No size given: just enough for the coldest step of this period (rounded up to 0.1 kW).
+    hp_pmax = np.array([h.max_power_kw if h.max_power_kw is not None else float(np.ceil(n.max() * 10) / 10)
+                        for h, n in zip(hps, hp_need, strict=True)], dtype=float)
+    hp_cap = np.array([h.buffer_kwh for h in hps], dtype=float)
+    hp_buf = hp_cap * np.array([h.buffer_initial for h in hps], dtype=float)
+    hp_need_tot = np.sum(hp_need, axis=0) if hps else np.zeros(T)
     look = int(round(24 / dth))
     price_profile = lib.get(site.tariff.price_profile, "price")
-    try:
-        price_ext = window("tariff", site.tariff.price_profile, "price", T + look)
-    except ValueError:  # data ends inside the look-ahead: repeat the last day
-        base = window("tariff", site.tariff.price_profile, "price")
-        price_ext = np.concatenate([base, base[-look:] if T >= look else np.resize(base, look)])
-    price_ext = price_ext + site.tariff.price_adder
+
+    def window_ahead(profile_id: str, kind: str) -> FloatArray:
+        """The period plus 24 h of look-ahead for the controllers; if the data ends inside the look-ahead,
+        the last day is repeated."""
+        try:
+            return window("tariff", profile_id, kind, T + look)
+        except ValueError:
+            base = window("tariff", profile_id, kind)
+            return np.concatenate([base, base[-look:] if T >= look else np.resize(base, look)])
+
+    price_ext = window_ahead(site.tariff.price_profile, "price") + site.tariff.price_adder
+    if site.tariff.network_fee_profile:  # §14a Modul 3: a time-of-day network fee on every imported kWh
+        price_ext = price_ext + window_ahead(site.tariff.network_fee_profile, "netfee")
     price = price_ext[:T]
     load_tot = np.sum(list(load.values()), axis=0) if load else np.zeros(T)
     pv_tot = np.sum(list(pv_avail.values()), axis=0) if pv_avail else np.zeros(T)
@@ -104,6 +159,22 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
         arrivals.append(m)
     min3 = [c.min_current_a * PHASE_VOLTAGE * c.phases / 1000 for c in chargers]
 
+    def car_limits(i: int, s: Any) -> tuple[float, str, float]:
+        """Max power, phase ("3" or a phase name) and minimum power for session `s` on charger `i`."""
+        c = chargers[i]
+        car_max = s.max_kw if s.max_kw else c.max_power_kw
+        single = c.phases == 3 and car_max < min3[i]  # a single-phase car on a three-phase charger
+        phase = c.phase if (c.phases == 1 or single) else "3"
+        return min(c.max_power_kw, car_max), phase, c.min_current_a * PHASE_VOLTAGE * (1 if phase != "3" else 3) / 1000
+
+    # Billing months are calendar months (year and month), so a run longer than a year bills each one.
+    year_month = np.array([(d.year, d.month) for d in (start + dt.timedelta(seconds=step_s * i) for i in range(T))])
+    bill_month = year_month[:, 0] * 12 + year_month[:, 1] if T else np.zeros(0, dtype=int)
+    demand_rate = (window("tariff", site.tariff.demand_charge_profile, "demand") if site.tariff.demand_charge_profile
+                   else np.zeros(T))
+    month_peak: dict[int, float] = {}
+    tou_peak: dict[tuple[int, float], float] = {}
+
     # Battery state
     cap = np.array([b.capacity_kwh for b in bats], dtype=float)
     pmax = np.array([b.power_kw for b in bats], dtype=float)
@@ -120,9 +191,28 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     ev_min = np.zeros(n_c)
     ev_ph = [""] * n_c  # "3" or a phase name
     ev_sess: list[dict[str, Any] | None] = [None] * n_c
+    ev_lent = np.zeros(n_c)  # energy taken from the current car this visit (bidirectional chargers)
     sessions_out: list[dict[str, Any]] = []
     skipped = 0
     ev_delivered = 0.0
+    ev_discharged = 0.0
+    hp_unmet = np.zeros(n_hp)
+
+    # §14a dimming window (simulation clock = local time) and the devices it can limit.
+    dim = site.grid.dimming
+    hour_of_step = np.array([((step_s * i) / 3600.0) % 24 for i in range(T)])
+    d0, dlen = site.grid.dimming_start_hour % 24, site.grid.dimming_hours
+    dim_mask = (((hour_of_step - d0) % 24) < dlen) if dim != "off" and dlen > 0 else np.zeros(T, dtype=bool)
+    dim_ev = [c.max_power_kw > DIM_THRESHOLD_KW for c in chargers]
+    dim_bat = [b.power_kw > DIM_THRESHOLD_KW for b in bats]
+    dim_hp = [float(pm) > DIM_THRESHOLD_KW for pm in hp_pmax]
+    n_dim = sum(dim_ev) + sum(dim_bat) + sum(dim_hp)
+    big_hp_kw = float(sum(pm for pm, d in zip(hp_pmax, dim_hp, strict=True) if d and pm > DIM_LARGE_KW))
+    if n_dim <= 1:
+        ems_cap = DIM_LARGE_FACTOR * big_hp_kw if big_hp_kw > 0 else DIM_MIN_KW
+    else:
+        gzf = DIM_GZF.get(n_dim, DIM_GZF_MANY)
+        ems_cap = (DIM_LARGE_FACTOR * big_hp_kw if big_hp_kw > 0 else DIM_MIN_KW) + (n_dim - 1) * gzf * DIM_MIN_KW
 
     rec_bat = np.zeros((len(bats), T))
     rec_soc = np.zeros((len(bats), T))
@@ -134,12 +224,43 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     rec_overload = np.zeros(T)
     rec_phase = np.zeros((3, T))
     rec_fuse_over = np.zeros(T)
+    rec_hp = np.zeros((n_hp, T))
+    rec_hp_buf = np.zeros((n_hp, T))
+    rec_dimmed = np.zeros(T)
     imp_lim, exp_lim, fuse = site.grid.import_limit_kw, site.grid.export_limit_kw, site.grid.fuse_a
+
+    controller: Any = RuleController(site.controller)
+    if site.controller.battery == "mpc":
+        from emsbench.sim.mpc import FutureSession, MPCController, PerfectForecast, SiteLimits
+
+        # The sessions the engine will accept (a car arriving while the charger is busy is skipped).
+        upcoming: list[list[FutureSession]] = []
+        for i in range(n_c):
+            accepted: list[FutureSession] = []
+            free_from = -1
+            for a in sorted(arrivals[i]):
+                dep, s = arrivals[i][a]
+                if a < free_from:
+                    continue
+                mx, car_phase, mn = car_limits(i, s)
+                accepted.append(FutureSession(int(a), int(dep), float(s.energy_kwh), mx, mn, car_phase))
+                free_from = int(dep)
+            upcoming.append(accepted)
+
+        controller = MPCController(site.controller, SiteLimits(
+            step_hours=dth, battery_capacity_kwh=float(cap.sum()), battery_min_kwh=float(e_min.sum()),
+            battery_max_kwh=float(e_max.sum()), battery_power_kw=float(pmax.sum()),
+            battery_eta=float(np.mean(eta)) if bats else 1.0, import_limit_kw=imp_lim, export_limit_kw=exp_lim,
+            fuse_kw=fuse * PHASE_VOLTAGE / 1000 if fuse is not None else None, export_price=site.tariff.export_price,
+            demand_rate_flat=site.tariff.demand_charge_per_kw_month,
+            charger_efficiency=tuple(c.efficiency for c in chargers),
+        ), PerfectForecast({"load": load_tot + hp_need_tot, "pv": pv_tot, "price": price_ext,
+                            "demand_rate": demand_rate}, upcoming))  # heat pumps run on demand under mpc
 
     def phase_kw(base: float, ev_kw: FloatArray) -> FloatArray:
         out = np.full(3, base / 3.0)
         for i in range(n_c):
-            if ev_kw[i] <= 0:
+            if ev_kw[i] == 0:
                 continue
             if ev_ph[i] == "3":
                 out += ev_kw[i] / 3.0
@@ -154,15 +275,20 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                 if ev_on[i]:
                     skipped += 1
                     continue
-                car_max = s.max_kw if s.max_kw else c.max_power_kw
-                single = c.phases == 3 and car_max < min3[i]
                 ev_on[i], ev_dep[i], ev_rem[i] = True, dep, s.energy_kwh
-                ev_max[i] = min(c.max_power_kw, car_max)
-                ev_ph[i] = c.phase if (c.phases == 1 or single) else "3"
-                ev_min[i] = c.min_current_a * PHASE_VOLTAGE * (1 if ev_ph[i] != "3" else 3) / 1000
+                ev_max[i], ev_ph[i], ev_min[i] = car_limits(i, s)
                 ev_sess[i] = {"charger": c.id, "ev": s.ev_id, "arrival": t, "departure": int(dep),
-                              "requested_kwh": round(s.energy_kwh, 3), "delivered_kwh": 0.0}
+                              "requested_kwh": round(s.energy_kwh, 3), "delivered_kwh": 0.0, "discharged_kwh": 0.0}
+                ev_lent[i] = 0.0
 
+        # Bidirectional chargers: how much a car may give back now and still reach its target by departure
+        # (charging at full power in the remaining steps), within the per-visit limit.
+        ev_dis = np.zeros(n_c)
+        for i, c in enumerate(chargers):
+            if ev_on[i] and c.bidirectional:
+                slack = (ev_dep[i] - t - 1) * ev_max[i] * dth * c.efficiency - ev_rem[i]
+                lend = max(0.0, min(slack, c.v2g_max_kwh_per_visit - ev_lent[i]))
+                ev_dis[i] = min(float(ev_max[i]), lend * c.efficiency / dth)
         max_ch = np.minimum(pmax, np.maximum(e_max - energy, 0) / (eta * dth)) if bats else pmax
         max_dis = np.minimum(pmax, np.maximum(energy - e_min, 0) * eta / dth) if bats else pmax
         obs = Observation(
@@ -171,25 +297,81 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
             battery_energy_kwh=float(energy.sum()), battery_capacity_kwh=float(cap.sum()),
             battery_max_charge_kw=float(max_ch.sum()), battery_max_discharge_kw=float(max_dis.sum()),
             evs=tuple(EVState(bool(ev_on[i]), float(ev_rem[i]), int(ev_dep[i] - t) if ev_on[i] else 0,
-                              float(ev_max[i]), float(ev_min[i]), chargers[i].efficiency)
+                              float(ev_max[i]), float(ev_min[i]), chargers[i].efficiency, ev_ph[i] or "3",
+                              bool(ev_dis[i] > 0), float(ev_dis[i]))
                       for i in range(n_c)),
+            heat_pumps=tuple(HPState(float(hp_heat[j][t]), float(hp_cop[j][t]), float(hp_buf[j]), float(hp_cap[j]),
+                                     float(hp_pmax[j])) for j in range(n_hp)),
+            month_peak_kw=month_peak.get(int(bill_month[t]), 0.0),
+            tou_peaks=tuple((r, v) for (m, r), v in tou_peak.items() if m == int(bill_month[t])),
         )
-        act = decide(site.controller, obs)
+        act = controller.act(obs)
 
         # Physical limits
         ev_kw = np.zeros(n_c)
         for i, req in enumerate(act.ev_kw):
-            if ev_on[i]:
+            if ev_on[i] and req < 0 and ev_dis[i] > 0:  # a car gives energy back (bidirectional charger)
+                ev_kw[i] = -min(-req, float(ev_dis[i]))
+            elif ev_on[i]:
                 need_kw = float(ev_rem[i] / chargers[i].efficiency / dth)
                 want = min(max(req, 0.0), float(ev_max[i]), need_kw)
                 # Below the minimum current the charger pauses, unless the car only needs a top-up.
                 ev_kw[i] = want if want >= ev_min[i] - EPS or want >= need_kw - EPS else 0.0
+        # Heat pumps: at least enough to meet demand with what is in the tank, at most until the tank is full.
+        hp_kw = np.zeros(n_hp)
+        for j in range(n_hp):
+            q, cop = float(hp_heat[j][t]), float(hp_cop[j][t])
+            req = act.hp_kw[j] if j < len(act.hp_kw) else float(hp_need[j][t])
+            p_need = max(0.0, (q * dth - hp_buf[j]) / (cop * dth))
+            p_fill = max(0.0, (hp_cap[j] - hp_buf[j] + q * dth) / (cop * dth))
+            hi = min(float(hp_pmax[j]), p_fill)
+            hp_kw[j] = hi if p_need > hi else min(max(req, p_need), hi)
         total_b = float(np.clip(act.battery_kw, -max_dis.sum(), max_ch.sum())) if bats else 0.0
         b_kw = np.array(_split(total_b, list(max_ch if total_b > 0 else max_dis))) if bats else np.zeros(0)
         pv_out = float(pv_tot[t])
 
+        # Grid-operator dimming (§14a, BK6-22-300 Anlage 1 section 4.5): limit controllable devices.
+        if dim_mask[t]:
+            before = float(np.clip(ev_kw, 0, None).sum() + hp_kw.sum() + np.clip(b_kw, 0, None).sum())
+            if dim == "direct":
+                for i in range(n_c):
+                    if dim_ev[i] and ev_kw[i] > DIM_MIN_KW:
+                        ev_kw[i] = DIM_MIN_KW
+                for j in range(n_hp):
+                    if dim_hp[j]:
+                        cap_j = DIM_LARGE_FACTOR * hp_pmax[j] if hp_pmax[j] > DIM_LARGE_KW else DIM_MIN_KW
+                        hp_kw[j] = min(hp_kw[j], cap_j)
+                for kb in range(len(bats)):
+                    if dim_bat[kb] and b_kw[kb] > DIM_MIN_KW:
+                        b_kw[kb] = DIM_MIN_KW
+            else:  # "ems": one allowance for all controllable devices together
+                # The EMS hands it out by priority: heat first (comfort), then cars, then battery charging.
+                # Each device gets what it asked for from what is left; a charger that cannot get its
+                # minimum current pauses and leaves its share to the next one.
+                left = ems_cap
+                for j in range(n_hp):
+                    if dim_hp[j]:
+                        hp_kw[j] = min(hp_kw[j], left)
+                        left -= hp_kw[j]
+                for i in range(n_c):
+                    if dim_ev[i] and ev_kw[i] > 0:
+                        ev_kw[i] = min(ev_kw[i], left)
+                        if ev_kw[i] < ev_min[i] - EPS:
+                            ev_kw[i] = 0.0
+                        left -= ev_kw[i]
+                for kb in range(len(bats)):
+                    if dim_bat[kb] and b_kw[kb] > 0:
+                        b_kw[kb] = min(b_kw[kb], max(left, 0.0))
+                        left -= b_kw[kb]
+            for i in range(n_c):  # a charger squeezed below its minimum current pauses (IEC 61851-1)
+                if 0 < ev_kw[i] < ev_min[i] - EPS:
+                    ev_kw[i] = 0.0
+            after = float(np.clip(ev_kw, 0, None).sum() + hp_kw.sum() + np.clip(b_kw, 0, None).sum())
+            rec_dimmed[t] = max(before - after, 0.0)
+        base_load = float(load_tot[t] + hp_kw.sum())  # heat pumps are not curtailed by the safety layer
+
         # Safety layer 1: site import limit
-        net = load_tot[t] - pv_out + b_kw.sum() + ev_kw.sum()
+        net = base_load - pv_out + b_kw.sum() + ev_kw.sum()
         if imp_lim is not None and net > imp_lim + EPS:
             excess = net - imp_lim
             for i in range(len(bats)):  # stop charging batteries
@@ -200,18 +382,21 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                 r = min(excess, max_dis[i] + min(b_kw[i], 0.0))
                 b_kw[i] -= r
                 excess -= r
-            ev_sum = ev_kw.sum()  # slow EVs proportionally
+            ev_sum = float(np.clip(ev_kw, 0, None).sum())  # slow charging EVs proportionally
             if ev_sum > EPS and excess > EPS:
                 r = min(excess, ev_sum)
-                ev_kw *= (ev_sum - r) / ev_sum
+                ev_kw = np.where(ev_kw > 0, ev_kw * (ev_sum - r) / ev_sum, ev_kw)
                 excess -= r
+            for i in range(n_c):  # a charger squeezed below its minimum current pauses (IEC 61851-1)
+                if 0 < ev_kw[i] < ev_min[i] - EPS:
+                    ev_kw[i] = 0.0
             rec_overload[t] = max(excess, 0.0)
 
         # Safety layer 2: per-phase fuse (import side), by slowing EVs on the overloaded phase
         if fuse is not None:
             fuse_kw = fuse * PHASE_VOLTAGE / 1000
             for _ in range(3):
-                base = load_tot[t] - pv_out + b_kw.sum()
+                base = base_load - pv_out + b_kw.sum()
                 ph = phase_kw(base, ev_kw)
                 p_idx = int(np.argmax(ph))
                 excess = ph[p_idx] - fuse_kw
@@ -233,14 +418,19 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                 for i in range(n_c):  # a charger squeezed below its minimum pauses
                     if 0 < ev_kw[i] < ev_min[i] - EPS:
                         ev_kw[i] = 0.0
-            base = load_tot[t] - pv_out + b_kw.sum()
+            base = base_load - pv_out + b_kw.sum()
             over = float(phase_kw(base, ev_kw).max()) - fuse_kw
             rec_fuse_over[t] = over if over > 1e-6 else 0.0
 
         # Safety layer 3: export limit
-        net = load_tot[t] - pv_out + b_kw.sum() + ev_kw.sum()
+        net = base_load - pv_out + b_kw.sum() + ev_kw.sum()
         if exp_lim is not None and -net > exp_lim + EPS:
             surplus = -net - exp_lim
+            for i in range(n_c):  # stop cars giving energy back first
+                if ev_kw[i] < 0 and surplus > EPS:
+                    r = min(surplus, -ev_kw[i])
+                    ev_kw[i] += r
+                    surplus -= r
             for i in range(len(bats)):
                 r = min(surplus, max_ch[i] - b_kw[i])
                 b_kw[i] += r
@@ -254,19 +444,34 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
             energy[i] += b_kw[i] * dth * eta[i] if b_kw[i] >= 0 else b_kw[i] * dth / eta[i]
         if bats:
             energy = np.clip(energy, e_min, e_max)
+        for j in range(n_hp):
+            hp_buf[j] += (hp_cop[j][t] * hp_kw[j] - hp_heat[j][t]) * dth
+            if hp_buf[j] < 0:  # demand not met (heat pump too small, or limited by dimming)
+                hp_unmet[j] += -hp_buf[j]
+                hp_buf[j] = 0.0
+            hp_buf[j] = min(hp_buf[j], hp_cap[j])
         for i in range(n_c):
             if not ev_on[i]:
                 continue
-            got = ev_kw[i] * dth * chargers[i].efficiency
-            ev_rem[i] = max(ev_rem[i] - got, 0.0)
-            ev_delivered += got
-            rec_ev_on[i, t] = 1.0
-            rec_ev_rem[i, t] = ev_rem[i]
             sess = ev_sess[i]
             assert sess is not None
+            if ev_kw[i] >= 0:
+                got = ev_kw[i] * dth * chargers[i].efficiency
+                ev_rem[i] = max(ev_rem[i] - got, 0.0)
+                ev_delivered += got
+            else:  # the car gave energy back: it now needs that much more (losses on the way out)
+                lent = -ev_kw[i] * dth / chargers[i].efficiency
+                ev_rem[i] += lent
+                ev_lent[i] += lent
+                ev_discharged += lent
+                sess["discharged_kwh"] += lent
+                got = -lent
+            rec_ev_on[i, t] = 1.0
+            rec_ev_rem[i, t] = ev_rem[i]
             sess["delivered_kwh"] += got
             if t + 1 >= ev_dep[i]:
                 sess["delivered_kwh"] = round(sess["delivered_kwh"], 3)
+                sess["discharged_kwh"] = round(sess["discharged_kwh"], 3)
                 sess["unmet_kwh"] = round(max(sess["requested_kwh"] - sess["delivered_kwh"], 0.0), 3)
                 sessions_out.append(sess)
                 ev_on[i], ev_rem[i], ev_sess[i] = False, 0.0, None
@@ -274,14 +479,22 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
         rec_bat[:, t] = b_kw
         rec_soc[:, t] = energy / np.where(cap > 0, cap, 1)
         rec_ev[:, t] = ev_kw
-        net = load_tot[t] - pv_out + b_kw.sum() + ev_kw.sum()
+        rec_hp[:, t] = hp_kw
+        rec_hp_buf[:, t] = hp_buf
+        net = base_load - pv_out + b_kw.sum() + ev_kw.sum()
         rec_grid[t] = net
+        bm = int(bill_month[t])
+        month_peak[bm] = max(month_peak.get(bm, 0.0), net)
+        if demand_rate[t] > 0:
+            key = (bm, float(demand_rate[t]))
+            tou_peak[key] = max(tou_peak.get(key, 0.0), net)
         rec_phase[:, t] = phase_kw(net - ev_kw.sum(), ev_kw) * 1000 / PHASE_VOLTAGE
 
     for i in range(n_c):  # sessions still plugged in at the end
         sess = ev_sess[i]
         if sess is not None:
             sess["delivered_kwh"] = round(sess["delivered_kwh"], 3)
+            sess["discharged_kwh"] = round(sess["discharged_kwh"], 3)
             sess["unmet_kwh"] = None  # unknown: the car leaves after the period
             sessions_out.append(sess)
 
@@ -294,14 +507,23 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     )
     k = compute_kpis(trace).as_dict()
     import_kw = np.clip(rec_grid, 0, None)
-    monthly_peaks = [float(import_kw[month == m].max()) for m in np.unique(month)]
-    demand_cost = site.tariff.demand_charge_per_kw_month * sum(monthly_peaks)
+    monthly_peaks = [float(import_kw[bill_month == m].max()) for m in np.unique(bill_month)]
+    demand_flat = site.tariff.demand_charge_per_kw_month * sum(monthly_peaks)
+    demand_tou = 0.0
+    if site.tariff.demand_charge_profile:
+        demand_tou = tou_demand_cost(import_kw, demand_rate, bill_month)
+    demand_cost = demand_flat + demand_tou
     pv_used = float((pv_tot.sum() - rec_curtail.sum()) * dth)
     pv_exported = min(float(np.clip(-rec_grid, 0, None).sum() * dth), pv_used)
-    consumption = float((load_tot.sum() + rec_ev.sum()) * dth)
+    consumption = float((load_tot.sum() + np.clip(rec_ev, 0, None).sum() + rec_hp.sum()) * dth)
+    hp_elec = float(rec_hp.sum() * dth)
+    hp_heat_needed = float(sum(q.sum() for q in hp_heat) * dth)
+    hp_heat_delivered = hp_heat_needed - float(hp_unmet.sum())
     done = [s for s in sessions_out if s.get("unmet_kwh") is not None]
     k.update(
         demand_charge_cost=demand_cost,
+        demand_charge_peak_window_cost=demand_tou,
+        peak_import_kw=float(import_kw.max()) if T else 0.0,
         total_cost=k["energy_cost"] + demand_cost,
         pv_generated_kwh=float(pv_tot.sum() * dth),
         pv_curtailed_kwh=float(rec_curtail.sum() * dth),
@@ -315,6 +537,12 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
         grid_overload_kwh=float(rec_overload.sum() * dth),
         max_phase_current_a=float(rec_phase.max()) if T else 0.0,
         fuse_overload_kwh=float(rec_fuse_over.sum() * dth),
+        ev_discharged_kwh=ev_discharged,
+        hp_electric_kwh=hp_elec,
+        hp_heat_kwh=hp_heat_delivered,
+        hp_unmet_heat_kwh=float(hp_unmet.sum()),
+        hp_scop=hp_heat_delivered / hp_elec if hp_elec > EPS else 0.0,
+        dimmed_kwh=float(rec_dimmed.sum() * dth),
     )
     if rec_overload.sum() > 0.01:
         warnings.append(f"Import limit exceeded in {(rec_overload > 0.01).sum()} time steps even after "
@@ -324,13 +552,17 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                         "even after slowing EV charging (the base load alone is too high).")
     if skipped:
         warnings.append(f"{skipped} EV visit(s) skipped because the charger was still occupied.")
+    if hp_unmet.sum() > 0.5:
+        warnings.append(f"Heat pumps left {hp_unmet.sum():,.0f} kWh of heat demand unmet (too small, or limited by "
+                        "grid-operator dimming).")
     if any(s["resampling"].startswith("repeated") for s in sources):
         warnings.append("Some data is coarser than the time step and was repeated, not measured, at this "
                         "resolution. See Data sources.")
 
     site_series = {
         "load_kw": load_tot, "pv_kw": pv_tot - rec_curtail, "pv_curtailed_kw": rec_curtail,
-        "battery_kw": rec_bat.sum(axis=0), "ev_kw": rec_ev.sum(axis=0), "grid_kw": rec_grid,
+        "battery_kw": rec_bat.sum(axis=0), "ev_kw": rec_ev.sum(axis=0), "hp_kw": rec_hp.sum(axis=0),
+        "grid_kw": rec_grid, "dimmed_kw": rec_dimmed,
         "price": price.astype(float),
         "soc": (rec_soc * cap[:, None]).sum(axis=0) / cap.sum() if cap.sum() > 0 else np.zeros(T),
         "phase_l1_a": rec_phase[0], "phase_l2_a": rec_phase[1], "phase_l3_a": rec_phase[2],
@@ -338,6 +570,8 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     assets: dict[str, dict[str, FloatArray]] = {}
     for bld in buildings:
         assets[bld.id] = {"power_kw": load[bld.id]}
+    for dcn in centers:
+        assets[dcn.id] = {"power_kw": load[dcn.id], "it_kw": it_kw[dcn.id], "cooling_kw": load[dcn.id] - it_kw[dcn.id]}
     curtail_share = np.divide(rec_curtail, pv_tot, out=np.zeros(T), where=pv_tot > EPS)
     for p in pvs:
         assets[p.id] = {"power_kw": -pv_avail[p.id] * (1 - curtail_share)}
@@ -345,6 +579,9 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
         assets[bat.id] = {"power_kw": rec_bat[i], "soc": rec_soc[i]}
     for i, c in enumerate(chargers):
         assets[c.id] = {"power_kw": rec_ev[i], "connected": rec_ev_on[i], "remaining_kwh": rec_ev_rem[i]}
+    for j, h in enumerate(hps):
+        assets[h.id] = {"power_kw": rec_hp[j], "heat_kw": hp_heat[j], "cop": hp_cop[j],
+                        "buffer": rec_hp_buf[j] / hp_cap[j] if hp_cap[j] > 0 else np.zeros(T)}
 
     return SimResult(start, site.step_minutes, month, site_series, assets, k, sessions_out, sources,
                      price_profile.currency, warnings)

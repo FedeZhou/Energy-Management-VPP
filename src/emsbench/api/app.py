@@ -25,6 +25,8 @@ WEB_DIST = ROOT / "web" / "app" / "dist"
 
 ASSET_INFO: dict[str, dict[str, str]] = {
     "building": {"label": "Building", "group": "Loads"},
+    "data_center": {"label": "Data center", "group": "Loads"},
+    "heat_pump": {"label": "Heat pump", "group": "Loads"},
     "ev_charger": {"label": "EV charger", "group": "Loads"},
     "pv": {"label": "Solar PV", "group": "Sources"},
     "battery": {"label": "Battery", "group": "Storage"},
@@ -134,7 +136,8 @@ def run_simulation(site: Site) -> dict[str, Any]:
         result = simulate(site, lib)
         baseline_site = site.model_copy(
             update={"controller": site.controller.model_copy(
-                update={"battery": "idle", "ev": "as_fast_as_possible"})}
+                update={"battery": "idle", "ev": "as_fast_as_possible", "heat_pump": "on_demand",
+                        "ev_discharge": "never"})}
         )
         baseline = simulate(baseline_site, lib)
     except (KeyError, ValueError) as e:

@@ -1,0 +1,33 @@
+# Operate example: the same kind of German home in a January week, with a heat pump, a bidirectional wallbox
+# and the time-variable network fee (§14a Modul 3).
+# Data: measured home load (OPSD home 3: its sub-meters list a heating circulation pump but no heat pump, so the
+# heat pump below is not double-counted), solar modelled from Konstanz weather (Open-Meteo + pvlib), measured
+# Norwegian EV sessions (SINTEF, garage ASK spot 7), German 15-minute day-ahead prices (Energy-Charts / SMARD),
+# heat demand and COP from When2Heat (Germany, single-family house, air-source heat pump with radiators), and the
+# Netzgesellschaft Düsseldorf 2026 Modul 3 network fee. See each profile's source in the app.
+# Equipment sizes (8 kWp, 10 kWh / 5 kW battery, 11 kW bidirectional wallbox, 6 kW heat pump with a 14 kWh tank,
+# 3 x 25 A fuse) are example choices, not sourced. Annual heat demand: the model default (Heizspiegel 2025).
+label: Home with heat pump and bidirectional EV (15-min)
+description: >-
+  A German home in January with solar, a battery, a 6 kW air-source heat pump with a hot-water tank that pre-heats
+  in cheap hours, and a bidirectional wallbox that lets the car cover dear evening hours. Network fees vary by time
+  of day (§14a Modul 3). One week, 15-minute steps.
+site:
+  name: Home with heat pump and V2H (15-min)
+  mode: operate
+  start: 2026-01-12
+  days: 7
+  step_minutes: 15
+  grid: {fuse_a: 25}
+  # Price adder: Eurostat 2025 German household taxes incl. VAT (0.1241 EUR/kWh, nrg_pc_204_c, band DC). The
+  # network part comes from the time-variable fee profile instead (Düsseldorf 2026, net of VAT), so it is not in
+  # the adder. Spot + fee + adder approximates a dynamic tariff without supplier margin.
+  tariff: {price_profile: ec/de_lu_da, price_adder: 0.1241, network_fee_profile: netfee/de_duesseldorf_2026}
+  controller: {battery: self_consumption, ev: cheapest_hours, heat_pump: cheap_hours, ev_discharge: high_prices}
+  assets:
+    - {type: building, id: home, name: Home, load_profile: opsd/residential3, ui: {x: 420, y: 40}}
+    - {type: heat_pump, id: heatpump, name: Heat pump, max_power_kw: 6, buffer_kwh: 14, ui: {x: 740, y: 40}}
+    - {type: pv, id: pv, name: Rooftop solar, capacity_kwp: 8, profile: om/konstanz_south30, ui: {x: 100, y: 40}}
+    - {type: battery, id: battery, name: Home battery, capacity_kwh: 10, power_kw: 5, ui: {x: 100, y: 380}}
+    - {type: ev_charger, id: charger, name: Wallbox, sessions: sintef/ASK_Plass7, phases: 3, bidirectional: true,
+       ui: {x: 420, y: 380}}

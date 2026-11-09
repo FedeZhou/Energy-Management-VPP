@@ -17,6 +17,15 @@ CL_EVS_SCHEMA = "CityLearn citylearn_challenge_2022_phase_all_plus_evs schema.js
 CL_P1_SCHEMA = "CityLearn citylearn_challenge_2022_phase_1 schema.json"
 # Nominal low-voltage phase-to-neutral voltage in Europe (IEC 60038: 230/400 V systems).
 PHASE_VOLTAGE = 230.0
+# § 14a EnWG (BNetzA BK6-22-300, Anlage 1): devices above 4.2 kW are controllable (2.4.1); minimum power 4.2 kW
+# per device, 0.4 x power for heat pumps / air conditioning above 11 kW (4.5.1); for EMS control the minimum is
+# 4.2 kW + (n - 1) x GZF x 4.2 kW with these simultaneity factors (4.5.2).
+DIM_THRESHOLD_KW = 4.2
+DIM_MIN_KW = 4.2
+DIM_LARGE_KW = 11.0
+DIM_LARGE_FACTOR = 0.4
+DIM_GZF = {2: 0.8, 3: 0.75, 4: 0.7, 5: 0.65, 6: 0.6, 7: 0.55, 8: 0.5}  # 9 or more devices: 0.45
+DIM_GZF_MANY = 0.45
 MAX_STEPS = 110_000  # keeps a run under ~20 s; e.g. a year at 5-minute steps
 
 
@@ -146,11 +155,99 @@ class EVCharger(AssetBase):
         help="Chargers cannot charge below this current per phase; they pause instead.",
         source="IEC 61851-1: the lowest current a charger may signal to the car is 6 A",
     )
+    bidirectional: bool = param(
+        False, "Bidirectional (V2H / V2G)",
+        help="Lets a plugged-in car give energy back to the site (vehicle-to-home) at up to the charger's power, "
+        "but only while it can still be charged to its target by departure. Needs a bidirectional charger and car. "
+        "Assumed to be a DC charger, which can discharge at any power up to its rating (the 6 A minimum applies to "
+        "AC charging only).",
+    )
+    v2g_max_kwh_per_visit: float = param(
+        10.0, "Max energy borrowed per visit", unit="kWh", ge=0,
+        help="Only for bidirectional chargers. Upper limit on energy taken from one car during one visit, to "
+        "protect the driver's range and the car battery.",
+        source="Example choice",
+    )
 
 
-Asset = Annotated[Building | SolarPV | Battery | EVCharger, Field(discriminator="type")]
+class DataCenter(AssetBase):
+    """A data center: servers (IT load) plus cooling and other overhead, set by the PUE.
+
+    Facility power = IT power x PUE. The PUE is held constant, so cooling follows the IT load
+    but not the weather (real cooling rises on hot afternoons). The UPS battery and backup
+    generator are separate components: add a battery with a minimum charge as the backup reserve.
+    """
+
+    type: Literal["data_center"] = "data_center"
+    it_load_profile: str = param(
+        "esif/it_202404", "IT load profile", options="load",
+        help="Measured server power. The ESIF profiles are a ~3 MW supercomputer centre in Colorado.",
+        source="NLR (NREL) HPC Facility PUE Data, it_power_kw, https://data.openei.org/submissions/8616",
+    )
+    it_scale: float = param(
+        1.0, "IT scale factor", ge=0,
+        help="Multiplies the IT profile. 2 means twice the servers of the measured site.",
+    )
+    pue: float = param(
+        1.54, "PUE (total power / IT power)", ge=1.0, le=3.0,
+        help="1.54 is the 2025 industry average; best liquid-cooled sites reach about 1.05-1.1. Everything "
+        "above 1 is cooling, fans, pumps, lights and losses.",
+        source="Uptime Institute Global Data Center Survey 2025 (UII Keynote Report 180), p. 7, Fig. 2: "
+        "weighted average annual PUE 1.54, n=681",
+    )
+
+
+class HeatPump(AssetBase):
+    """An electric heat pump for space heating and hot water, with a heat buffer (tank).
+
+    Heat demand = a When2Heat profile x the annual heat demand. Electricity = heat / COP, using the COP of the
+    chosen heat pump type in that hour. The tank lets the controller heat earlier than needed (when power is
+    cheap or solar is spare) and use the stored heat later. If the heat pump cannot cover the demand (too
+    small, or limited by the grid operator), the shortfall is recorded as unmet heat.
+    """
+
+    type: Literal["heat_pump"] = "heat_pump"
+    heat_profile: str = param(
+        "w2h/de_sfh", "Heat demand profile", options="heat",
+        help="Hourly shape of space heating plus hot water for a building type and country.",
+        source="When2Heat (Ruhnau, Hirth, Praktiknjo 2019, Scientific Data 6:189), Open Power System Data 2023-07-27, https://doi.org/10.1038/s41597-019-0199-y",
+    )
+    annual_heat_kwh: float = param(
+        15730.0, "Annual heat demand", unit="kWh", ge=0,
+        help="Heat needed in a year for space heating and hot water. 15,730 kWh is the average gas use of a "
+        "130 m² single-family house in Germany; gas use includes boiler losses, so the heat actually needed is "
+        "somewhat lower.",
+        source="co2online Heizspiegel 2025 (with Deutscher Mieterbund and BMWK), as reported by t-online, 23.09.2025: "
+        "130 m² single-family house, about 15,730 kWh of gas per year",
+    )
+    cop_profile: str = param(
+        "w2h/de_ashp_radiator", "Heat pump type (COP)", options="cop",
+        help="Coefficient of performance per hour: kWh of heat per kWh of electricity. Depends on the heat source "
+        "(air or ground), the outdoor temperature and the heating circuit (radiators need hotter water than floor "
+        "heating, so the COP is lower).",
+        source="When2Heat (Ruhnau, Hirth, Praktiknjo 2019, Scientific Data 6:189), Open Power System Data 2023-07-27, https://doi.org/10.1038/s41597-019-0199-y",
+    )
+    max_power_kw: float | None = param(
+        None, "Max electric power", unit="kW", ge=0,
+        help="Electric power of the heat pump. Empty = sized to cover the coldest hour of the simulated period "
+        "exactly (no spare capacity for pre-heating then).",
+    )
+    buffer_kwh: float = param(
+        7.0, "Heat buffer (tank) size", unit="kWh heat", ge=0,
+        help="Heat the tank can store and release later. About 7 kWh is a 300-litre water tank used over 20 °C.",
+        source="Example choice; water stores about 4.19 kJ per kg per kelvin, so 300 kg x 20 K x 4.19 kJ/(kg·K) "
+        "= 7.0 kWh",
+    )
+    buffer_initial: float = param(
+        0.5, "Initial tank charge", ge=0, le=1, help="Share of the buffer that is full at the start.",
+        source="Example choice",
+    )
+
+
+Asset = Annotated[Building | SolarPV | Battery | EVCharger | DataCenter | HeatPump, Field(discriminator="type")]
 ASSET_TYPES: dict[str, type[AssetBase]] = {
-    "building": Building, "pv": SolarPV, "battery": Battery, "ev_charger": EVCharger,
+    "building": Building, "data_center": DataCenter, "heat_pump": HeatPump, "pv": SolarPV, "battery": Battery,
+    "ev_charger": EVCharger,
 }
 
 
@@ -170,6 +267,24 @@ class GridConnection(BaseModel):
         None, "Fuse per phase", unit="A", ge=0,
         help="Main fuse rating per phase (three-phase, 230 V to neutral). EV charging is "
         "slowed so no phase exceeds it. Empty = not checked.",
+    )
+    dimming: Literal["off", "direct", "ems"] = param(
+        "off", "Grid-operator dimming (§14a, Germany)",
+        help="Simulates the grid operator limiting controllable devices during a daily window: EV chargers, heat "
+        "pumps and batteries (while charging) rated above 4.2 kW. direct: each device is limited to 4.2 kW (heat "
+        "pumps above 11 kW to 40% of their power). ems: the devices together are limited to 4.2 kW + (n - 1) x "
+        "simultaneity factor x 4.2 kW, and the energy management system shares it out.",
+        source="BNetzA decision BK6-22-300 of 27.11.2023, Anlage 1, sections 2.4.1 (devices above 4.2 kW) and 4.5 "
+        "(minimum power 4.2 kW; 0.4 x power above 11 kW; EMS formula with simultaneity factors 0.8 for 2 devices "
+        "down to 0.45 for 9 or more)",
+    )
+    dimming_start_hour: float = param(
+        17.0, "Dimming window start", unit="h", ge=0, le=24,
+        help="Real dimming is rare and comes at short notice; a daily window is a stress test, not a forecast.",
+        source="Example choice",
+    )
+    dimming_hours: float = param(
+        2.0, "Dimming window length", unit="h", ge=0, le=24, source="Example choice",
     )
 
 
@@ -192,10 +307,24 @@ class Tariff(BaseModel):
         help="Charged on each month's highest import (per time step). Common for commercial sites. "
         "Enter your tariff's value; there is no default.",
     )
+    network_fee_profile: str = param(
+        "", "Time-variable network fee (§14a Modul 3)", options="netfee",
+        help="Optional. Adds a time-of-day network fee (low / standard / high tier) to every imported kWh, from a "
+        "real German grid operator's 2026 price sheet. If you use it, leave the network fee out of the price "
+        "adder. Empty = none.",
+    )
+    demand_charge_profile: str = param(
+        "", "Peak-window demand charge (profile id)",
+        help="Optional, on top of the demand charge above. A 'demand' profile giving a rate per kW per month "
+        "for each hour (0 outside the window), e.g. urdb/xcel_co_pg_demand. Each month, each rate is charged "
+        "on the highest import during the hours that carry it. Empty = none.",
+    )
 
 
-BatteryStrategy = Literal["idle", "self_consumption", "price_arbitrage", "peak_shaving"]
+BatteryStrategy = Literal["idle", "self_consumption", "price_arbitrage", "peak_shaving", "mpc"]
 EVStrategy = Literal["as_fast_as_possible", "spread_until_departure", "cheapest_hours", "solar_surplus"]
+HeatPumpStrategy = Literal["on_demand", "cheap_hours", "solar_surplus"]
+EVDischargeStrategy = Literal["never", "high_prices"]
 
 
 class ControllerSpec(BaseModel):
@@ -205,11 +334,36 @@ class ControllerSpec(BaseModel):
         "self_consumption", "Battery strategy",
         help="idle: never used. self_consumption: store spare solar, use it when short. "
         "price_arbitrage: also charge from the grid at the day's cheapest hours and "
-        "discharge at the most expensive. peak_shaving: keep grid import under a threshold.",
+        "discharge at the most expensive. peak_shaving: keep grid import under a threshold. "
+        "mpc: model predictive control, plans the battery and all EV charging together over the next hours "
+        "with a linear program and re-plans regularly (the EV strategy below is then ignored).",
     )
     peak_threshold_kw: float = param(
         10.0, "Peak-shaving threshold", unit="kW", ge=0,
         help="Only used by peak_shaving. Target ceiling for grid import.",
+    )
+    mpc_horizon_hours: float = param(
+        24.0, "MPC planning horizon", unit="h", ge=1, le=48,
+        help="Only used by mpc. How far ahead it plans. EMHASS recommends a horizon of at least five optimisation "
+        "steps; 24 h covers a daily price and solar cycle.",
+        source="Example choice; EMHASS documentation: prediction horizon at least 5 x the optimisation time step",
+    )
+    mpc_replan_minutes: int = param(
+        60, "MPC re-plan interval", unit="min", ge=1, le=1440,
+        help="Only used by mpc. How often it re-optimises (also immediately when a car arrives). Shorter is more "
+        "responsive but slower to simulate.",
+    )
+    heat_pump: HeatPumpStrategy = param(
+        "on_demand", "Heat pump strategy",
+        help="on_demand: heat when needed, the tank is not used. cheap_hours: fill the tank in the cheapest quarter "
+        "of the next 24 h and draw on it in the dearest quarter. solar_surplus: fill the tank with spare solar. "
+        "With mpc, heat pumps run on demand (the planner does not schedule them yet).",
+    )
+    ev_discharge: EVDischargeStrategy = param(
+        "high_prices", "Car discharging (bidirectional chargers)",
+        help="Only for chargers marked bidirectional. high_prices: a plugged-in car covers the site's grid import "
+        "when the price is in the dearer half of the next 24 h, as long as it can still reach its target by "
+        "departure. never: cars only charge. The mpc controller does not discharge cars yet.",
     )
     ev: EVStrategy = param(
         "as_fast_as_possible", "EV charging strategy",
