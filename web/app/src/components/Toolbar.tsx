@@ -1,16 +1,32 @@
 import { useRef } from "react";
-import { CalendarRange, Download, Gauge, Loader2, Play, Upload } from "lucide-react";
+import { BookOpen, CircleHelp, Database, Download, FilePlus2, Loader2, Play, RotateCw, Upload } from "lucide-react";
 import type { Mode, Site } from "../api";
 import { useStore } from "../store";
+import { useGuide } from "./Guide";
+import { Help } from "./Help";
 
-const MODES: { id: Mode; label: string; hint: string; icon: typeof Gauge }[] = [
-  { id: "plan", label: "Plan", hint: "Months to a year, hourly. Costs, savings, wear.", icon: CalendarRange },
-  { id: "operate", label: "Operate", hint: "Hours to days, 15-minute steps. EVs, fuses, phases.", icon: Gauge },
+const MODES: { id: Mode; label: string; hint: string }[] = [
+  { id: "plan", label: "Plan", hint: "Months to a year, hourly: costs, savings, battery wear" },
+  { id: "operate", label: "Operate", hint: "Hours to days, 1–15 min steps: EVs, fuses, phases" },
 ];
+
+function Mark() {
+  return (
+    <svg className="brand-mark" viewBox="0 0 24 24" aria-hidden>
+      <rect width="24" height="24" rx="6" fill="currentColor" />
+      <g fill="var(--surface)">
+        <rect x="6" y="12" width="3" height="6" rx="1" />
+        <rect x="10.5" y="6" width="3" height="12" rx="1" />
+        <rect x="15" y="9" width="3" height="9" rx="1" />
+      </g>
+    </svg>
+  );
+}
 
 export function Toolbar() {
   const presets = useStore((s) => s.presets);
   const mode = useStore((s) => s.site.mode);
+  const name = useStore((s) => s.site.name);
   const running = useStore((s) => s.running);
   const stale = useStore((s) => s.stale);
   const hasResult = useStore((s) => s.result !== null);
@@ -38,44 +54,67 @@ export function Toolbar() {
     }
   };
 
+  const again = hasResult && stale;
   return (
-    <header className="toolbar">
+    <header className="topbar">
       <div className="brand">
-        <span className="logo" aria-hidden>⚡</span>
-        <div>
-          <strong>Site Lab</strong>
-          <span className="muted small block">emsbench simulator</span>
-        </div>
+        <Mark />
+        <span className="brand-name">Site Lab</span>
+        <span className="crumb-sep">/</span>
+        <span className="crumb" title={name}>{name}</span>
       </div>
-      <div className="modes" role="radiogroup" aria-label="Mode">
-        {MODES.map(({ id, label, hint, icon: Icon }) => (
-          <button key={id} role="radio" aria-checked={mode === id} className={`mode ${mode === id ? "on" : ""}`}
+      <div className="segmented" role="radiogroup" aria-label="Mode" data-tour="mode">
+        {MODES.map(({ id, label, hint }) => (
+          <button key={id} role="radio" aria-checked={mode === id} className={mode === id ? "on" : ""}
             onClick={() => mode !== id && setMode(id)} title={hint}>
-            <Icon size={15} /> {label}
+            {label}
           </button>
         ))}
       </div>
-      <div className="toolbar-mid">
-        <select id="preset" aria-label="Load an example" defaultValue="" onChange={(e) => {
+      <Help topic="modes" />
+      <div className="topbar-spacer" />
+      <div className="topbar-group">
+        <button className="btn ghost" onClick={() => useGuide.getState().start()} data-tour="guide" title="A short tour of the interface">
+          <CircleHelp size={15} /> Guide
+        </button>
+        <button className="btn ghost" data-tour="learn" onClick={() => useStore.getState().setPage("learn")} title="How Site Lab works, how the systems behave, research digests">
+          <BookOpen size={15} /> Learn
+        </button>
+        <button className="icon-btn" title="Where the data comes from" aria-label="Data sources" data-tour="data"
+          onClick={() => useStore.getState().setDataPanel(true)}>
+          <Database size={16} />
+        </button>
+      </div>
+      <div className="vsep" />
+      <div className="topbar-files" data-tour="examples">
+        <select className="examples" aria-label="Load an example" defaultValue="" onChange={(e) => {
           const p = presets.find((x) => x.id === e.target.value);
           if (p) loadSite(p.site);
           e.target.value = "";
         }}>
-          <option value="" disabled>Load an example…</option>
+          <option value="" disabled>Examples</option>
           {presets.filter((p) => p.mode === mode).map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
         </select>
-        <button className="btn ghost" onClick={() => loadSite({ ...useStore.getState().site, name: "New site", assets: [] })}>New</button>
-        <button className="btn ghost" onClick={exportJson} title="Save the site as a JSON file"><Download size={15} /> Export</button>
-        <button className="btn ghost" onClick={() => fileRef.current?.click()} title="Open a site JSON file"><Upload size={15} /> Import</button>
+        <button className="icon-btn" title="New empty site" aria-label="New empty site"
+          onClick={() => loadSite({ ...useStore.getState().site, name: "New site", assets: [] })}>
+          <FilePlus2 size={16} />
+        </button>
+        <button className="icon-btn" title="Open a site file (JSON)" aria-label="Open a site file" onClick={() => fileRef.current?.click()}>
+          <Upload size={16} />
+        </button>
+        <button className="icon-btn" title="Save the site as JSON" aria-label="Save the site as JSON" onClick={exportJson}>
+          <Download size={16} />
+        </button>
         <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) importJson(f);
           e.target.value = "";
         }} />
       </div>
-      <button className="btn primary run" onClick={() => run()} disabled={running || assets === 0}>
-        {running ? <Loader2 size={16} className="spin" /> : <Play size={16} />}
-        {running ? "Simulating…" : hasResult && stale ? "Run again" : "Run simulation"}
+      <div className="vsep" />
+      <button className="btn primary" data-tour="run" onClick={() => run()} disabled={running || assets === 0} title="Run simulation (Ctrl+Enter)">
+        {running ? <Loader2 size={14} className="spin" /> : again ? <RotateCw size={14} /> : <Play size={14} />}
+        {running ? "Running" : again ? "Re-run" : "Run"}
       </button>
     </header>
   );

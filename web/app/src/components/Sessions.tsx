@@ -1,4 +1,5 @@
 import { useStore } from "../store";
+import { Help } from "./Help";
 import { dayLabel, isMidnight, num, timeAt, timeText } from "../util";
 
 /** One row per charger, one bar per car visit (arrival to departure). The fill shows how much
@@ -17,9 +18,11 @@ export function Sessions() {
 
   return (
     <div className="gantt">
-      <div className="gantt-head">
-        <h4>EV visits</h4>
-        <span className="small muted">Bar = plugged in. Fill = energy delivered of energy needed. Red outline = left short. Click a bar to jump there.</span>
+      <div className="legend">
+        <span><i className="sw" /> Plugged in</span>
+        <span><i className="sw fill" /> Energy delivered</span>
+        <span><i className="sw short" /> Left short</span>
+        <Help topic="sessions" />
       </div>
       <div className="gantt-grid">
         <div className="gantt-axis">

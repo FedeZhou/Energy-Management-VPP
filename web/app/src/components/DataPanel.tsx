@@ -44,9 +44,10 @@ export function DataPanel() {
   const [data, setData] = useState<DataSources | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // A link ending in #data opens the panel directly.
+  // A link ending in #data (or "-data") opens the panel directly. Not "contains": preset ids such as
+  // operate_data_center also contain "data".
   useEffect(() => {
-    if (location.hash.includes("data")) setOpen(true);
+    if (/(^#|-)data$/.test(location.hash)) setOpen(true);
   }, [setOpen]);
 
   useEffect(() => {

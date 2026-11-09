@@ -1,6 +1,6 @@
 // Types mirror emsbench.api.app responses and emsbench.sim.model.Site.
 
-export type AssetType = "building" | "pv" | "battery" | "ev_charger";
+export type AssetType = "building" | "data_center" | "heat_pump" | "pv" | "battery" | "ev_charger";
 export type Mode = "plan" | "operate";
 
 export interface Field {
@@ -13,7 +13,7 @@ export interface Field {
   unit: string;
   help: string;
   source: string;
-  options: "" | "load" | "pv" | "price" | "ev";
+  options: "" | "load" | "pv" | "price" | "demand" | "heat" | "cop" | "netfee" | "ev";
   min: number | null;
   max: number | null;
   nullable: boolean;
@@ -44,6 +44,10 @@ export interface Profiles {
   load: ProfileInfo[];
   pv: ProfileInfo[];
   price: ProfileInfo[];
+  demand: ProfileInfo[];
+  heat: ProfileInfo[];
+  cop: ProfileInfo[];
+  netfee: ProfileInfo[];
   ev: ProfileInfo[];
 }
 
@@ -61,9 +65,11 @@ export interface Site {
   start: string; // ISO date
   days: number;
   step_minutes: number;
-  grid: { import_limit_kw: number | null; export_limit_kw: number | null; fuse_a: number | null };
-  tariff: { price_profile: string; price_adder: number; export_price: number; demand_charge_per_kw_month: number };
-  controller: { battery: string; peak_threshold_kw: number; ev: string };
+  grid: { import_limit_kw: number | null; export_limit_kw: number | null; fuse_a: number | null;
+    dimming?: "off" | "direct" | "ems"; dimming_start_hour?: number; dimming_hours?: number };
+  tariff: { price_profile: string; price_adder: number; export_price: number; demand_charge_per_kw_month: number;
+    network_fee_profile?: string };
+  controller: { battery: string; peak_threshold_kw: number; ev: string; heat_pump?: string; ev_discharge?: string };
   assets: Asset[];
 }
 

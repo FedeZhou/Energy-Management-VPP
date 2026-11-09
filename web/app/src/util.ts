@@ -2,6 +2,8 @@ import type { AssetType } from "./api";
 
 export const ASSET_COLOR: Record<AssetType | "grid", string> = {
   building: "var(--c-load)",
+  data_center: "var(--c-load)", // a load: same token as buildings, told apart by name and icon
+  heat_pump: "var(--c-heat)", // the one warm hue: distinguishable from every blue/grey token
   pv: "var(--c-solar)",
   battery: "var(--c-batt)",
   ev_charger: "var(--c-ev)",
