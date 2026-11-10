@@ -34,7 +34,6 @@ treated as one month. Forecasts are perfect for now, including the car visits ah
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -42,7 +41,10 @@ from scipy.optimize import Bounds, LinearConstraint, linprog, milp
 from scipy.sparse import coo_matrix
 
 from emsbench.sim.controllers import Action, Observation
+from emsbench.sim.forecasts import Forecast, FutureSession, PerfectForecast
 from emsbench.sim.model import ControllerSpec
+
+__all__ = ["Forecast", "FutureSession", "MPCController", "PerfectForecast", "SiteLimits"]
 
 FloatArray = NDArray[np.float64]
 INF = np.inf
@@ -50,47 +52,6 @@ TIE_BREAK_PER_KWH = 1e-4  # tiny battery throughput cost: avoids pointless cycli
 RELAX_AND_FIX_ROUNDS = 5  # re-solves allowed to push EV plans out of the band between 0 and the minimum
 MILP_GAP = 1e-4  # exact mode: stop when the plan is provably within 0.01% of the best possible plan
 MILP_TIME_LIMIT_S = 10.0  # exact mode, per solve; the best plan found so far is used if it runs out
-
-
-@dataclass(frozen=True)
-class FutureSession:
-    """A car visit the controller expects: steps are absolute (arrive inclusive, depart exclusive)."""
-
-    arrive: int
-    depart: int
-    energy_kwh: float
-    max_kw: float
-    min_kw: float
-    phase: str = "3"
-
-
-class Forecast(Protocol):
-    """What the controller is told about the future. `name` is load, pv, price or demand_rate."""
-
-    def window(self, name: str, t: int, steps: int) -> FloatArray: ...
-
-    def sessions(self, charger: int, t: int, steps: int) -> list[FutureSession]: ...
-
-
-@dataclass
-class PerfectForecast:
-    """Tells the controller the true future (an upper bound on what any forecast can achieve)."""
-
-    series: dict[str, FloatArray]
-    ev: list[list[FutureSession]] = field(default_factory=list)  # per charger, in time order
-
-    def sessions(self, charger: int, t: int, steps: int) -> list[FutureSession]:
-        """Cars that will arrive after step t and before t + steps."""
-        if charger >= len(self.ev):
-            return []
-        return [s for s in self.ev[charger] if t < s.arrive < t + steps]
-
-    def window(self, name: str, t: int, steps: int) -> FloatArray:
-        s = self.series[name]
-        out = s[t: t + steps]
-        if out.size < steps:  # past the end of the data: repeat the last value
-            out = np.concatenate([out, np.full(steps - out.size, s[-1] if s.size else 0.0)])
-        return out.astype(float)
 
 
 @dataclass(frozen=True)
@@ -228,6 +189,7 @@ class Plan:
     t0: int
     battery_kw: FloatArray
     ev_kw: FloatArray  # (n_chargers, H)
+    net_kw: FloatArray  # forecast load - solar the plan was made for
 
 
 class MPCController:
@@ -257,7 +219,11 @@ class MPCController:
         for i in range(len(obs.evs)):
             p = float(self.plan.ev_kw[i, k])
             ev_kw.append(p if p > 1e-6 else 0.0)
-        return Action(battery_kw=float(self.plan.battery_kw[k]), ev_kw=tuple(ev_kw))
+        # The battery takes up the forecast error of this step, so the grid exchange stays as planned
+        # (zero with a perfect forecast). The next re-plan starts from the battery's real state.
+        actual_net = obs.load_kw + sum(h.heat_kw / max(h.cop, 1.0) for h in obs.heat_pumps) - obs.pv_kw
+        error = actual_net - float(self.plan.net_kw[k])
+        return Action(battery_kw=float(self.plan.battery_kw[k]) - error, ev_kw=tuple(ev_kw))
 
     def solve(self, obs: Observation) -> Plan:
         lim, H, dt = self.lim, self.horizon, self.lim.step_hours
@@ -362,4 +328,4 @@ class MPCController:
         ev_plan = np.zeros((len(obs.evs), H))
         for i, k0, _, car_vars in blocks:
             ev_plan[i, k0: k0 + car_vars.size] = x[car_vars]
-        return Plan(obs.t, bat, ev_plan)
+        return Plan(obs.t, bat, ev_plan, net0)

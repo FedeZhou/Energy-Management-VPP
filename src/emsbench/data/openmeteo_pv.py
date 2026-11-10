@@ -41,10 +41,12 @@ GAMMA_PDC = -0.0047  # PVWatts v5 "standard" module temperature coefficient (Dob
 ETA_INV_NOM = 0.96  # PVWatts v5 nominal inverter efficiency (Dobos 2014)
 
 
-def per_kwp(weather: pd.DataFrame, lat: float, lon: float, tilt: float, azimuth: float) -> FloatArray:
+def per_kwp(weather: pd.DataFrame, lat: float, lon: float, tilt: float, azimuth: float,
+            mid_minutes: float = 7.5) -> FloatArray:
+    """AC kW per kWp. `mid_minutes`: offset from each time label to the middle of its interval (sun position)."""
     import pvlib
 
-    times = pd.DatetimeIndex(weather.index).tz_localize("UTC") + pd.Timedelta(minutes=7.5)  # mid-interval
+    times = pd.DatetimeIndex(weather.index).tz_localize("UTC") + pd.Timedelta(minutes=mid_minutes)
     sun = pvlib.solarposition.get_solarposition(times, lat, lon)
     dni_extra = pvlib.irradiance.get_extra_radiation(times)
     poa = pvlib.irradiance.get_total_irradiance(

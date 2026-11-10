@@ -29,6 +29,7 @@ from numpy.typing import NDArray
 
 from emsbench.benchmark.kpis import EpisodeTrace, compute_kpis
 from emsbench.sim.controllers import EVState, HPState, Observation, RuleController
+from emsbench.sim.forecasts import DAY_AHEAD_PUBLISHED_HOUR, Forecast, FutureSession, PerfectForecast, RealisticForecast
 from emsbench.sim.model import (
     DIM_GZF,
     DIM_GZF_MANY,
@@ -45,7 +46,7 @@ from emsbench.sim.model import (
     Site,
     SolarPV,
 )
-from emsbench.sim.profiles import ProfileLibrary
+from emsbench.sim.profiles import Profile, ProfileLibrary
 
 FloatArray = NDArray[np.float64]
 EPS = 1e-9
@@ -95,9 +96,12 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     sources: list[dict[str, str]] = []
     warnings: list[str] = []
 
+    used: dict[tuple[str, str], tuple[Profile, dt.datetime]] = {}  # (asset, kind) -> profile, source start
+
     def window(asset_id: str, profile_id: str, kind: str, steps: int = T) -> FloatArray:
         p = lib.get(profile_id, kind)
         vals, info = p.window(start, steps, step_s)
+        used.setdefault((asset_id, kind), (p, info.source_start))
         sources.append({"asset": asset_id, "profile": profile_id, "label": p.label,
                         "source_start": info.source_start.isoformat(), "resampling": info.resampling})
         return vals
@@ -229,10 +233,12 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     rec_dimmed = np.zeros(T)
     imp_lim, exp_lim, fuse = site.grid.import_limit_kw, site.grid.export_limit_kw, site.grid.fuse_a
 
-    controller: Any = RuleController(site.controller)
-    if site.controller.battery == "mpc":
-        from emsbench.sim.mpc import FutureSession, MPCController, PerfectForecast, SiteLimits
-
+    # What the controllers are told about the future (heat pumps run on demand in these series).
+    forecast: Forecast
+    actual = {"load": load_tot + hp_need_tot, "pv": pv_tot, "price": price_ext, "demand_rate": demand_rate}
+    if site.controller.forecast == "realistic":
+        forecast = _realistic_forecast(site, lib, actual, used, start, T, step_s, pvs, warnings)
+    else:
         # The sessions the engine will accept (a car arriving while the charger is busy is skipped).
         upcoming: list[list[FutureSession]] = []
         for i in range(n_c):
@@ -246,6 +252,11 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                 accepted.append(FutureSession(int(a), int(dep), float(s.energy_kwh), mx, mn, car_phase))
                 free_from = int(dep)
             upcoming.append(accepted)
+        forecast = PerfectForecast(actual, upcoming, int(round(86400 / step_s)))
+
+    controller: Any = RuleController(site.controller)
+    if site.controller.battery == "mpc":
+        from emsbench.sim.mpc import MPCController, SiteLimits
 
         controller = MPCController(site.controller, SiteLimits(
             step_hours=dth, battery_capacity_kwh=float(cap.sum()), battery_min_kwh=float(e_min.sum()),
@@ -254,8 +265,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
             fuse_kw=fuse * PHASE_VOLTAGE / 1000 if fuse is not None else None, export_price=site.tariff.export_price,
             demand_rate_flat=site.tariff.demand_charge_per_kw_month,
             charger_efficiency=tuple(c.efficiency for c in chargers),
-        ), PerfectForecast({"load": load_tot + hp_need_tot, "pv": pv_tot, "price": price_ext,
-                            "demand_rate": demand_rate}, upcoming))  # heat pumps run on demand under mpc
+        ), forecast)
 
     def phase_kw(base: float, ev_kw: FloatArray) -> FloatArray:
         out = np.full(3, base / 3.0)
@@ -293,7 +303,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
         max_dis = np.minimum(pmax, np.maximum(energy - e_min, 0) * eta / dth) if bats else pmax
         obs = Observation(
             t=t, step_hours=dth, load_kw=float(load_tot[t]), pv_kw=float(pv_tot[t]),
-            price=float(price[t]), price_ahead=price_ext[t: t + look],
+            price=float(price[t]), price_ahead=forecast.window("price", t, look),
             battery_energy_kwh=float(energy.sum()), battery_capacity_kwh=float(cap.sum()),
             battery_max_charge_kw=float(max_ch.sum()), battery_max_discharge_kw=float(max_dis.sum()),
             evs=tuple(EVState(bool(ev_on[i]), float(ev_rem[i]), int(ev_dep[i] - t) if ev_on[i] else 0,
@@ -585,3 +595,69 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
 
     return SimResult(start, site.step_minutes, month, site_series, assets, k, sessions_out, sources,
                      price_profile.currency, warnings)
+
+
+def _realistic_forecast(site: Site, lib: ProfileLibrary, actual: dict[str, FloatArray],
+                        used: dict[tuple[str, str], tuple[Profile, dt.datetime]], start: dt.datetime, T: int,
+                        step_s: int, pvs: list[SolarPV], warnings: list[str]) -> RealisticForecast:
+    """Forecasts from what a real controller knows (see emsbench.sim.forecasts)."""
+    day = int(round(86400 / step_s))
+
+    def before(asset_id: str, kind: str) -> FloatArray | None:
+        p, src = used[(asset_id, kind)]
+        return p.before(src, day, step_s)
+
+    # The day before the run, for "repeat the most recent day". Missing data: use the run's first day.
+    parts: list[FloatArray | None] = []
+    for a in site.assets:
+        if isinstance(a, Building):
+            b = before(a.id, "load")
+            parts.append(None if b is None else b * a.scale)
+        elif isinstance(a, DataCenter):
+            b = before(a.id, "load")
+            parts.append(None if b is None else b * a.it_scale * a.pue)
+        elif isinstance(a, HeatPump):
+            q, c = before(a.id, "heat"), before(a.id, "cop")
+            parts.append(None if q is None or c is None else q * a.annual_heat_kwh / np.maximum(c, 1.0))
+    first_day = np.resize(actual["load"][:day], day)
+    if any(x is None for x in parts):
+        load_before = first_day
+        warnings.append("Realistic forecast: no load data before the start, so the first day's load forecast uses "
+                        "that day's actual load.")
+    else:
+        load_before = np.sum([x for x in parts if x is not None], axis=0) if parts else np.zeros(day)
+
+    pv_parts = [before(p.id, "pv") for p in pvs]
+    if any(x is None for x in pv_parts):
+        pv_before = np.resize(actual["pv"][:day], day)
+    else:
+        pv_before = np.sum([x * p.capacity_kwp for x, p in zip(pv_parts, pvs, strict=True) if x is not None],
+                           axis=0) if pvs else np.zeros(day)
+
+    # Solar: the archived day-ahead weather forecast through the same model, aligned with the actual data.
+    pv_dayahead: FloatArray | None = np.zeros(T + 2 * day) if pvs else None
+    for p in pvs:
+        fc = lib.profiles.get(f"{p.profile}@dayahead")
+        truth, src = used[(p.id, "pv")]
+        vals: FloatArray | None = None
+        if fc is not None and fc.kind == "pvforecast":
+            for n in (T + 2 * day, T):
+                try:
+                    v, info = fc.window(start, n, step_s)
+                except ValueError:
+                    continue
+                if info.source_start == src:
+                    vals = np.concatenate([v, np.resize(v[-day:], T + 2 * day - n)]) if n < T + 2 * day else v
+                break
+        if vals is None or pv_dayahead is None:
+            pv_dayahead = None
+            warnings.append(f"Realistic forecast: no archived weather forecast for '{truth.label}', so its solar "
+                            "forecast repeats the most recent day.")
+            break
+        pv_dayahead += vals * p.capacity_kwp
+
+    published = next((h for prefix, h in DAY_AHEAD_PUBLISHED_HOUR.items()
+                      if site.tariff.price_profile.startswith(prefix)), None)
+    first_step = int(round((start.hour * 3600 + start.minute * 60) / step_s))
+    return RealisticForecast(actual, load_before, pv_before, pv_dayahead, day, first_step,
+                             None if published is None else int(round(published * 3600 / step_s)))

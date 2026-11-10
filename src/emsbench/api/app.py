@@ -87,7 +87,11 @@ def datasources() -> dict[str, Any]:
 
     lib = default_library()
     ids = list(lib.profiles) + list(lib.ev_sets)
-    sources = [{**s, "profiles": sum(1 for i in ids if i.startswith(s["prefix"]))} for s in SOURCES]
+    def count(s: dict[str, Any]) -> int:  # a source with a "suffix" owns only ids ending in it
+        suffix = str(s.get("suffix", ""))
+        return sum(1 for i in ids if i.startswith(s["prefix"]) and (i.endswith(suffix) if suffix else "@" not in i))
+
+    sources = [{**s, "profiles": count(s)} for s in SOURCES]
     return {"sources": sources, "excluded": EXCLUDED, "rules": RULES, "checks": STATIC_CHECKS,
             "pv_checks": load_validations(), "warnings": lib.warnings}
 

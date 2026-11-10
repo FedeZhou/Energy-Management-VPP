@@ -325,6 +325,7 @@ BatteryStrategy = Literal["idle", "self_consumption", "price_arbitrage", "peak_s
 EVStrategy = Literal["as_fast_as_possible", "spread_until_departure", "cheapest_hours", "solar_surplus"]
 HeatPumpStrategy = Literal["on_demand", "cheap_hours", "solar_surplus"]
 EVDischargeStrategy = Literal["never", "high_prices"]
+ForecastMode = Literal["perfect", "realistic"]
 
 
 class ControllerSpec(BaseModel):
@@ -352,6 +353,13 @@ class ControllerSpec(BaseModel):
         60, "MPC re-plan interval", unit="min", ge=1, le=1440,
         help="Only used by mpc. How often it re-optimises (also immediately when a car arrives). Shorter is more "
         "responsive but slower to simulate.",
+    )
+    forecast: ForecastMode = param(
+        "perfect", "Forecasts",
+        help="What controllers know about the future. perfect: the true future (an upper bound). realistic: only "
+        "what a real system would know: load = the most recent day repeated; solar = the weather forecast from "
+        "about a day earlier; day-ahead prices only once published (about 13:00 for the next day); cars only "
+        "once plugged in. Affects the rules that look ahead (cheapest hours, arbitrage) and mpc.",
     )
     heat_pump: HeatPumpStrategy = param(
         "on_demand", "Heat pump strategy",

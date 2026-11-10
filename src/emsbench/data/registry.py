@@ -93,6 +93,19 @@ SOURCES: list[dict[str, Any]] = [
                    "unverified). Treat solar yields as accurate to about ±10%.",
     },
     {
+        "id": "openmeteo_forecast", "prefix": "om/", "suffix": "@dayahead", "name": "Day-ahead solar forecasts",
+        "provider": "Open-Meteo Previous Runs API + pvlib (NREL PVWatts method)", "kind": "modelled",
+        "what": "For each solar profile above: the output predicted from the weather forecast made 24 hours "
+                "earlier, through the same solar model.",
+        "used_for": "Realistic forecasts (what a controller would have been told)", "resolution": "1 hour",
+        "coverage": "from Oct 2025", "licence": "CC BY 4.0 (weather); BSD-3 (pvlib)", "commercial_use": True,
+        "attribution": "Weather data by Open-Meteo.com (CC BY 4.0); pvlib python; Dobos (2014), PVWatts "
+                       "Version 5 Manual, NREL/TP-6A20-62641",
+        "url": "https://open-meteo.com/en/docs/previous-runs-api",
+        "caveats": "Forecasts are hourly, repeated over 15-minute steps. Hours missing from the archive are "
+                   "filled with the actual solar 24 h earlier.",
+    },
+    {
         "id": "citylearn", "prefix": "cl2022/", "name": "CityLearn typical year, California",
         "provider": "CityLearn (Intelligent Environments Lab)", "kind": "mixed",
         "what": "17 home loads, solar per kW, two price series and EV schedules for one typical year.",

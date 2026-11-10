@@ -93,23 +93,32 @@ class Profile:
         offset = (src - self.start).total_seconds()
         if offset % n:
             raise ValueError(f"start {start} is not aligned with the {n // 60}-minute data of {self.label}")
-        i0 = int(offset // n)
+        vals, how = self._take(int(offset // n), steps, step_seconds)
+        return vals, WindowInfo(src, how)
+
+    def _take(self, i0: int, steps: int, step_seconds: int) -> tuple[FloatArray, str]:
+        """`steps` values of `step_seconds` starting at data index i0 (wrapping around the data)."""
+        n = self.step_seconds
         if step_seconds >= n:
             if step_seconds % n:
                 raise ValueError(f"step {step_seconds}s is not a multiple of the data step {n}s")
             f = step_seconds // n
             idx = (i0 + np.arange(steps * f)) % self.values.size
-            vals = self.values[idx].reshape(steps, f).mean(axis=1)
-            how = "native" if f == 1 else "averaged"
-        else:
-            if n % step_seconds:
-                raise ValueError(f"data step {n}s is not a multiple of step {step_seconds}s")
-            f = n // step_seconds
-            n_src = -(-steps // f)
-            idx = (i0 + np.arange(n_src)) % self.values.size
-            vals = np.repeat(self.values[idx], f)[:steps]
-            how = "repeated (finer than the data)"
-        return vals.astype(float), WindowInfo(src, how)
+            return self.values[idx].reshape(steps, f).mean(axis=1).astype(float), ("native" if f == 1 else "averaged")
+        if n % step_seconds:
+            raise ValueError(f"data step {n}s is not a multiple of step {step_seconds}s")
+        f = n // step_seconds
+        idx = (i0 + np.arange(-(-steps // f))) % self.values.size
+        return np.repeat(self.values[idx], f)[:steps].astype(float), "repeated (finer than the data)"
+
+    def before(self, source_start: dt.datetime, steps: int, step_seconds: int) -> FloatArray | None:
+        """The `steps` steps just before `source_start` (a window's source start), continuous with that
+        window; None if the data starts later (typical-year profiles wrap around instead)."""
+        first = source_start - dt.timedelta(seconds=steps * step_seconds)
+        offset = (first - self.start).total_seconds()
+        if (offset < 0 and not self.cyclic) or offset % self.step_seconds:
+            return None
+        return self._take(int(offset // self.step_seconds), steps, step_seconds)[0]
 
     def summary(self) -> dict[str, object]:
         stats: dict[str, float] = {}
@@ -215,7 +224,8 @@ class ProfileLibrary:
         out: dict[str, list[dict[str, object]]] = {"load": [], "pv": [], "price": [], "demand": [], "heat": [],
                                                   "cop": [], "netfee": [], "ev": []}
         for p in self.profiles.values():
-            out[p.kind].append(p.summary())
+            if p.kind in out:  # forecasts (e.g. "pvforecast") are not choosable inputs
+                out[p.kind].append(p.summary())
         out["ev"] = [s.summary() for s in self.ev_sets.values()]
         return out
 
