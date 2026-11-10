@@ -82,7 +82,7 @@ export const HELP = {
           <dt>Self-consumption</dt><dd>Stores spare solar and covers demand from storage when solar is short.</dd>
           <dt>Price arbitrage</dt><dd>Stores spare solar, fills up from the grid at the cheapest step of the next 24 hours, and covers the site at the most expensive one.</dd>
           <dt>Peak shaving</dt><dd>Discharges when demand is above the threshold and recharges below it.</dd>
-          <dt>MPC</dt><dd>Model predictive control: every re-plan (hourly by default, and when a car plugs in) it solves an optimisation over the next 24 hours for the battery and all cars together, minimising energy cost and any demand charges, and follows the plan until the next re-plan. The EV strategy below is then ignored. Heat pumps run on demand and cars are not discharged under MPC yet.</dd>
+          <dt>MPC</dt><dd>Model predictive control: every re-plan (hourly by default, and when a car plugs in) it solves an optimisation over the next 24 hours for the battery and all cars together, minimising energy cost, any demand charges and, when the battery has a replacement cost, battery wear (a price per kWh cycled from the same ageing model), and follows the plan until the next re-plan. The EV strategy below is then ignored. Heat pumps run on demand and cars are not discharged under MPC yet.</dd>
         </dl>
         <h5>EV charging</h5>
         <dl>
@@ -224,7 +224,8 @@ export const HELP = {
         <dt>Max phase current</dt><dd>The highest current on any one phase, shown when a fuse is set.</dd>
         <dt>Self-sufficiency</dt><dd>The share of demand (including EVs) not bought from the grid.</dd>
         <dt>Solar self-use</dt><dd>The share of solar used on site rather than exported.</dd>
-        <dt>Battery cycles</dt><dd>Energy discharged ÷ capacity: a simple proxy for wear.</dd>
+        <dt>Cost incl. wear</dt><dd>Total cost plus battery wear: the share of the battery's value this period used up.</dd>
+        <dt>Battery wear</dt><dd>NREL's BLAST-Lite ageing model (LFP or NMC; calendar and cycle ageing, depth of discharge, state of charge, temperature) estimates how many years the battery would last if it were always run like this, until it holds 80% of its capacity. Wear = replacement cost × the share of that life this period used. An idle battery ages too, so the baseline has wear. Default replacement costs are 2022 German averages excluding VAT (1,200 €/kWh for home systems), higher than today's prices; set your own in the battery. Without a price (non-EUR sites) only the life is shown.</dd>
         <dt>EV energy</dt><dd>Energy delivered to cars, and how much was missing at departure.</dd>
         <dt>Import limit</dt><dd>Energy above the limit that the safety layer could not avoid.</dd>
         <dt>Heat pump</dt><dd>Electricity used, the average COP over the period, and any heat demand left unmet.</dd>

@@ -26,6 +26,8 @@ const PRETTY: Record<string, string> = {
   off: "Off",
   perfect: "Perfect (knows the future)",
   realistic: "Realistic (what a controller would know)",
+  lfp: "LFP (lithium iron phosphate)",
+  nmc: "NMC (nickel manganese cobalt)",
   direct: "Direct (each device)",
   ems: "Via energy management (shared)",
   "1": "1 minute", "5": "5 minutes", "15": "15 minutes", "60": "1 hour",

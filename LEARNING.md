@@ -281,3 +281,23 @@ This is why real "solar charging" products switch to one phase.
 - **Watch the end of the data.** A forecast that pads beyond the last data point with the last value (night: no sun,
   forever) made the perfect-forecast MPC do worse than the realistic one in a test. Padding with the last day repeated
   fixed it. Edges of the horizon change decisions.
+
+## 14. Battery wear: a referee and a price
+
+- **Wear is scored by a validated ageing model, not by the controller.** NREL's open-source BLAST-Lite (BSD-3) turns
+  a state-of-charge history and a temperature into capacity lost: calendar ageing (time, average charge, heat) plus
+  cycle ageing (energy cycled, depth, charge rate). Site Lab repeats a run's pattern until the battery holds 80% of
+  its capacity (a typical warranty threshold) and charges the run its share of the battery's value. Separating the
+  referee from the players stops a controller from winning by believing its own optimistic wear model.
+- **A new battery ages fastest, so don't price one week of a new battery.** Calendar ageing slows over time; pricing
+  a run by its share of a whole life avoids charging the first weeks' steep loss to whoever runs first.
+- **Chemistry matters a lot.** At one full cycle a day and 25 °C, the LFP model lasts about 6,150 cycles (19 years) to
+  80%, the NMC model about 2,260 (7 years). In the LFP model an empty battery barely ages; a full one ages fastest.
+- **A single price per kWh cycled is too crude.** Calibrated on deep daily cycles it is about €0.15/kWh for a home
+  LFP battery at 2022 prices. On the German home week the optimiser's cycles were shallower and wore the battery
+  less, so the price was too high: wear-aware MPC cycled less but lost more energy savings than it saved in wear
+  (€22.47 vs €21.70 with wear counted). Wear is also why the simple rule falls behind once it is counted: €23.61.
+- **Replacement prices move fast.** German home storage cost about 2,500 €/kWh in 2013, 920 in 2021 and an estimated
+  1,200 in 2022 (Figgener et al. 2023, excluding VAT); prices have fallen since. Wear in euros is only as good as
+  that number, so it is a setting.
+

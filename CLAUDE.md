@@ -88,6 +88,8 @@ open-data loaders in `src/emsbench/data/`, FastAPI in `src/emsbench/api/app.py`,
 Two modes on one engine: **Plan** (hourly, months to a year) and **Operate** (1-15 min, days; phases, fuses).
 Controllers see the future through `sim/forecasts.py`: `perfect` (an upper bound) or `realistic` (only what a real
 system knows: last day's load, archived day-ahead weather forecasts for solar, prices once published, cars once plugged in).
+Battery wear (`sim/wear.py`): every run is scored with NREL BLAST-Lite (LFP/NMC) -> expected life and wear cost;
+the MPC decides with a per-kWh wear price calibrated from the same model (`mpc_wear_cost`).
 
 ```bash
 $PY -m emsbench.data             # download + process open data into %LOCALAPPDATA%\emsbench (first run ~400 MB, When2Heat is ~330 MB)

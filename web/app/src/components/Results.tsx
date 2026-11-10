@@ -47,8 +47,22 @@ function Kpis() {
   if (has("pv")) cards.push({ label: "Solar self-use", value: pct(k.self_consumption_share),
     ...delta(k.self_consumption_share, b.self_consumption_share, (v) => `${Math.round(v * 100)} pts`, false, false),
     detail: `Share of solar used on site. ${k.pv_curtailed_kwh > 0.5 ? `${num(k.pv_curtailed_kwh)} kWh curtailed` : `${num(k.grid_export_kwh)} kWh exported`}` });
-  if (has("battery")) cards.push({ label: "Battery cycles", value: num(k.battery_equivalent_full_cycles, k.battery_equivalent_full_cycles < 10 ? 1 : 0),
-    delta: `${num(k.battery_discharge_kwh)} kWh out`, detail: "Equivalent full cycles, a proxy for wear" });
+  if (has("battery")) {
+    const life = k.battery_life_capped ? `${num(k.battery_life_years)}+ yr` : `${num(k.battery_life_years, 1)} yr`;
+    const cycles = `${num(k.battery_equivalent_full_cycles, k.battery_equivalent_full_cycles < 10 ? 1 : 0)} full cycles`;
+    const lifeTxt = `At this pace the battery would last ${life} until end of life (NREL BLAST-Lite ageing model, ${Math.round(k.battery_cycle_wear_share * 100)}% of the ageing from cycling, the rest from time).`;
+    if (k.battery_wear_priced) {
+      cards[0].detail = `${cards[0].detail}. Excludes ${m(k.battery_wear_cost)} battery wear`;
+      cards.splice(1, 0, { label: "Cost incl. wear", value: m(k.total_cost_with_wear),
+        ...delta(k.total_cost_with_wear, b.total_cost_with_wear, m, true),
+        detail: "Total cost plus the share of the battery's value this period used up" });
+      cards.push({ label: "Battery wear", value: m(k.battery_wear_cost), delta: `${life} life`,
+        detail: `${lifeTxt} ${cycles} this period. The idle baseline also ages: ${m(b.battery_wear_cost)}.` });
+    } else {
+      cards.push({ label: "Battery life", value: life, delta: cycles,
+        detail: `${lifeTxt} Wear is not priced: set the battery's replacement cost (no default outside EUR sites).` });
+    }
+  }
   if (has("ev_charger")) {
     const short = k.ev_unmet_kwh > 0.5;
     cards.push({ label: "EV energy", value: `${num(k.ev_delivered_kwh)} kWh`,
@@ -182,6 +196,7 @@ function ForecastCompare() {
     ["Peak import", p.peak_import_kw, q.peak_import_kw, (v) => `${num(v, 1)} kW`, true],
     ["Self-sufficiency", p.self_sufficiency_share, q.self_sufficiency_share, pct, false],
   ];
+  if (site.assets.some((a) => a.type === "battery") && q.battery_wear_priced) rows.splice(1, 0, ["Cost incl. battery wear", p.total_cost_with_wear, q.total_cost_with_wear, m, true]);
   if (site.assets.some((a) => a.type === "ev_charger")) rows.push(["EV energy short", p.ev_unmet_kwh, q.ev_unmet_kwh, (v) => `${num(v, 1)} kWh`, true]);
   const extra = q.total_cost - p.total_cost;
   const share = p.total_cost ? (extra / Math.abs(p.total_cost)) * 100 : 0;
