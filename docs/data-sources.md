@@ -17,6 +17,7 @@ The machine-readable version is `src/emsbench/data/registry.py`.
 | **Energy-Charts** (SMARD data) | Measured | Day-ahead prices: Germany, Netherlands, France, western Denmark | 15 min | from Oct 2025 | CC BY 4.0 |
 | **Eurostat** nrg_pc_204_c / nrg_pc_205_c | Statistics | Household and business price components (energy, network, taxes) for 15 countries | annual | 2025 | CC BY 4.0 |
 | **Open-Meteo** weather + **pvlib** | Modelled | Solar output per kWp: Konstanz, Amsterdam, Paris, Aarhus, Los Angeles; south 30° and east-west 15° | 15 min | from Oct 2025 | CC BY 4.0 / BSD-3 |
+| **Open-Meteo Previous Runs** + **pvlib** | Modelled (forecast) | Day-ahead solar forecasts for the same 10 profiles: the weather predicted 24 h before each hour, through the same solar model. Used only for realistic forecasts, never as actual solar | 1 hour (repeated over 15-min steps, flagged) | from Oct 2025 | CC BY 4.0 / BSD-3 |
 | **CityLearn** 2022 datasets | Mixed | 17 California home loads, solar, two prices, EV schedules | 1 hour | typical year | MIT |
 | **NLR (NREL) ESIF** HPC data center PUE data | Measured | IT power and whole-facility power of a ~2.5-2.9 MW liquid-cooled supercomputer centre, Golden, Colorado | 15 min (from ~1-min samples) | Apr-Aug 2024, Nov 2024-Jun 2025 | CC BY 4.0 |
 | **OpenEI URDB**, Xcel Colorado Schedule PG | Statistics (tariff) | Large-customer energy price and 14-18 h peak-window demand charge | 15 min (schedule, exact) | tariff of 2024 | Public domain |
@@ -51,6 +52,12 @@ Required by the CC BY licences; also shown in the app.
 
 ## Processing and cleaning rules
 
+- **Day-ahead solar forecasts** (`data/openmeteo_forecast.py`): Open-Meteo Previous Runs API, variables ending
+  `_previous_day1` ("the value predicted 24 hours before valid time"). Hourly radiation is averaged over the past hour,
+  so the hour labelled h is given to the four 15-minute steps in (h - 1 h, h], and the sun position is taken at h - 30 min.
+  Gaps of up to 2 hours are interpolated; longer ones are filled with the actual solar 24 h earlier and counted in the
+  profile note (0 hours missing as of Nov 2026). Unverified detail: Open-Meteo does not say whether 15-minute radiation
+  covers the preceding or the following 15 minutes; the actual profiles assume the following.
 - **OPSD:** cumulative meters differenced; consumption = import - export + PV; EV sub-meter removed from home 4; a site with
   PV but no export meter (home 1) skipped; gaps up to 2 h interpolated; 15-min values above 10x the series' 99.9th
   percentile treated as meter glitches.

@@ -1,4 +1,5 @@
 import { MARKET_SOURCES } from "./market";
+import { DEEP_SOURCES } from "./deepdive";
 
 // Every source cited on the Learn pages. `read` says how deeply it was checked (2026-11-08):
 // "abstract" = publisher/arXiv/OpenAlex abstract read; "docs" = official documentation page read;
@@ -40,6 +41,9 @@ const list: Source[] = [
     note: "Period hours decoded from the URDB record's 12 x 24 schedule matrices (peak demand periods at local hours 14-17, Jun-Sep vs Oct-May); checked by unit tests." },
   { id: "runs_2026_11", title: "Site Lab example runs (configs/sites), 7-8 Nov 2026", read: "data",
     note: "Numbers from our own simulations; they depend on the example sizes, which are choices, not sourced values." },
+  { id: "code_forecasts", title: "Site Lab forecasts: src/emsbench/sim/forecasts.py (+ tests/test_forecasts.py)", read: "code" },
+  { id: "runs_2026_11b", title: "Site Lab runs: perfect vs realistic forecasts, and day-ahead solar forecast vs actual, 9-10 Nov 2026", read: "data",
+    note: "Our own simulations of the example sites, and the archived day-ahead solar forecasts (Oct 2025 to Nov 2026) compared step by step with the actual solar profiles. They depend on the example sizes, which are choices, not sourced values." },
   { id: "pvgis_check", title: "Solar model vs PVGIS 5.3 check, 10 profiles (pv_validations.json)", read: "data",
     url: "https://re.jrc.ec.europa.eu/api/v5_3/PVcalc" },
   { id: "eurostat_check", title: "Eurostat price components, nrg_pc_204_c / nrg_pc_205_c, 2025", read: "data",
@@ -50,6 +54,13 @@ const list: Source[] = [
     url: "https://emhass.readthedocs.io/en/latest/advanced_math_model.html" },
   { id: "emhass_home", title: "EMHASS documentation (overview: CVXPY, HiGHS)", venue: "EMHASS documentation", read: "docs",
     url: "https://emhass.readthedocs.io/en/latest/" },
+  { id: "emhass_fc", title: "EMHASS: The forecast module (load methods typical, naive, mlforecaster; PV from Open-Meteo, Solcast, Solar.Forecast)",
+    venue: "EMHASS documentation", read: "docs", url: "https://emhass.readthedocs.io/en/latest/forecasts.html" },
+  { id: "om_prevruns", title: "Open-Meteo Previous Runs API (forecasts archived at fixed lead times of 1-7 days)", venue: "Open-Meteo documentation",
+    read: "docs", url: "https://open-meteo.com/en/docs/previous-runs-api" },
+  { id: "mesc2024", title: "Market Coupling Steering Committee: update on SDAC and SIDC, incl. SDAC operational timings (slides 5-6)",
+    venue: "ENTSO-E MESC meeting, 28 Feb 2024", read: "report",
+    url: "https://eepublicdownloads.blob.core.windows.net/public-cdn-container/clean-documents/Network%20codes%20documents/MESC/2024/240228_MESC_TOP_3.3_Update_on_SDAC___SIDC.pdf" },
   { id: "pvlib_losses", title: "pvlib.pvsystem.pvwatts_losses (defaults from the PVWatts Version 5 Manual, Dobos 2014)",
     venue: "pvlib documentation", read: "docs",
     url: "https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.pvsystem.pvwatts_losses.html" },
@@ -216,6 +227,7 @@ const list: Source[] = [
   { id: "wilson2022", title: "End-Use Load Profiles for the U.S. Building Stock: Methodology and Results of Model Calibration, Validation, and Uncertainty Quantification",
     authors: "Wilson, Parker, Fontanini, Present, Reyna et al.", year: 2022, venue: "NREL technical report",
     url: "https://doi.org/10.2172/1854582", read: "metadata", note: "Cited by the ComStock release; report not read here." },
+  ...DEEP_SOURCES,
   ...MARKET_SOURCES,
 ];
 

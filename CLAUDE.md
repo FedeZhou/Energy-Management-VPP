@@ -86,6 +86,8 @@ UV_SYSTEM_CERTS=1 VIRTUAL_ENV="$USERPROFILE/.venvs/energy-vpp" \
 Generic engine in `src/emsbench/sim/` (own asset model; CityLearn is one data source and a cross-check),
 open-data loaders in `src/emsbench/data/`, FastAPI in `src/emsbench/api/app.py`, React app in `web/app/`.
 Two modes on one engine: **Plan** (hourly, months to a year) and **Operate** (1-15 min, days; phases, fuses).
+Controllers see the future through `sim/forecasts.py`: `perfect` (an upper bound) or `realistic` (only what a real
+system knows: last day's load, archived day-ahead weather forecasts for solar, prices once published, cars once plugged in).
 
 ```bash
 $PY -m emsbench.data             # download + process open data into %LOCALAPPDATA%\emsbench (first run ~400 MB, When2Heat is ~330 MB)
@@ -109,5 +111,6 @@ ode_modules` (keeps OneDrive from
 - Site view has two styles: **Scene** (isometric illustrations, auto-laid-out on an iso grid by `sceneLayout` in
   `web/app/src/view.ts`, not draggable) and **Diagram** (one-line diagram at the saved `ui` positions, draggable).
 - Demo URLs: `#run` runs the first Plan example; `#operate-run`; `#<preset_id>-run` (e.g. `#operate_shared_garage-run`).
+  `mpc` in the hash switches the battery to MPC; `compare` runs Compare forecasts (e.g. `#operate_home_ev-mpc-compare`).
   `#guide` (or `#guide-5`) opens the guided tour (at step 5); `#help-<topic>` opens one "?" explanation
   (topics in `web/app/src/help.tsx`, which must stay in sync with the engine's behaviour).

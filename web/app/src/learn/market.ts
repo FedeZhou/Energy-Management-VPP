@@ -42,7 +42,7 @@ export const MARKET_PAGES: Page[] = [
       { kind: "p", text: "Left: the company. Right: what it does (with a link to its website in the sources below), then what Site Lab can simulate of it today. Company descriptions are their own claims; the Site Lab side refers to this repository as of November 2026 {mkt_doc}." },
       { kind: "h", text: "Home and residential fleets" },
       { kind: "facts", rows: [
-        ["Base Power", "They: own home batteries, sell retail power and bid the fleet into ERCOT {mkt_base}. Website {mkt_web_base}. Site Lab today: one home battery on a price profile with rules or a perfect-forecast MPC; no fleet, no retail plan, no ERCOT market model {code_ctrl} {mkt_mpc_code}."],
+        ["Base Power", "They: own home batteries, sell retail power and bid the fleet into ERCOT {mkt_base}. Website {mkt_web_base}. Site Lab today: one home battery on a price profile with rules or MPC (perfect or realistic forecasts); no fleet, no retail plan, no ERCOT market model {code_ctrl} {mkt_mpc_code}."],
         ["Lunar Energy", "They: home batteries plus Gridshare VPP software, 650 MW managed {mkt_lunar}. Website {mkt_web_lunar}. Site Lab today: the single home (battery, solar, EV, heat pump) with the same kind of controllers; no VPP layer {code_engine}."],
         ["1KOMMA5° (Heartbeat AI)", "They: optimise solar, batteries, heat pumps, air conditioning and wallboxes, and pool 1 GW {mkt_1komma5}. Website {mkt_web_1komma5}. Site Lab today: solar, battery, wallbox and heat pump with a tank on one site, rule-based; no air conditioning, no pooling {code_engine} {code_ctrl}."],
         ["Rabot Energy", "They: dynamic tariff, smart meter and a plug-in battery for renters {mkt_rabot}. Website {mkt_web_rabot}. Site Lab today: dynamic day-ahead prices plus German time-variable network fees, and a small battery can be configured {code_model} {mkt_netfee_code}."],
@@ -54,8 +54,8 @@ export const MARKET_PAGES: Page[] = [
       { kind: "h", text: "Business sites, aggregators and large batteries" },
       { kind: "facts", rows: [
         ["Voltus", "They: aggregate flexibility from businesses and homes, about 8.5 GW, and sell capacity to data centers {mkt_voltus}. Website {mkt_web_voltus}. Site Lab today: one business or data center site with peak shaving and demand charges; no capacity products, no aggregation {code_engine}."],
-        ["Axle Energy", "They: connect devices, forecast availability, bid, dispatch and settle {mkt_axle}. Website {mkt_web_axle}. Site Lab today: only the dispatch step, in simulation, with perfect knowledge of the future {code_engine}."],
-        ["Furo", "They: control business batteries on price and weather forecasts about two days ahead {mkt_furo}. Website {mkt_web_furo}. Site Lab today: business batteries with rules or MPC, but the MPC sees the future perfectly {mkt_mpc_code}."],
+        ["Axle Energy", "They: connect devices, forecast availability, bid, dispatch and settle {mkt_axle}. Website {mkt_web_axle}. Site Lab today: only the dispatch step, in simulation, on perfect or realistic forecasts; no bidding, settlement or forecasting of device availability {code_engine} {code_forecasts}."],
+        ["Furo", "They: control business batteries on price and weather forecasts about two days ahead {mkt_furo}. Website {mkt_web_furo}. Site Lab today: business batteries with rules or MPC; the MPC can plan on realistic forecasts (yesterday's load, archived day-ahead weather forecasts for solar, prices once published) {code_forecasts}."],
         ["Entrix, enspired, Capalo", "They: trade large batteries on intraday and reserve markets (FCR, aFRR) {mkt_enspired} {mkt_entrix} {mkt_modo}. Websites {mkt_web_entrix} {mkt_web_enspired} {mkt_web_capalo}. Site Lab today: battery arbitrage on energy prices only; no reserves {code_ctrl}."],
         ["Enode", "They: one API to read and control many brands of EVs, chargers, heat pumps and batteries. Website {mkt_web_enode}. Site Lab today: not applicable; Site Lab simulates devices and does not control real hardware {mkt_doc}."],
         ["Gridcog", "They: multi-market, multi-site, multi-asset project simulation for feasibility assessment {mkt_gridcog}. Website {mkt_web_gridcog}. Site Lab today: the closest match to our Plan mode (a year of a site, costs vs baseline), but single-site, open, and focused on comparing controllers rather than financing {code_engine}."],
@@ -76,7 +76,7 @@ export const MARKET_PAGES: Page[] = [
       ] },
       { kind: "h", text: "Still missing" },
       { kind: "facts", rows: [
-        ["Forecast-driven control", "A first MPC exists, but it plans with perfect forecasts {mkt_mpc_code}. Furo and the VPPs plan on forecasts {mkt_furo}. Missing: a forecast module and the forecast-error harness."],
+        ["Forecast-driven control", "MPC exists with perfect or realistic forecasts (yesterday's load, archived day-ahead weather forecasts for solar, prices once published, cars once plugged in) {code_forecasts}. Furo and the VPPs plan on forecasts {mkt_furo}. Missing: forecast models beyond persistence, scenario or probabilistic forecasts, and a sweep over forecast-error levels."],
         ["Fleets of homes", "VPPs bid thousands of homes as one {mkt_kraken}. Site Lab has one site behind one meter {code_engine}. See Virtual power plants and fleets."],
         ["Reserve markets", "Batteries earn from FCR and aFRR as well as energy trading {mkt_enspired}. Site Lab prices energy and demand charges only. See Reserve markets."],
         ["Intraday trading", "Tibber trades EV charging on the intraday market {mkt_tibber}. Site Lab uses day-ahead prices only."],
@@ -111,17 +111,17 @@ export const MARKET_PAGES: Page[] = [
     blocks: [
       { kind: "p", text: "The principle: reproduce what these companies do in simulation, so it can be measured; do not rebuild their products {mkt_doc}." },
       { kind: "steps", items: [
-        "Done: one site, rule controllers and a perfect-forecast MPC, open data, phases, fuses and demand charges {code_engine} {mkt_mpc_code}.",
+        "Done: one site, rule controllers and an MPC that plans on perfect or realistic forecasts, open data, phases, fuses and demand charges {code_engine} {mkt_mpc_code} {code_forecasts}.",
         "Done (November 2026): a complete home with rule-based control: heat pump with a tank, bidirectional charging (V2H), §14a dimming and time-variable network fees {code_engine} {mkt_bnetza_14a}.",
         "Realistic EV plans: departure time and target entered by the driver, with the errors real drivers make {mkt_doc}.",
-        "Forecasts and the error harness: simple baselines, then a probabilistic time-series model; degrade forecasts step by step and measure what each controller loses. This turns the MPC from an upper bound into a fair stand-in for commercial 'AI' controllers {mkt_doc}.",
+        "Forecasts: realistic forecasts and 'Compare forecasts' are done (November 2026) {code_forecasts}. Next: better forecast models than 'yesterday again', probabilistic forecasts, and a sweep that degrades forecasts step by step to measure what each controller loses {mkt_doc}.",
         "A supplier view: what the energy retailer earns or loses, next to what the household pays {mkt_doc}.",
         "Fleet layer (option A, awaiting a decision): sampled homes, an aggregator controller, opt-outs, fleet KPIs such as delivered vs promised flexibility {mkt_doc}.",
         "Neighbourhood: a shared transformer limit and grid-operator flexibility requests; later, optionally, feeder power flow {mkt_doc}.",
         "Markets and value stacking: reserve products (FCR, aFRR), intraday prices, battery wear as a cost, revenue split between operator and households {mkt_svk}.",
         "The trust report: a public, reproducible scoreboard of every controller at every scale, under the same forecast error {mkt_doc}.",
       ] },
-      { kind: "note", tone: "info", text: "Order matters: forecasts before market features, because comparing a perfect-foresight MPC with a commercial product would flatter us; the fleet layer before the neighbourhood, because a street is a small fleet with a shared limit {mkt_doc}." },
+      { kind: "note", tone: "info", text: "Order matters: forecasts before market features, because comparing a perfect-foresight MPC with a commercial product would flatter us (in our June week the MPC cost €13.42 with perfect forecasts and €22.13 with realistic ones) {runs_2026_11b}; the fleet layer before the neighbourhood, because a street is a small fleet with a shared limit {mkt_doc}." },
     ],
   },
 

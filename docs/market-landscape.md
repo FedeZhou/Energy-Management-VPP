@@ -33,7 +33,7 @@ for (research.md section 9), and the 2026 landscape makes it more relevant, not 
 
 ### 1b. Side by side: what they do and what our simulator does
 
-"Site Lab today" means this repository in November 2026 (single site, rules plus a perfect-forecast MPC, open data;
+"Site Lab today" means this repository in November 2026 (single site, rules plus an MPC on perfect or realistic forecasts, open data;
 heat pump, bidirectional charging, §14a dimming and time-variable network fees added on 2026-11-09). The in-app
 Learn page has the same table with a link to each company's website.
 
@@ -48,8 +48,8 @@ Learn page has the same table with a link to each company's website.
 | Renew Home + Sunrun + Tesla | Thermostats + batteries, up to 16.8 GW (framework) \[S\] | Batteries; a heat pump with a tank (closest to thermostat pre-heating) | Fleet, opt-outs |
 | evcc (open source) | Local home EMS for chargers, heat pumps, batteries; cheapest-hour charging \[S\] | Similar strategies (incl. heat pump), simulated | Real hardware (not our goal) |
 | Voltus | Aggregate business + home flexibility, ~8.5 GW; capacity for data centers \[S\] | One business / data center site with peak shaving | Capacity products, aggregation |
-| Axle Energy | Connect, forecast availability, bid, dispatch, settle \[S\] | Dispatch only, with perfect foresight | Forecasts, bidding |
-| Furo | Business batteries on ~2-day price and weather forecasts \[S\] | Business batteries with rules or perfect-forecast MPC | Forecasts |
+| Axle Energy | Connect, forecast availability, bid, dispatch, settle \[S\] | Dispatch only, on perfect or realistic forecasts | Bidding, availability forecasting |
+| Furo | Business batteries on ~2-day price and weather forecasts \[S\] | Business batteries with rules or MPC on realistic forecasts (yesterday's load, archived weather forecasts, published prices) | Better forecast models |
 | Entrix, enspired, Capalo | Trade large batteries on intraday and reserves (FCR, aFRR) \[S\] | Energy-price arbitrage | Reserves, intraday |
 | Gridcog | Multi-market, multi-site, multi-asset project simulation for feasibility \[S\] | Plan mode: a year of one site, costs vs baseline | Multi-site, cash flow (but we are open and compare controllers) |
 
@@ -62,7 +62,7 @@ companies rely on that our simulator cannot represent?* If we cannot simulate it
 
 | # | Capability | Who relies on it | emsbench today | Gap size | Priority |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **Forecast-driven control** using price, solar and load forecasts | Everyone with "AI" in the pitch (Heartbeat, Gridshare, Furo, traders) | A deterministic MPC now exists (`sim/mpc.py`, added Nov 2026) but with **perfect** forecasts; no forecast module yet | Medium | **High**: forecasts and the error harness are the missing half |
+| 1 | **Forecast-driven control** using price, solar and load forecasts | Everyone with "AI" in the pitch (Heartbeat, Gridshare, Furo, traders) | Deterministic MPC (`sim/mpc.py`) with **perfect or realistic** forecasts (`sim/forecasts.py`: yesterday's load, archived day-ahead weather forecasts for solar, prices once published, cars once plugged in) and a "Compare forecasts" view; in the June home week the MPC cost €13.42 with perfect and €22.13 with realistic forecasts vs €13.45 for the self-consumption rule (our runs, 10 Nov 2026) | Medium | **High**: better forecast models, probabilistic forecasts and an error sweep are missing |
 | 2 | **Fleet / portfolio aggregation**: many homes behind many meters, bid as one | All residential VPPs and aggregators | One site, one meter | Large | **High**: needed for "residential at scale" (section 3) |
 | 3 | **Heat pumps and thermal storage** (comfort as a constraint) | 1KOMMA5°, Axle, Kraken, Renew Home (thermostats are over half its 16.8 GW) | **Built 2026-11-09**: heat pump asset (When2Heat heat demand + COP, hot-water tank, unmet heat reported), rule strategies; not yet in the MPC; no building thermal model | Small (remaining) | MPC scheduling of the tank |
 | 4 | **Reserve markets** (FCR, aFRR) and value stacking with energy trading | enspired (FCR, aFRR), 1KOMMA5° (FCR-D, unverified), Capalo | Energy price and demand charges only | Medium | Medium: needs a 1-15 min reserve model and availability penalties |
@@ -109,14 +109,15 @@ of the claimed fleet flexibility survives forecast error, opt-outs and a transfo
 
 The principle: **we reproduce their behaviour in simulation so we can measure it, not their product.** Each step
 below is a deliverable that unlocks a new benchmark question. Step 1 comes first: an MPC that sees the future perfectly is an
-upper bound, not a fair stand-in for a commercial "AI" controller.
+upper bound, not a fair stand-in for a commercial "AI" controller (realistic forecasts landed on 10 Nov 2026 and showed exactly
+that: the June-week MPC went from €13.42 to €22.13, worse than the simple rule).
 
 | Step | What we build | What it lets us benchmark | Whose behaviour it reproduces | Size |
 | --- | --- | --- | --- | --- |
 | **0. Done** | Single site, rule controllers and a perfect-forecast MPC, open data, Plan / Operate, phases and fuses, demand charges, scene view | Rules and MPC vs baseline on one site | Simple home and C&I EMS | n/a |
 | **0b. Done (2026-11-09)** | A complete home with rules: heat pump + tank (When2Heat), V2H, §14a dimming, Modul 3 network fees; example `operate_home_heatpump_v2h` | Value of pre-heating, of a car as a home battery, of network-fee timing; cost of dimming | 1KOMMA5°, Tibber, Octopus, Rabot, BMW + E.ON, VW Elli | n/a |
-| **1. Forecasts + error harness** | Forecast module (persistence, seasonal naive, then a time-series foundation model such as Chronos-2 for probabilistic forecasts); a sweep that degrades forecasts step by step | How much each controller loses as forecasts get worse | The forecasting half of every "AI" claim | Medium |
-| **2. MPC** | **Started (Nov 2026):** rolling-horizon LP with grid limit, fuses, demand charges and EV deadlines (`sim/mpc.py`, EMHASS-style). Next: run it on imperfect forecasts from step 1 | Rules vs MPC vs perfect foresight, with honest forecasts | 1KOMMA5° Heartbeat, Lunar Gridshare, C&I optimisers like Furo | Small (remaining) |
+| **1. Forecasts + error harness** | **Started (Nov 2026):** realistic persistence-style forecasts and "Compare forecasts" (`sim/forecasts.py`). Next: seasonal naive, then a time-series foundation model such as Chronos-2 for probabilistic forecasts; a sweep that degrades forecasts step by step | How much each controller loses as forecasts get worse | The forecasting half of every "AI" claim | Medium |
+| **2. MPC** | **Started (Nov 2026):** rolling-horizon LP with grid limit, fuses, demand charges and EV deadlines (`sim/mpc.py`, EMHASS-style). Runs on perfect or realistic forecasts (Nov 2026); next: stochastic/robust variants and wear in the objective | Rules vs MPC vs perfect foresight, with honest forecasts | 1KOMMA5° Heartbeat, Lunar Gridshare, C&I optimisers like Furo | Small (remaining) |
 | **3. A complete home, in the MPC** | The rule-based parts are done (row 0b); remaining: heat-pump tank and car discharge as MPC decision variables, and optionally a building thermal model with a comfort band | The same questions with an optimiser instead of rules | 1KOMMA5°, Tibber, Octopus | Small-medium |
 | **4. Building scale** | Several meters behind one connection: per-flat billing, tenant electricity / energy-sharing split, shared EV chargers with a fairness rule | Who gains in a shared building, and whether a shared battery pays | neugemacht and other energy-sharing platforms, Rabot (renters) | Small-medium |
 | **5. Fleet layer (option A)** | Population generator (homes sampled from open data distributions), aggregator controller that sends price or setpoint signals, an opt-out and override model, fleet KPIs (fleet peak, coincidence factor, delivered vs promised flexibility) | How much promised fleet flexibility is real after diversity, forecast error and opt-outs | Kraken, Voltus, Renew Home, Base Power, Axle | Large |
@@ -169,8 +170,13 @@ is becoming a business of its own: Kraken was spun out, and Enpal now sells its 
 **What this means for emsbench:**
 
 1. **Their results depend on imperfect information.** Fuse's margin depends on its forecasts; its EV control depends
-   on the departure time and target a customer types in. Our controllers currently see the future exactly, so they
-   overstate what a supplier can actually achieve. This is the forecast-error question at the centre of emsbench.
+   on the departure time and target a customer types in. Our first results show how much this matters: in the June
+   home week, the MPC cost €13.42 with perfect forecasts but €22.13 with realistic ones (yesterday's load, archived
+   weather forecasts, prices once published, cars only once plugged in), worse than the simple self-consumption rule
+   at €13.45. Most of the gap came from not knowing when cars arrive (worth €5.94), then solar (€1.75) and load
+   (€0.52); prices cost nothing, since day-ahead prices are published in advance (our runs, 10 Nov 2026). Knowing
+   the car's plan is exactly what Fuse asks its customers for in the app. This is the forecast-error question at the
+   centre of emsbench.
 2. **Time-window tariffs synchronise fleets.** With hundreds of thousands of customers on the same cheap window, the
    rebound peak we measured in the shared-garage example (56 A to 63 A when every car started at the cheapest moment)
    becomes a fleet-scale effect. This argues for the fleet layer (step 5, option A, not yet approved).
@@ -185,7 +191,8 @@ is becoming a business of its own: Kraken was spun out, and Enpal now sells its 
 **Short answer: yes, as an independent benchmark and learning tool; no, as a competitor to these companies.**
 
 **Where we are (2026-11-09).** Site Lab simulates one site at a time (home, garage, office, data center) on open
-measured data, with rule controllers and a first deterministic MPC that still sees the future perfectly. It has
+measured data, with rule controllers and a deterministic MPC that plans on perfect or, since 10 Nov 2026, realistic
+forecasts (in the June home week: €13.42 perfect, €22.13 realistic, vs €13.45 for the self-consumption rule). It has
 batteries, solar, EV chargers including bidirectional ones (V2H/V2G), a heat pump asset (When2Heat data), a data
 center asset, German §14a dimming (BNetzA BK6-22-300, Annex 1) and time-variable network fees (Modul 3) from two real
 2026 price sheets, plus demand charges and fuses. Not yet: forecasts with errors, battery wear in the objective, a
@@ -212,7 +219,8 @@ fleet layer, reserve markets.
 - **Without real fleet or market data, results stay simulated** and must be labelled as such.
 
 **Proposed focus (in order):** (1) realistic EV plans, where controllers get the user-entered departure and target,
-with errors, instead of the truth; (2) the forecast-error harness, so every controller runs on imperfect forecasts;
+with errors, instead of the truth; (2) the forecast-error harness, so every controller runs on imperfect forecasts (realistic persistence-style
+forecasts and "Compare forecasts" exist since 10 Nov 2026; better forecast models and an error sweep are still to do);
 (3) a supplier view: margin = tariff revenue minus wholesale cost, to show who keeps the savings; (4) the fleet layer
 (option A) once the user approves it.
 

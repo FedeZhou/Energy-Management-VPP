@@ -262,3 +262,22 @@ This is why real "solar charging" products switch to one phase.
 - **Smart control can raise the peak.** In our January home example, pre-heating and car charging both chase the same
   cheap hours: the bill fell about 4% but the peak rose from 11.6 to 13.8 kW. Cheap-hour rules need a peak limit
   alongside, or an optimiser that sees both.
+
+## 13. Forecasts: what a controller really knows
+
+- **"Perfect forecast" results are an upper bound, not a prediction.** Site Lab can now run any controller with
+  realistic forecasts, using only what a real system knows at that moment: the most recent day's load repeated
+  (EMHASS's "naive" method), the weather forecast made a day earlier for solar (Open-Meteo keeps an archive of past
+  forecasts), day-ahead prices only once published (auction closes 12:00, results about 13:00), and cars only once
+  they plug in. "Compare forecasts" runs both.
+- **Deterministic MPC can lose to a simple rule once forecasts are real.** On the German home week, MPC cost €13.42
+  with perfect forecasts and €22.13 with realistic ones; the self-consumption rule cost €13.45 either way. Putting each
+  piece of knowledge back one at a time: knowing when cars arrive was worth €5.94, perfect solar €1.75, perfect load
+  €0.52, perfect prices nothing (they are published in time). An optimiser that trusts its forecast exports solar it
+  thinks it will not need; the rule stores everything and is robust by accident. This is the case for stochastic or
+  robust MPC, and for forecasting car visits.
+- **Day-ahead weather forecasts are rough at the hour level.** Across 10 solar profiles (Oct 2025 to Nov 2026) the
+  day-ahead forecast missed daytime output by 17-30% of its mean on average, while yearly totals were within about 10%.
+- **Watch the end of the data.** A forecast that pads beyond the last data point with the last value (night: no sun,
+  forever) made the perfect-forecast MPC do worse than the realistic one in a test. Padding with the last day repeated
+  fixed it. Edges of the horizon change decisions.

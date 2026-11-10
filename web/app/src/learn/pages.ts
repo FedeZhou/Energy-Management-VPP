@@ -1,5 +1,6 @@
 // Market and roadmap pages live in market.ts (kept apart so parallel edits do not collide).
 import { MARKET_PAGES } from "./market";
+import { DEEP_PAGES } from "./deepdive";
 
 // Learn pages. Text may cite sources inline with {sourceId}; every id must exist in sources.ts.
 // Rule: only statements backed by a cited source (or by this repository / our own runs, labelled as such).
@@ -16,7 +17,7 @@ export type Block =
 
 export interface Page {
   id: string;
-  section: "lab" | "systems" | "research" | "market";
+  section: "lab" | "systems" | "control" | "battery" | "research" | "market";
   title: string;
   summary: string;
   status?: "built" | "planned";
@@ -26,6 +27,8 @@ export interface Page {
 export const SECTIONS: Record<Page["section"], { title: string; intro: string }> = {
   lab: { title: "How Site Lab works", intro: "What the simulator does, step by step, and how each control strategy is implemented." },
   systems: { title: "How the systems behave", intro: "Batteries, solar, EV charging, grid connections, tariffs, buildings and data centers." },
+  control: { title: "Control theory, from scratch", intro: "Feedback, optimal control, linear programming, estimation and fair comparisons, with worked examples from real Site Lab runs." },
+  battery: { title: "Battery modelling, from scratch", intro: "From cells to systems: the energy-reservoir model, equivalent circuits, state-of-charge estimation, physics models, ageing, cycle counting and the price of wear." },
   research: { title: "Research digests", intro: "Recent papers, what they found, and what it means for Site Lab. Summaries are based on abstracts unless stated." },
   market: { title: "Market and roadmap", intro: "Who builds virtual power plants and home energy systems in 2026, what Site Lab cannot simulate yet, and the steps to get there. Company figures are their own claims." },
 };
@@ -206,7 +209,7 @@ export const PAGES: Page[] = [
     id: "mpc", section: "lab", title: "Model predictive control (MPC)", status: "built",
     summary: "Planning ahead with a model and a forecast, re-planned every few minutes: the idea, the optimisation Site Lab solves, the design choices, what reviews and field tests report, and where it is used.",
     blocks: [
-      { kind: "note", tone: "info", text: "Built in Site Lab as the battery strategy 'mpc': it plans the battery and every EV charger together {code_mpc}. Forecasts are perfect for now (the true future load, solar, prices and car visits), so results are an upper bound on what a real MPC with imperfect forecasts can reach {code_mpc}." },
+      { kind: "note", tone: "info", text: "Built in Site Lab as the battery strategy 'mpc': it plans the battery and every EV charger together {code_mpc}. By default it sees perfect forecasts (the true future load, solar, prices and car visits), an upper bound; with realistic forecasts it sees only what a real system would know, and 'Compare forecasts' runs both. See 'Planning under uncertainty' {code_mpc} {code_forecasts}." },
       { kind: "p", text: "In plain words: MPC is how a careful driver uses the road ahead. With a model of how the site behaves and a forecast of the next day (prices, load, sun, cars), it works out the best plan for the whole horizon, carries out only the first step, then looks again with fresh information and re-plans. The model makes it plan; the re-planning makes it forgive wrong forecasts. Its strength is that goals (cost, peaks, wear) and limits (fuses, battery size, departure times) are written down explicitly and traded off by a solver rather than by hand-tuned rules." },
       { kind: "h", text: "Where it comes from" },
       { kind: "p", text: "MPC's appeal, in the words of one overview, is its conceptual simplicity and its ability to handle systems with many inputs and outputs, constraints on inputs and states, and conflicting objectives {mesbah2016}. Mayne reviews its recent developments and future promise {mayne2014}. In buildings, reviews report that MPC can notably reduce energy use and emissions, but that practical applications are still at an early stage {drgona2020}; it has been applied to building thermal mass, to active storage and to on-site renewables, and its ability to handle constraints, disturbance forecasts and conflicting goals such as comfort and cost is its main advantage {serale2018}." },
@@ -298,8 +301,17 @@ export const PAGES: Page[] = [
       { kind: "p", text: "The concern with robust plans is that they may be too conservative: they accept a worse result for the nominal forecast so that the plan stays feasible and near-optimal when the data changes {bertsimas2004}. For a battery that means holding back energy that would have been worth using on most days." },
       { kind: "h", text: "Better forecasts instead of more caution" },
       { kind: "p", text: "The other lever is the forecast itself. Probabilistic load forecasting, which gives a range rather than a single number, has its own tutorial review {hongfan2016}. Pretrained 'foundation' models now forecast many time series without site-specific training {chronos1} {chronos2}, and a 2026 benchmark tested them for load forecasting under uncertain inputs {kaljevic2026}. See the 'Forecasting' page." },
-      { kind: "h", text: "What Site Lab will measure" },
-      { kind: "p", text: "Today Site Lab's controllers see the future exactly: prices 24 hours ahead, and each car's departure and energy need {code_ctrl}. The planned benchmark feeds the same controllers forecasts with controlled amounts of error and records how much of their advantage survives, which is the comparison this page is about." },
+      { kind: "h", text: "Realistic forecasts in Site Lab" },
+      { kind: "p", text: "Site Lab can run every controller twice: with perfect forecasts (the true future, an upper bound) and with realistic ones, which use only what a real system would know at that moment {code_forecasts}. The 'Compare forecasts' button next to Run does both and shows the difference. Realistic means:" },
+      { kind: "facts", rows: [
+        ["Load", "The most recent day repeated: EMHASS's 'naive' method, where the load at each future step equals the load at the same time of day on the most recent day {emhass_fc} {code_forecasts}."],
+        ["Solar", "The weather forecast made 24 hours before each hour, from Open-Meteo's archive of past forecasts {om_prevruns}, run through the same solar model as the actual solar, so the only difference is the weather forecast's error {code_forecasts}. EMHASS also forecasts solar from Open-Meteo weather by default {emhass_fc}. Across our 10 solar profiles (Oct 2025 to Nov 2026), these forecasts miss daytime output by 17-30% of its mean on average, Amsterdam the most {runs_2026_11b}."],
+        ["Prices", "Day-ahead prices only once published. The auction closes at 12:00 and final results were published at 12:58, with 13:01 proposed for the 2025 timings {mesc2024}; so before about 13:00 a controller knows prices until midnight, afterwards until the end of tomorrow, and beyond that it repeats the last known day {code_forecasts}. Site Lab's clock is fixed CET, so in summer this waits an hour longer than reality. Fixed tariffs are known in advance."],
+        ["Cars", "Unknown until they plug in; then departure and energy are known, as if the driver had entered them in an app {code_forecasts}."],
+      ] },
+      { kind: "p", text: "When the forecast is wrong, the MPC lets the battery take up the difference in the current step, so the grid exchange stays as planned, and re-plans from the battery's real state at the next re-plan {code_mpc}." },
+      { kind: "h", text: "First result: what deterministic MPC loses" },
+      { kind: "p", text: "On the German home example (one June week, solar, battery and an EV), deterministic MPC cost €13.42 with perfect forecasts and €22.13 with realistic ones. The simple self-consumption rule cost €13.45 either way, because it does not look ahead {runs_2026_11b}. Switching each ingredient back to perfect, one at a time, recovers €5.94 when cars are known in advance, €1.75 with perfect solar, €0.52 with perfect load and nothing with perfect prices, which are published in time {runs_2026_11b}. A plan that trusts its forecast exports midday solar it believes it will not need, then meets the unannounced evening car with an empty battery; the rule stores all spare solar anyway and is robust by accident. On the heat-pump home with a bidirectional car the loss was small (€122.5 to €123.3) {runs_2026_11b}. This is the gap the stochastic and robust methods above are meant to close, and Site Lab's next step." },
       { kind: "h", text: "Go deeper" },
       { kind: "facts", rows: [
         ["Stochastic MPC", "Mesbah 2016: overview and research directions {mesbah2016}; the scenario approach {campi2009}."],
@@ -535,7 +547,7 @@ export const PAGES: Page[] = [
         "Chronos-2 adds multivariate and covariate-informed forecasting through group attention and reports state-of-the-art results on three benchmarks {chronos2}; a 2026 paper reports +5.2 percentage points of skill score over the strongest baselines {chronos2b}.",
         "For short-term load forecasting, Chronos-2 led when future covariates were available or accurate, but degraded as covariate forecasts became noisy, where TimesNet was more robust {kaljevic2026}.",
       ] },
-      { kind: "note", tone: "info", text: "Site Lab controllers currently see perfect information (prices 24 h ahead, actual loads). Measuring how they degrade with realistic forecast error is the planned forecast-error harness." },
+      { kind: "note", tone: "info", text: "Site Lab controllers can run with perfect information or with realistic forecasts: the most recent day's load repeated, the day-ahead weather forecast for solar, prices only once published, cars only once plugged in {code_forecasts}. 'Compare forecasts' shows the difference; see 'Planning under uncertainty'." },
     ],
   },
 
@@ -558,7 +570,7 @@ export const PAGES: Page[] = [
     summary: "A further 99 kW (5.8%) peak reduction over standard MPC for a German company.",
     blocks: [
       { kind: "p", text: "LSTM forecasting plus a constraint-tightened stochastic optimisation in a receding horizon, targeting peak shaving and battery health under forecast uncertainty {li2025smpc}." },
-      { kind: "note", tone: "info", text: "For Site Lab: the template for the stochastic MPC step, and a reason to build the forecast-error harness first." },
+      { kind: "note", tone: "info", text: "For Site Lab: the template for the stochastic MPC step. The first half of the forecast-error harness now exists: 'Compare forecasts' runs controllers with realistic forecasts {code_forecasts}." },
     ],
   },
   {
@@ -642,5 +654,6 @@ export const PAGES: Page[] = [
       ] },
     ],
   },
+  ...DEEP_PAGES,
   ...MARKET_PAGES,
 ];
