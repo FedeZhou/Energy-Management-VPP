@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, ChevronDown, ChevronUp, Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { useStore } from "../store";
 import { dayLabel, money, num, pct, stepLabel, timeAt } from "../util";
 import { Charts } from "./Charts";
@@ -8,11 +8,16 @@ import { Sessions } from "./Sessions";
 
 interface Card { label: string; value: string; delta?: string; good?: boolean | null; dir?: 1 | -1; detail?: string }
 
-function delta(cur: number, base: number, fmt: (v: number) => string, lowerIsGood: boolean): Pick<Card, "delta" | "good" | "dir"> {
+/** Change against the baseline as a signed value, e.g. "−€20.25 (−60%)". Shares in percentage points
+ *  (relative = false) show only the point change, since a percentage of a percentage confuses. */
+function delta(cur: number, base: number, fmt: (v: number) => string, lowerIsGood: boolean, relative = true): Pick<Card, "delta" | "good" | "dir"> {
   const d = cur - base;
-  if (Math.abs(d) < 1e-6 * Math.max(1, Math.abs(base))) return { delta: "No change", good: null };
-  const rel = base ? ` · ${Math.abs((d / base) * 100).toFixed(1)}%` : "";
-  return { delta: `${fmt(Math.abs(d))}${rel}`, good: lowerIsGood ? d < 0 : d > 0, dir: d > 0 ? 1 : -1 };
+  // A change that rounds to zero at the precision shown is "No change", not "-0 pts".
+  if (Math.abs(d) < 1e-6 * Math.max(1, Math.abs(base)) || fmt(Math.abs(d)) === fmt(0)) return { delta: "No change", good: null };
+  const sign = d < 0 ? "−" : "+";
+  const r = relative && base ? Math.abs((d / base) * 100) : 0;
+  const rel = r ? ` (${sign}${r < 10 ? r.toFixed(1) : Math.round(r)}%)` : "";
+  return { delta: `${sign}${fmt(Math.abs(d))}${rel}`, good: lowerIsGood ? d < 0 : d > 0, dir: d > 0 ? 1 : -1 };
 }
 
 function Kpis() {
@@ -37,10 +42,10 @@ function Kpis() {
       detail: over ? `Fuse ${site.grid.fuse_a} A exceeded` : `Fuse ${site.grid.fuse_a} A respected` });
   }
   cards.push({ label: "Self-sufficiency", value: pct(k.self_sufficiency_share),
-    ...delta(k.self_sufficiency_share, b.self_sufficiency_share, (v) => `${Math.round(v * 100)} pts`, false),
+    ...delta(k.self_sufficiency_share, b.self_sufficiency_share, (v) => `${Math.round(v * 100)} pts`, false, false),
     detail: "Share of demand not bought from the grid" });
   if (has("pv")) cards.push({ label: "Solar self-use", value: pct(k.self_consumption_share),
-    ...delta(k.self_consumption_share, b.self_consumption_share, (v) => `${Math.round(v * 100)} pts`, false),
+    ...delta(k.self_consumption_share, b.self_consumption_share, (v) => `${Math.round(v * 100)} pts`, false, false),
     detail: `Share of solar used on site. ${k.pv_curtailed_kwh > 0.5 ? `${num(k.pv_curtailed_kwh)} kWh curtailed` : `${num(k.grid_export_kwh)} kWh exported`}` });
   if (has("battery")) cards.push({ label: "Battery cycles", value: num(k.battery_equivalent_full_cycles, k.battery_equivalent_full_cycles < 10 ? 1 : 0),
     delta: `${num(k.battery_discharge_kwh)} kWh out`, detail: "Equivalent full cycles, a proxy for wear" });
@@ -79,7 +84,7 @@ function Kpis() {
           <span className="kpi-value">{c.value}</span>
           {c.delta && (
             <span className={`kpi-delta ${c.good === true ? "good" : c.good === false ? "bad" : ""}`}>
-              {c.dir === 1 && <ArrowUp size={12} />}{c.dir === -1 && <ArrowDown size={12} />}{c.delta}
+              {c.delta}
             </span>
           )}
         </div>
@@ -164,6 +169,53 @@ function Sources() {
   );
 }
 
+/** Shown after "Compare forecasts": the same site with perfect and with realistic forecasts. */
+function ForecastCompare() {
+  const cmp = useStore((s) => s.compare)!;
+  const site = useStore((s) => s.site);
+  const p = cmp.perfect.result.kpis, q = cmp.realistic.result.kpis;
+  const cur = cmp.realistic.result.currency;
+  const m = (v: number) => money(v, cur);
+  type Row = [string, number, number, (v: number) => string, boolean];  // label, perfect, realistic, format, lower is better
+  const rows: Row[] = [
+    ["Total cost", p.total_cost, q.total_cost, m, true],
+    ["Peak import", p.peak_import_kw, q.peak_import_kw, (v) => `${num(v, 1)} kW`, true],
+    ["Self-sufficiency", p.self_sufficiency_share, q.self_sufficiency_share, pct, false],
+  ];
+  if (site.assets.some((a) => a.type === "ev_charger")) rows.push(["EV energy short", p.ev_unmet_kwh, q.ev_unmet_kwh, (v) => `${num(v, 1)} kWh`, true]);
+  const extra = q.total_cost - p.total_cost;
+  const share = p.total_cost ? (extra / Math.abs(p.total_cost)) * 100 : 0;
+  const ctrl = site.controller.battery === "mpc" ? "MPC" : "rule-based control";
+  return (
+    <div className="fc-compare" aria-label="Perfect versus realistic forecasts">
+      <div className="fc-head">
+        <b>Forecasts: perfect vs realistic</b> <Help topic="forecasts" />
+        <span className="muted">
+          {Math.abs(extra) < 0.005 ? `Real-world forecasts cost ${ctrl} nothing here.`
+            : extra > 0 ? `Real-world forecasts cost ${ctrl} ${m(extra)} more (${share.toFixed(1)}%). Charts and numbers below show the realistic run.`
+            : `The realistic run came out ${m(-extra)} cheaper; see the help for why this can happen. Charts below show the realistic run.`}
+        </span>
+      </div>
+      <table className="table fc-table">
+        <thead><tr><th></th><th>Perfect forecast</th><th>Realistic forecast</th><th>Difference</th></tr></thead>
+        <tbody>
+          {rows.map(([label, a, b, f, lower]) => {
+            const d = b - a;
+            const same = f(Math.abs(d)) === f(0);  // no difference at the precision shown
+            const worse = lower ? d > 0 : d < 0;
+            return (
+              <tr key={label}>
+                <td>{label}</td><td>{f(a)}</td><td>{f(b)}</td>
+                <td className={same ? "muted" : worse ? "warn-text" : ""}>{same ? "same" : `${d > 0 ? "+" : "−"}${f(Math.abs(d))}`}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 type Tab = "charts" | "sessions" | "sources";
 
 export function Results() {
@@ -173,6 +225,7 @@ export function Results() {
   const collapsed = useStore((s) => s.collapsed);
   const setCollapsed = useStore((s) => s.setCollapsed);
   const site = useStore((s) => s.site);
+  const compare = useStore((s) => s.compare);
   const [tab, setTab] = useState<Tab>("charts");
   const [height, setHeight] = useState(() => Math.round(window.innerHeight * 0.48));
   const [dragging, setDragging] = useState(false);
@@ -229,6 +282,7 @@ export function Results() {
       </div>
       {open && (
         <div className="results-body">
+          {compare && compare.realistic === r && !stale && <ForecastCompare />}
           <Kpis />
           <Transport />
           {active === "charts" && <div className="tab-pane"><div className="pane-help"><Help topic="charts" /></div><Charts /></div>}

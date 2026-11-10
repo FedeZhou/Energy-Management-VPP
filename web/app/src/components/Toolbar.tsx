@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { BookOpen, CircleHelp, Database, Download, FilePlus2, Loader2, Play, RotateCw, Upload } from "lucide-react";
+import { BookOpen, CircleHelp, Database, Download, FilePlus2, Loader2, Play, RotateCw, Scale, Upload } from "lucide-react";
 import type { Mode, Site } from "../api";
 import { useStore } from "../store";
 import { useGuide } from "./Guide";
@@ -31,7 +31,7 @@ export function Toolbar() {
   const stale = useStore((s) => s.stale);
   const hasResult = useStore((s) => s.result !== null);
   const assets = useStore((s) => s.site.assets.length);
-  const { loadSite, run, setMode } = useStore.getState();
+  const { loadSite, run, compareForecasts, setMode } = useStore.getState();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const exportJson = () => {
@@ -112,6 +112,10 @@ export function Toolbar() {
         }} />
       </div>
       <div className="vsep" />
+      <button className="btn" onClick={() => compareForecasts()} disabled={running || assets === 0}
+        title="Run twice: with perfect forecasts, and with what a real controller would know (yesterday's load, the day-ahead weather forecast, prices only once published, cars only once plugged in)">
+        <Scale size={14} /> Compare forecasts
+      </button>
       <button className="btn primary" data-tour="run" onClick={() => run()} disabled={running || assets === 0} title="Run simulation (Ctrl+Enter)">
         {running ? <Loader2 size={14} className="spin" /> : again ? <RotateCw size={14} /> : <Play size={14} />}
         {running ? "Running" : again ? "Re-run" : "Run"}

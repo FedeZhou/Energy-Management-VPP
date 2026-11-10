@@ -23,6 +23,8 @@ interface State {
   collapsed: boolean;
   dataPanelOpen: boolean;
   page: "lab" | "learn";
+  /** Last "Compare forecasts": the same site with perfect and with realistic forecasts. */
+  compare: { perfect: SimResponse; realistic: SimResponse } | null;
 
   init: () => Promise<void>;
   setMode: (mode: Mode) => void;
@@ -39,6 +41,7 @@ interface State {
   setMeterPos: (pos: { x: number; y: number }) => void;
   select: (id: string | null) => void;
   run: () => Promise<void>;
+  compareForecasts: () => Promise<void>;
   setCursor: (i: number) => void;
   setPlaying: (p: boolean) => void;
   setSpeed: (s: number) => void;
@@ -83,6 +86,17 @@ function maxPower(r: SimResponse): number {
   return m;
 }
 
+/** Start the playhead at 18:00 on the first (operate) or second (plan) day: the evening peak. */
+function startCursor(result: SimResponse, mode: Mode): number {
+  const { start, step_minutes: step, steps: T } = result.time;
+  const day = mode === "operate" ? 0 : 1;
+  for (let i = 0; i < T; i++) {
+    const d = timeAt(start, step, i);
+    if (d.getUTCHours() === 18 && d.getUTCMinutes() === 0 && Math.floor((i * step) / 1440) === day) return i;
+  }
+  return 0;
+}
+
 export const useStore = create<State>((set, get) => ({
   catalog: null,
   profiles: null,
@@ -100,6 +114,7 @@ export const useStore = create<State>((set, get) => ({
   maxPower: 1,
   collapsed: false,
   dataPanelOpen: false,
+  compare: null,
   // #learn or #learn-<page> opens the Learn page directly.
   page: /^#learn(-|$)/.test(location.hash) ? "learn" : "lab",
 
@@ -196,18 +211,26 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async run() {
-    set({ running: true, error: null, playing: false });
+    set({ running: true, error: null, playing: false, compare: null });
     try {
       const result = await api.simulate(get().site);
-      const { start, step_minutes: step, steps: T } = result.time;
-      // Start the playhead at 18:00 on the first (operate) or second (plan) day: evening peak.
-      const day = get().site.mode === "operate" ? 0 : 1;
-      let cursor = 0;
-      for (let i = 0; i < T; i++) {
-        const d = timeAt(start, step, i);
-        if (d.getUTCHours() === 18 && d.getUTCMinutes() === 0 && Math.floor((i * step) / 1440) === day) { cursor = i; break; }
-      }
-      set({ result, stale: false, running: false, cursor, maxPower: maxPower(result) });
+      set({ result, stale: false, running: false, cursor: startCursor(result, get().site.mode), maxPower: maxPower(result) });
+    } catch (e) {
+      set({ running: false, error: (e as Error).message });
+    }
+  },
+
+  async compareForecasts() {
+    // The same site twice: what controllers would achieve knowing the future, and with what a real system knows.
+    // The realistic run becomes the main result (charts, numbers); the panel shows the difference.
+    const site = get().site;
+    set({ running: true, error: null, playing: false });
+    try {
+      const withForecast = (forecast: "perfect" | "realistic") =>
+        api.simulate({ ...site, controller: { ...site.controller, forecast } });
+      const [perfect, realistic] = await Promise.all([withForecast("perfect"), withForecast("realistic")]);
+      set({ result: realistic, compare: { perfect, realistic }, stale: false, running: false,
+        cursor: startCursor(realistic, site.mode), maxPower: maxPower(realistic) });
     } catch (e) {
       set({ running: false, error: (e as Error).message });
     }

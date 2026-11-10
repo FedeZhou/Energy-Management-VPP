@@ -16,13 +16,16 @@ export function App() {
   const page = useStore((s) => s.page);
   useEffect(() => {
     // Demo shortcuts: #operate opens Operate mode, and "run" in the hash runs the example
-    // straight away (#run, #operate-run).
+    // straight away (#run, #operate-run). "mpc" switches the battery to MPC; "compare" runs
+    // Compare forecasts instead (#operate_home_ev-mpc-compare).
     useStore.getState().init().then(() => {
       const h = location.hash;
       if (h.includes("operate")) useStore.getState().setMode("operate");
       const preset = useStore.getState().presets.find((p) => h.includes(p.id));
       if (preset) useStore.getState().loadSite(preset.site);
-      if (h.includes("run")) useStore.getState().run();
+      if (/(^|[#-])mpc($|-)/.test(h)) useStore.getState().updateSection("controller", { battery: "mpc" });
+      if (h.includes("compare")) useStore.getState().compareForecasts();
+      else if (h.includes("run")) useStore.getState().run();
       // #guide or #guide-4 opens the tour (at step 4); a first visit without a demo link opens it too.
       const g = /guide(?:-(\d+))?/.exec(h);
       if (g) {

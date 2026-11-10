@@ -71,7 +71,7 @@ export function Charts() {
 
     const axes = layout.map((_, k) => ({
       type: "category" as const, data: x, gridIndex: k, boundaryGap: true,
-      axisLine: { lineStyle: { color: strong } }, axisTick: { show: false },
+      axisLine: { lineStyle: { color: hair } }, axisTick: { show: false },
       axisLabel: k === last
         ? { color: muted, fontSize: 11, formatter: (val: string) => dayLabel(timeAt(start, step, Number(val))), interval: (i: number) => isMidnight(start, step, i) }
         : { show: false },
@@ -80,11 +80,11 @@ export function Charts() {
     const tidy = (n: number) => (Number.isInteger(n) || Math.abs(n) >= 10 ? String(Math.round(n)) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, ""));
     const yAxis = (k: number, extra: object = {}) => ({
       type: "value" as const, gridIndex: k, splitNumber: 2,
-      axisLabel: { color: muted, fontSize: 10, formatter: tidy }, splitLine: { lineStyle: { color: hair, type: [3, 3] } }, ...extra,
+      axisLabel: { color: muted, fontSize: 10, formatter: tidy }, splitLine: { lineStyle: { color: hair, opacity: 0.7 } }, ...extra,
     });
     const lineS = (name: string, data: number[], color: string, k: number, extra: object = {}) => ({
       name, type: "line" as const, data, xAxisIndex: k, yAxisIndex: k, showSymbol: false, sampling: "lttb" as const,
-      lineStyle: { width: 2, color }, itemStyle: { color }, emphasis: { disabled: true }, ...extra,
+      lineStyle: { width: 1.75, color }, itemStyle: { color }, emphasis: { disabled: true }, ...extra,
     });
 
     // Power panel: one line per consuming component (each building by name, EV charging), plus solar
@@ -125,19 +125,19 @@ export function Charts() {
       const fuse = site.grid.fuse_a;
       (["phase_l1_a", "phase_l2_a", "phase_l3_a"] as const).forEach((key, k) => {
         series.push(lineS(`L${k + 1}`, s[key], ink2, idx.phase, {
+          endLabel: { show: true, formatter: `L${k + 1}`, color: muted, fontSize: 10, distance: 4 },
           lineStyle: { width: 1.5, color: ink2, type: ["solid", "dashed", "dotted"][k] },
           ...(k === 0 && fuse != null ? { markLine: { silent: true, symbol: "none", lineStyle: { color: bad, width: 1.5 },
             label: { formatter: `Fuse ${fuse} A`, color: bad, position: "insideEndTop" }, data: [{ yAxis: fuse }] } } : {}),
         }));
       });
-      legend.push("L1", "L2", "L3");
     }
 
     c.setOption({
       animation: false,
       textStyle: { fontFamily: v("--font-ui") },
-      title: layout.map((p) => ({ text: p.title, top: p.top - 22, left: 52, textStyle: { fontSize: 11, fontWeight: 500, color: ink2 } })),
-      grid: layout.map((p) => ({ left: 52, right: 24, top: p.top, height: p.height })),
+      title: layout.map((p) => ({ text: p.title, top: p.top - 22, left: 52, textStyle: { fontSize: 11, fontWeight: 500, color: muted } })),
+      grid: layout.map((p) => ({ left: 52, right: 36, top: p.top, height: p.height })),
       xAxis: axes,
       yAxis: layout.map((p, k) => p.key === "soc"
         ? yAxis(k, { min: 0, max: 100, axisLabel: { color: muted, fontSize: 10, formatter: "{value}%" } })
@@ -162,7 +162,7 @@ export function Charts() {
           return `<div style="font-weight:600;margin-bottom:6px">${label(i)}</div>${rows.join("")}`;
         },
       },
-      legend: { top: 0, right: 24, icon: "roundRect", itemWidth: 10, itemHeight: 10, itemGap: 14, textStyle: { color: ink2, fontSize: 11 }, data: legend },
+      legend: { top: 0, right: 24, icon: "circle", itemWidth: 8, itemHeight: 8, itemGap: 16, textStyle: { color: muted, fontSize: 11 }, data: legend },
       dataZoom: [
         { type: "inside", xAxisIndex: layout.map((_, k) => k), startValue: win.current[0], endValue: win.current[1], zoomOnMouseWheel: "ctrl", moveOnMouseWheel: false },
         { type: "slider", xAxisIndex: layout.map((_, k) => k), startValue: win.current[0], endValue: win.current[1], bottom: 2, height: 18,

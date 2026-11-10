@@ -82,6 +82,7 @@ export const HELP = {
           <dt>Self-consumption</dt><dd>Stores spare solar and covers demand from storage when solar is short.</dd>
           <dt>Price arbitrage</dt><dd>Stores spare solar, fills up from the grid at the cheapest step of the next 24 hours, and covers the site at the most expensive one.</dd>
           <dt>Peak shaving</dt><dd>Discharges when demand is above the threshold and recharges below it.</dd>
+          <dt>MPC</dt><dd>Model predictive control: every re-plan (hourly by default, and when a car plugs in) it solves an optimisation over the next 24 hours for the battery and all cars together, minimising energy cost and any demand charges, and follows the plan until the next re-plan. The EV strategy below is then ignored. Heat pumps run on demand and cars are not discharged under MPC yet.</dd>
         </dl>
         <h5>EV charging</h5>
         <dl>
@@ -186,6 +187,22 @@ export const HELP = {
           <li>A car still needing energy at departure "left short".</li>
           <li>Bidirectional (V2H): a car may give energy back while it can still reach its target by departure at full power, up to a per-visit limit. Lent energy is added to what the car still needs, with losses both ways.</li>
         </ul>
+      </>
+    ),
+  },
+  forecasts: {
+    title: "Perfect and realistic forecasts",
+    body: (
+      <>
+        <p>Controllers that plan ahead (MPC, and the rules that look for cheap hours) need to know the future. <b>Perfect</b> tells them the true future: the best any forecast could do. <b>Realistic</b> tells them only what a real system would know at that moment:</p>
+        <dl>
+          <dt>Load</dt><dd>The most recent day repeated (the "naive" method of EMHASS, an open-source home energy manager).</dd>
+          <dt>Solar</dt><dd>The weather forecast made about a day earlier (Open-Meteo's archive of past forecasts), through the same solar model as the actual solar. Where no archived forecast exists, yesterday's solar repeated.</dd>
+          <dt>Prices</dt><dd>Day-ahead market prices only once published, around 13:00 for the next day; beyond that, the last known day repeated. Fixed tariffs are known in advance.</dd>
+          <dt>Cars</dt><dd>Unknown until they plug in; then their departure time and energy are known, as if the driver had entered them in an app.</dd>
+        </dl>
+        <p><b>Compare forecasts</b> runs the site both ways. The difference is what perfect knowledge would be worth, and shows how much a strategy depends on its forecast. Simple reactive rules (self-consumption) do not look ahead, so they are unaffected. When the forecast is wrong, MPC lets the battery take up the difference so the grid exchange stays as planned, then re-plans.</p>
+        <p>A realistic run can occasionally come out cheaper: a plan that is optimal for a forecast is not always best for the real day, and the end of the period is valued differently.</p>
       </>
     ),
   },

@@ -32,9 +32,13 @@ function Tex({ tex, display = false }: { tex: string; display?: boolean }) {
 function Cited({ text, order, k }: { text: string; order: string[]; k: string }) {
   const parts: React.ReactNode[] = [];
   let last = 0;
+  let prevCite = false;
   for (const m of text.matchAll(CITE)) {
     const before = text.slice(last, m.index).replace(/\s+$/, "");
     parts.push(<Fragment key={`${k}t${m.index}`}>{before}</Fragment>);
+    // Back-to-back citations ("{a} {b}") read as superscript 1,2 like a paper.
+    if (prevCite && before === "") parts.push(<sup key={`${k}s${m.index}`} className="ln-cite-sep">,</sup>);
+    prevCite = true;
     const n = order.indexOf(m[1]) + 1;
     const src = SOURCES[m[1]];
     parts.push(
