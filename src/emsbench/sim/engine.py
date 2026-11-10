@@ -47,6 +47,7 @@ from emsbench.sim.model import (
     SolarPV,
 )
 from emsbench.sim.profiles import Profile, ProfileLibrary
+from emsbench.sim.wear import MAX_YEARS, default_replacement_cost, expected_life, wear_price_per_kwh
 
 FloatArray = NDArray[np.float64]
 EPS = 1e-9
@@ -186,6 +187,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     e_min = cap * np.array([b.soc_min for b in bats])
     e_max = cap * np.array([b.soc_max for b in bats])
     energy = np.clip(cap * np.array([b.soc_initial for b in bats]), e_min, e_max)
+    energy_start = energy.copy()
 
     # EV state per charger
     ev_rem = np.zeros(n_c)
@@ -254,9 +256,19 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
             upcoming.append(accepted)
         forecast = PerfectForecast(actual, upcoming, int(round(86400 / step_s)))
 
+    # Battery wear: replacement value per battery (None = not priced) and the MPC's wear price per kWh.
+    wear_cost_per_kwh = [b.replacement_cost_per_kwh if b.replacement_cost_per_kwh is not None
+                         else default_replacement_cost(b.capacity_kwh, price_profile.currency) for b in bats]
+
     controller: Any = RuleController(site.controller)
     if site.controller.battery == "mpc":
         from emsbench.sim.mpc import MPCController, SiteLimits
+
+        wear_price = 0.0
+        if site.controller.mpc_wear_cost and bats and cap.sum() > 0:
+            prices = [wear_price_per_kwh(c, b.chemistry, b.temperature_c, b.end_of_life_capacity) if c else 0.0
+                      for b, c in zip(bats, wear_cost_per_kwh, strict=True)]
+            wear_price = float(np.dot(prices, cap) / cap.sum())
 
         controller = MPCController(site.controller, SiteLimits(
             step_hours=dth, battery_capacity_kwh=float(cap.sum()), battery_min_kwh=float(e_min.sum()),
@@ -264,7 +276,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
             battery_eta=float(np.mean(eta)) if bats else 1.0, import_limit_kw=imp_lim, export_limit_kw=exp_lim,
             fuse_kw=fuse * PHASE_VOLTAGE / 1000 if fuse is not None else None, export_price=site.tariff.export_price,
             demand_rate_flat=site.tariff.demand_charge_per_kw_month,
-            charger_efficiency=tuple(c.efficiency for c in chargers),
+            charger_efficiency=tuple(c.efficiency for c in chargers), battery_wear_per_kwh=wear_price,
         ), forecast)
 
     def phase_kw(base: float, ev_kw: FloatArray) -> FloatArray:
@@ -554,6 +566,8 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
         hp_scop=hp_heat_delivered / hp_elec if hp_elec > EPS else 0.0,
         dimmed_kwh=float(rec_dimmed.sum() * dth),
     )
+    k.update(_battery_wear(bats, cap, energy_start, rec_soc, step_s, T * dth / 8760, wear_cost_per_kwh))
+    k["total_cost_with_wear"] = k["total_cost"] + k["battery_wear_cost"]
     if rec_overload.sum() > 0.01:
         warnings.append(f"Import limit exceeded in {(rec_overload > 0.01).sum()} time steps even after "
                         "using the battery and slowing EV charging.")
@@ -661,3 +675,27 @@ def _realistic_forecast(site: Site, lib: ProfileLibrary, actual: dict[str, Float
     first_step = int(round((start.hour * 3600 + start.minute * 60) / step_s))
     return RealisticForecast(actual, load_before, pv_before, pv_dayahead, day, first_step,
                              None if published is None else int(round(published * 3600 / step_s)))
+
+
+def _battery_wear(bats: list[Battery], cap: FloatArray, energy_start: FloatArray, rec_soc: FloatArray, step_s: int,
+                  run_years: float, cost_per_kwh: list[float | None]) -> dict[str, float]:
+    """Expected life and wear cost of the batteries (see emsbench.sim.wear). Life: the shortest of all batteries."""
+    out = {"battery_life_years": 0.0, "battery_life_capped": 0.0, "battery_wear_cost": 0.0,
+           "battery_wear_priced": 0.0, "battery_cycle_wear_share": 0.0}
+    lives = []
+    for i, b in enumerate(bats):
+        if b.capacity_kwh <= 0:
+            continue
+        soc = np.concatenate([[energy_start[i] / cap[i]], rec_soc[i]])
+        life = expected_life(soc, step_s, b.chemistry, b.temperature_c, b.end_of_life_capacity)
+        lives.append(life)
+        price = cost_per_kwh[i]
+        if price is not None:
+            out["battery_wear_cost"] += life.wear_cost(price * b.capacity_kwh, run_years)
+            out["battery_wear_priced"] = 1.0
+    if lives:
+        shortest = min(lives, key=lambda x: x.years)
+        out["battery_life_years"] = shortest.years
+        out["battery_life_capped"] = 1.0 if shortest.years >= MAX_YEARS else 0.0
+        out["battery_cycle_wear_share"] = shortest.cycle_share
+    return out

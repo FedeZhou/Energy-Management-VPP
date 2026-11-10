@@ -70,6 +70,7 @@ class SiteLimits:
     export_price: float
     demand_rate_flat: float  # per kW per month
     charger_efficiency: tuple[float, ...]
+    battery_wear_per_kwh: float = 0.0  # wear price per kWh discharged (half charged on the way in, half out)
 
 
 @dataclass
@@ -242,8 +243,11 @@ class MPCController:
         cur = lp.var(H, ub=np.maximum(pv, 0.0) if lim.export_limit_kw is not None else 0.0)
         has_bat = lim.battery_capacity_kwh > 0 and lim.battery_power_kw > 0
         p_bat = lim.battery_power_kw if has_bat else 0.0
-        ch = lp.var(H, ub=p_bat, cost=TIE_BREAK_PER_KWH * dt)
-        dis = lp.var(H, ub=p_bat, cost=TIE_BREAK_PER_KWH * dt)
+        # Cycling costs battery life: half the wear price per kWh charged, half per kWh discharged (one equivalent
+        # full cycle = one capacity in and out). The tie-break avoids pointless cycling when wear is not priced.
+        cycle_cost = max(lim.battery_wear_per_kwh / 2, TIE_BREAK_PER_KWH)
+        ch = lp.var(H, ub=p_bat, cost=cycle_cost * dt)
+        dis = lp.var(H, ub=p_bat, cost=cycle_cost * dt)
         if has_bat:
             e0 = float(np.clip(obs.battery_energy_kwh, lim.battery_min_kwh, lim.battery_max_kwh))
             energy = lp.var(H + 1, lb=lim.battery_min_kwh, ub=lim.battery_max_kwh)

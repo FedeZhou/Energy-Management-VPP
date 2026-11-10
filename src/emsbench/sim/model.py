@@ -94,6 +94,9 @@ class SolarPV(AssetBase):
     )
 
 
+Chemistry = Literal["lfp", "nmc"]
+
+
 class Battery(AssetBase):
     """A stationary battery."""
 
@@ -120,6 +123,31 @@ class Battery(AssetBase):
     soc_initial: float = param(
         0.0, "Initial state of charge", ge=0, le=1,
         source="CityLearn default initial_soc = 0",
+    )
+    chemistry: Chemistry = param(
+        "lfp", "Cell chemistry (for wear)",
+        help="Which ageing model prices battery wear. lfp: lithium iron phosphate, most new stationary storage. "
+        "nmc: nickel manganese cobalt, more common in older and car batteries; ages faster in the models used.",
+        source="NREL BLAST-Lite models Lfp_Gr_250AhPrismatic and NMC_Gr_75Ah_A, fitted to Gasper et al. 2023, "
+        "https://doi.org/10.1016/j.est.2023.109042",
+    )
+    replacement_cost_per_kwh: float | None = param(
+        None, "Replacement cost", unit="per kWh", ge=0,
+        help="What the battery system costs per usable kWh, in the site's currency. Wear = this value used up as the "
+        "battery ages. Empty = by size, EUR sites only: 1,200 (home, up to 30 kWh), 580-710 (commercial), "
+        "380-464 (large-scale); 2022 prices excluding VAT, higher than today's.",
+        source="Figgener et al. 2023, The development of battery storage systems in Germany: a market review "
+        "(status 2023), https://arxiv.org/abs/2203.06762: 2022 mean prices per usable kWh, excl. VAT",
+    )
+    end_of_life_capacity: float = param(
+        0.8, "End of life at", ge=0.5, le=0.99,
+        help="Share of the original capacity at which the battery counts as worn out. Warranties use 60-80%.",
+        source="LG Energy Solution RESU12 warranty: 80% energy retention after 10 years or 30 MWh throughput",
+    )
+    temperature_c: float = param(
+        25.0, "Battery temperature", unit="°C", ge=-10, le=50,
+        help="Assumed constant. Warmer batteries age faster. The ageing models were fitted between 10 and 45 °C.",
+        source="Example choice (indoor installation); fitting range from the BLAST-Lite model notes",
     )
 
 
@@ -353,6 +381,11 @@ class ControllerSpec(BaseModel):
         60, "MPC re-plan interval", unit="min", ge=1, le=1440,
         help="Only used by mpc. How often it re-optimises (also immediately when a car arrives). Shorter is more "
         "responsive but slower to simulate.",
+    )
+    mpc_wear_cost: bool = param(
+        True, "MPC prices battery wear",
+        help="Only used by mpc. Charge each kWh cycled through the battery at its wear price (replacement cost x "
+        "capacity lost per cycle, from the battery's ageing model), so the plan only cycles when it pays.",
     )
     forecast: ForecastMode = param(
         "perfect", "Forecasts",
