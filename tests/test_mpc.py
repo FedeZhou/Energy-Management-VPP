@@ -178,3 +178,18 @@ def test_relax_and_fix_is_close_to_the_exact_on_off_solution(monkeypatch: pytest
     exact = simulate(s, lib)
     assert fast.kpis["ev_unmet_kwh"] == pytest.approx(exact.kpis["ev_unmet_kwh"], abs=1e-6)
     assert fast.kpis["total_cost"] <= exact.kpis["total_cost"] * 1.02 + 1e-6
+
+
+def test_mpc_survives_negative_prices_without_importing_to_export() -> None:
+    # Prices below the export price would make "import and export at once" look like free money.
+    lib = library()
+    hour = np.tile(np.arange(24), T // 24)
+    lib.profiles["price"] = Profile("price", "price", "neg", "test", np.where(hour == 13, -0.5, 0.3), START, 3600)
+    pv = SolarPV(id="pv", capacity_kwp=6.0, profile="pv")
+    r = simulate(site(HOME, pv, BAT, tariff=Tariff(price_profile="price", export_price=0.08)), lib)
+    assert balance_ok(r)
+    neg = r.site["price"] < 0
+    # Solar 6 kW - home 2 kW - battery 3 kW: 1 kW must be exported (no curtailment without an export limit),
+    # but nothing more, and the battery charges at full power while the price is negative.
+    assert np.all(r.site["grid_kw"][neg] >= -1.0 - 1e-6)
+    assert np.allclose(r.site["battery_kw"][neg], BAT.power_kw)
