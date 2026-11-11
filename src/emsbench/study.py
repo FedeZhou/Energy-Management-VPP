@@ -34,6 +34,7 @@ CONTROLLERS: dict[str, dict[str, Any]] = {
     "mpc_wear_blind": {"battery": "mpc", "mpc_wear_cost": False},
     "mpc_wear_priced": {"battery": "mpc", "mpc_wear_cost": True},
     "mpc_scenarios3": {"battery": "mpc", "mpc_wear_cost": True, "mpc_scenarios": 3},  # only differs when realistic
+    "mpc_hybrid": {"battery": "mpc", "mpc_wear_cost": True, "mpc_execution": "hybrid"},
 }
 FORECASTS = ("perfect", "realistic")
 METRICS = ("total_cost", "battery_wear_cost", "total_cost_with_wear", "self_sufficiency_share", "peak_import_kw",

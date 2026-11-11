@@ -14,5 +14,7 @@ Values: median (min to max) across the 4 homes, in the tariff's currency. Saving
 | mpc_wear_priced | perfect | 726 (-12 to 1,708) | 300 (271 to 340) | 1,050 (281 to 1,979) | 399 (321 to 612) | 69% (48% to 80%) | 39.5 (35.3 to 40.0) | 86.8 (24.7 to 217.4) |
 | mpc_wear_priced | realistic | 916 (153 to 1,888) | 303 (277 to 343) | 1,229 (430 to 2,211) | 239 (89 to 425) | 61% (43% to 68%) | 38.6 (35.0 to 40.0) | 86.8 (24.7 to 217.1) |
 | mpc_scenarios3 | realistic | 864 (120 to 1,919) | 354 (330 to 387) | 1,243 (450 to 2,255) | 225 (45 to 404) | 62% (44% to 72%) | 34.0 (31.0 to 36.4) | 86.8 (24.7 to 217.1) |
+| mpc_hybrid | perfect | 753 (19 to 1,722) | 371 (289 to 397) | 1,142 (381 to 2,012) | 336 (233 to 510) | 69% (49% to 80%) | 32.4 (30.2 to 40.0) | 86.8 (24.7 to 217.4) |
+| mpc_hybrid | realistic | 855 (144 to 1,869) | 348 (296 to 391) | 1,230 (479 to 2,165) | 216 (135 to 421) | 63% (46% to 74%) | 34.6 (30.7 to 40.0) | 86.8 (24.7 to 217.1) |
 
-Runtime 554 s.
+Runtime 193 s.

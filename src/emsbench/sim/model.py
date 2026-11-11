@@ -363,6 +363,7 @@ EVStrategy = Literal["as_fast_as_possible", "spread_until_departure", "cheapest_
 HeatPumpStrategy = Literal["on_demand", "cheap_hours", "solar_surplus"]
 EVDischargeStrategy = Literal["never", "high_prices"]
 ForecastMode = Literal["perfect", "realistic"]
+MPCExecution = Literal["plan", "hybrid"]
 
 
 class ControllerSpec(BaseModel):
@@ -390,6 +391,15 @@ class ControllerSpec(BaseModel):
         60, "MPC re-plan interval", unit="min", ge=1, le=1440,
         help="Only used by mpc. How often it re-optimises (also immediately when a car arrives). Shorter is more "
         "responsive but slower to simulate.",
+    )
+    mpc_execution: MPCExecution = param(
+        "plan", "MPC execution",
+        help="Only used by mpc. plan: follow the optimiser's battery plan; the battery takes up forecast errors. "
+        "hybrid: behave like the self-consumption rule (store all spare solar, cover the home from the battery) and "
+        "let the optimiser only add to it: charge more (e.g. from the grid before an expensive stretch) or hold "
+        "energy back as a reserve. Never stores less solar than the rule would.",
+        source="Design choice: local self-consumption control with a planning layer on top, as in the layered "
+        "architectures on the Learn page 'Control layers and time scales'",
     )
     mpc_scenarios: int = param(
         1, "MPC scenarios", ge=1, le=10,

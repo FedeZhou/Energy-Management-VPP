@@ -223,11 +223,16 @@ class MPCController:
         for i in range(len(obs.evs)):
             p = float(self.plan.ev_kw[i, k])
             ev_kw.append(p if p > 1e-6 else 0.0)
+        actual_net = obs.load_kw + sum(h.heat_kw / max(h.cop, 1.0) for h in obs.heat_pumps) - obs.pv_kw
+        planned = float(self.plan.battery_kw[k])
+        if self.spec.mpc_execution == "hybrid":
+            # Like the self-consumption rule (store all spare solar, cover the home), but the plan may ask for more:
+            # charge harder, or discharge less to keep a reserve. Never stores less solar than the rule would.
+            return Action(battery_kw=max(-(actual_net + sum(ev_kw)), planned), ev_kw=tuple(ev_kw))
         # The battery takes up the forecast error of this step, so the grid exchange stays as planned
         # (zero with a perfect forecast). The next re-plan starts from the battery's real state.
-        actual_net = obs.load_kw + sum(h.heat_kw / max(h.cop, 1.0) for h in obs.heat_pumps) - obs.pv_kw
         error = actual_net - float(self.plan.net_kw[k])
-        return Action(battery_kw=float(self.plan.battery_kw[k]) - error, ev_kw=tuple(ev_kw))
+        return Action(battery_kw=planned - error, ev_kw=tuple(ev_kw))
 
     def _scenarios(self) -> list[Forecast]:
         """The futures to plan for: one forecast, or several replayed from history (scenario MPC)."""

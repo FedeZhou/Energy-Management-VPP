@@ -193,3 +193,20 @@ def test_mpc_survives_negative_prices_without_importing_to_export() -> None:
     # but nothing more, and the battery charges at full power while the price is negative.
     assert np.all(r.site["grid_kw"][neg] >= -1.0 - 1e-6)
     assert np.allclose(r.site["battery_kw"][neg], BAT.power_kw)
+
+
+def test_hybrid_execution_never_stores_less_solar_than_the_rule() -> None:
+    # Flat price, export paid: a plain plan is indifferent between storing and exporting spare solar.
+    lib = library()
+    lib.profiles["price"] = Profile("price", "price", "flat", "test", np.full(T, 0.3), START, 3600)
+    pv = SolarPV(id="pv", capacity_kwp=6.0, profile="pv")
+    s = site(HOME, pv, BAT, tariff=Tariff(price_profile="price", export_price=0.08))
+    s = s.model_copy(update={"controller": s.controller.model_copy(update={"mpc_execution": "hybrid"})})
+    r = simulate(s, lib)
+    surplus = r.site["pv_kw"] - r.site["load_kw"]
+    soc_start = np.concatenate([[BAT.soc_initial], r.site["soc"][:-1]])
+    fits = (1 - soc_start) * BAT.capacity_kwh / np.sqrt(BAT.round_trip_efficiency)  # kW that fit in one hour
+    sunny = surplus > 1e-6
+    expected = np.minimum.reduce([surplus, np.full(T, BAT.power_kw), fits])
+    assert np.all(r.site["battery_kw"][sunny] >= expected[sunny] - 1e-6)
+    assert balance_ok(r)
