@@ -300,7 +300,9 @@ This is why real "solar charging" products switch to one phase.
 - **A single price per kWh cycled is crude, and whether it pays depends on the tariff.** Calibrated on deep daily
   cycles it is about €0.15/kWh for a home LFP battery at 2022 prices. On the German home week with the real tariff,
   wear-aware MPC cycled less and won once wear was counted (€19.96 vs €20.39 for wear-blind MPC); with exports paid
-  nothing it backfired by €0.77, because the battery's shallow cycles wore it less than the price assumed. On energy
+  nothing it backfired by €0.77. Not because of cycle depth: in the LFP model wear per full cycle is almost the
+  same from 10% to 100% depth (it is the NMC model that is depth-sensitive, sixteen-fold). The per-kWh price misses
+  calendar ageing, which depends on how full the battery is kept; our guess is that is where the gap comes from. On energy
   alone the simple rule beat the wear-aware optimiser (€11.57 vs €12.32); with wear counted it lost (€21.74).
 - **Replacement prices move fast.** German home storage cost about 2,500 €/kWh in 2013, 920 in 2021 and an estimated
   1,200 in 2022 (Figgener et al. 2023, excluding VAT); prices have fallen since. Wear in euros is only as good as

@@ -1,5 +1,6 @@
 import { MARKET_SOURCES } from "./market";
 import { DEEP_SOURCES } from "./deepdive";
+import { EXAMPLE_SOURCES } from "./examples";
 
 // Every source cited on the Learn pages. `read` says how deeply it was checked (2026-11-08):
 // "abstract" = publisher/arXiv/OpenAlex abstract read; "docs" = official documentation page read;
@@ -43,6 +44,8 @@ const list: Source[] = [
     note: "Numbers from our own simulations; they depend on the example sizes, which are choices, not sourced values." },
   { id: "code_forecasts", title: "Site Lab forecasts: src/emsbench/sim/forecasts.py (+ tests/test_forecasts.py)", read: "code" },
   { id: "code_wear", title: "Site Lab battery wear: src/emsbench/sim/wear.py (+ tests/test_wear.py)", read: "code" },
+  { id: "runs_2026_11f", title: "Site Lab check of the ageing models: capacity lost per full cycle at 10-100% depth (5 years of daily cycles around 50%, 25 °C), 11 Nov 2026", read: "data",
+    note: "LFP model: 2.8 to 3.1 x 10^-5 per full cycle at every depth. NMC model: 4.4 x 10^-6 at 10% depth rising to 7.8 x 10^-5 at 100%." },
   { id: "code_validate", title: "Site Lab sanity check against HTW Berlin: src/emsbench/validate.py, results/validation_htw2014.md", read: "data" },
   { id: "bnetza_eeg", title: "Bundesnetzagentur: EEG feed-in tariffs for solar (VergSaetzeAug25bisJan26.xlsx: partial feed-in up to 10 kWp, 7.86 ct/kWh)",
     venue: "Bundesnetzagentur", read: "data",
@@ -260,6 +263,7 @@ const list: Source[] = [
   { id: "wilson2022", title: "End-Use Load Profiles for the U.S. Building Stock: Methodology and Results of Model Calibration, Validation, and Uncertainty Quantification",
     authors: "Wilson, Parker, Fontanini, Present, Reyna et al.", year: 2022, venue: "NREL technical report",
     url: "https://doi.org/10.2172/1854582", read: "metadata", note: "Cited by the ComStock release; report not read here." },
+  ...EXAMPLE_SOURCES,
   ...DEEP_SOURCES,
   ...MARKET_SOURCES,
 ];

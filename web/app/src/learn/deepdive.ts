@@ -290,7 +290,7 @@ V_t &= \mathrm{OCV}(z_t) - R_0\, I_t - V_{1,t} \\[6pt]
       { kind: "list", items: [
         "The optimiser that ignores wear earns the most on energy (€10.06) but cycles hardest (6.4 full cycles): it moves energy whenever there is a cent to gain {runs_2026_11d}.",
         "Pricing wear made the MPC cycle less (4.4 instead of 6.4 full cycles): it paid €2.26 more for energy, saved €2.70 of wear and ended €0.43 better in total {runs_2026_11d}. With exports paid nothing (an earlier setting) the same flat €0.148 price made it €0.77 worse: the cycling it avoided saved only about €0.11 per kWh of scored wear {runs_2026_11c}.",
-        "Why: in the ageing model a shallow cycle wears less per kWh than a deep one, but a flat price per kWh treats them the same. This is exactly what the cycle-depth cost of market-dispatch research fixes {xu2017}, and what rainflow counting (page 7) measures. A depth-aware price is Site Lab's next step.",
+        "Why the flat price can miss: not cycle depth for this battery. In the LFP model, wear per full cycle is almost the same from 10% to 100% depth; in the NMC model it rises sixteen-fold, which is where a depth-dependent cost, as in market-dispatch research {xu2017}, and rainflow counting (page 7) matter {runs_2026_11f}. For LFP the likelier gap is calendar ageing, which depends on how full the battery is kept and which a price per kWh cycled does not see {code_wear}.",
         "With realistic forecasts: wear-blind MPC €18.24 + €6.12 = €24.37; wear-priced €20.33 + €5.44 = €25.77 {runs_2026_11d}.",
         "The idle battery shows €0 wear because in the LFP model a battery kept empty barely ages; at a high state of charge it would age even when idle {runs_2026_11d}.",
       ] },

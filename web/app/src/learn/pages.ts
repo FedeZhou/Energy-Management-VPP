@@ -1,6 +1,7 @@
 // Market and roadmap pages live in market.ts (kept apart so parallel edits do not collide).
 import { MARKET_PAGES } from "./market";
 import { DEEP_PAGES } from "./deepdive";
+import { EXAMPLE_PAGES } from "./examples";
 
 // Learn pages. Text may cite sources inline with {sourceId}; every id must exist in sources.ts.
 // Rule: only statements backed by a cited source (or by this repository / our own runs, labelled as such).
@@ -17,7 +18,7 @@ export type Block =
 
 export interface Page {
   id: string;
-  section: "lab" | "systems" | "control" | "battery" | "research" | "market";
+  section: "lab" | "examples" | "systems" | "control" | "battery" | "research" | "market";
   title: string;
   summary: string;
   status?: "built" | "planned";
@@ -26,6 +27,7 @@ export interface Page {
 
 export const SECTIONS: Record<Page["section"], { title: string; intro: string }> = {
   lab: { title: "How Site Lab works", intro: "What the simulator does, step by step, and how each control strategy is implemented." },
+  examples: { title: "Practical examples", intro: "Real-world situations worked through in Site Lab, each teaching one idea, with numbers from our own runs and a link to try it." },
   systems: { title: "How the systems behave", intro: "Batteries, solar, EV charging, grid connections, tariffs, buildings and data centers." },
   control: { title: "Control theory, from scratch", intro: "Feedback, optimal control, linear programming, estimation and fair comparisons, with worked examples from real Site Lab runs." },
   battery: { title: "Battery modelling, from scratch", intro: "From cells to systems: the energy-reservoir model, equivalent circuits, state-of-charge estimation, physics models, ageing, cycle counting and the price of wear." },
@@ -253,7 +255,7 @@ export const PAGES: Page[] = [
         "Cycle-ageing cost modelled as a piecewise-linear function, usable in electricity-market clearing {xu2017}.",
         "EMHASS adds virtual costs that steer behaviour without changing the reported bill: an inverter 'stress cost' that grows with the square of power (approximated piecewise-linearly; recommended 0.05-0.20 per kWh at full power) to prefer running 'low and slow', and a cost per kWh per hour spent above a high state-of-charge threshold, because sitting full accelerates calendar ageing {emhass_lp}.",
         "Batteries are not uniform: optimising each string's ageing separately gave 21% more revenue per unit of health lost {graner2025}.",
-        "Site Lab: the MPC decides with one price per kWh cycled (replacement cost x capacity lost per cycle, calibrated on one full 0-100% cycle a day), while every run is scored by the full ageing model. On the German home week with the real tariff, pricing wear made the MPC cycle less (4.4 instead of 6.4 full cycles) and it ended €0.43 better once wear was counted (€19.96 against €20.39) {code_wear} {runs_2026_11d}. With exports paid nothing (an earlier setting) the same flat price backfired by €0.77: the battery cycled shallower than the calibration cycle, so each kWh not cycled saved only about €0.11 of wear against a €0.15 price {runs_2026_11c}. A depth-aware price is the obvious next step.",
+        "Site Lab: the MPC decides with one price per kWh cycled (replacement cost x capacity lost per cycle, calibrated on one full 0-100% cycle a day), while every run is scored by the full ageing model. On the German home week with the real tariff, pricing wear made the MPC cycle less (4.4 instead of 6.4 full cycles) and it ended €0.43 better once wear was counted (€19.96 against €20.39) {code_wear} {runs_2026_11d}. With exports paid nothing (an earlier setting) the same flat price backfired by €0.77: each kWh not cycled saved only about €0.11 of scored wear against a €0.15 price {runs_2026_11c}. The cause is not cycle depth: in the LFP model, wear per full cycle barely changes between 10% and 100% depth, while in the NMC model it rises sixteen-fold {runs_2026_11f}. Likely causes, not yet pinned down: the referee also counts calendar ageing, which depends on how full the battery is kept, and ageing slows as a battery ages, neither of which a price per kWh sees {code_wear}.",
       ] },
       { kind: "h", text: "What field tests and reviews report" },
       { kind: "list", items: [
@@ -371,6 +373,45 @@ export const PAGES: Page[] = [
     ],
   },
   {
+    id: "case-home-de", section: "examples", title: "Case study: what is smart control worth?",
+    summary: "Four real German homes with solar, a battery and an EV, simulated for a full year on today's tariff rules, with realistic forecasts and battery wear counted. A simple rule beat the optimiser.",
+    blocks: [
+      { kind: "p", text: "The question a home owner, an installer or an energy company asks: how much does a home battery save, and how much more does a 'smart' optimiser add? Single example weeks can mislead, so this study runs a full year for four different real homes, each with its own real driver, and reports the range {runs_2026_11e}." },
+      { kind: "h", text: "Setup" },
+      { kind: "facts", rows: [
+        ["Homes", "Four measured German households from Open Power System Data, using 2.4 to 9.8 MWh a year; one has a heat pump, one uses most of its power around midday {runs_2026_11e}."],
+        ["Cars", "Each home gets one measured driver from Norwegian home garages (SINTEF), charging up to 11 kW {runs_2026_11e}."],
+        ["Equipment", "8 kWp of solar (modelled from Konstanz weather), a 10 kWh / 5 kW LFP battery; example sizes, not sourced {runs_2026_11e}."],
+        ["Tariff", "German day-ahead price plus average grid fees and taxes and a real supplier margin; exports earn the EEG feed-in tariff of 7.86 ct/kWh, but nothing while the spot price is negative {bnetza_eeg} {eeg51} {witten_tariff}."],
+        ["Period", "November 2025 to October 2026, hourly steps {runs_2026_11e}."],
+        ["Controllers", "Battery idle with the car charging on arrival (the baseline); a simple rule (store spare solar, charge the car in the cheapest hours); and the optimiser (MPC), with perfect or realistic forecasts {runs_2026_11e}."],
+        ["Wear", "Every run is scored with NREL's ageing model; the battery is worth 1,200 €/kWh, the 2022 average for German home systems excluding VAT {code_wear} {figgener2023}."],
+      ] },
+      { kind: "h", text: "Results: yearly saving against battery idle, wear included" },
+      { kind: "facts", rows: [
+        ["Simple rule", "€336 a year (median of the four homes; €210 to €473). Self-sufficiency rose from 34% to 68% {runs_2026_11e}."],
+        ["Optimiser, perfect forecasts", "€399 a year (€321 to €612): better than the rule in every home, by €35 to €139 {runs_2026_11e}."],
+        ["Optimiser, realistic forecasts", "€239 a year (€89 to €425): worse than the rule in every home, by €27 to €197 {runs_2026_11e}."],
+        ["Battery wear", "About €374 a year with the rule, which wears the battery to the end of its life in about 32 years in the model; the optimiser that prices wear stretches that to about 39 years {runs_2026_11e}."],
+      ] },
+      { kind: "h", text: "What it means" },
+      { kind: "list", items: [
+        "A battery mostly earns by storing midday solar for the evening. With the rule, the energy bill fell by €548 to €869 a year (median €672), and wear ate a bit more than half of that {runs_2026_11e}.",
+        "Perfect foresight is worth only about €100 a year more than the simple rule here: the ceiling for any smarter controller on this kind of home and tariff {runs_2026_11e}.",
+        "A deterministic optimiser that trusts imperfect forecasts loses that edge and more, in every home. It needs to plan for uncertainty (see 'Planning under uncertainty') before it can beat a well-chosen rule {runs_2026_11e}.",
+        "Counting wear matters: on energy alone the ranking of controllers can flip, as the June week on the 'Batteries' page shows {runs_2026_11d}.",
+      ] },
+      { kind: "h", text: "Read with care" },
+      { kind: "list", items: [
+        "Four homes are not a market average; the homes differ a lot (energy bills from €614 to €2,300 a year with the battery idle) {runs_2026_11e}.",
+        "The wear value uses 2022 battery prices, which have fallen since, and leaves out financing, inverter replacement and installation; it is not a full payback calculation {figgener2023}.",
+        "Some car visits ask for more energy than the charger can deliver before departure; that shortfall is the same for every controller and comes from the data, not from control {runs_2026_11e}.",
+        "Hourly steps, loads from other years than the weather, and the other simplifications on the 'Limits' page apply {code_profiles}.",
+      ] },
+      { kind: "note", tone: "info", text: "Reproduce it: python -m emsbench.study (about 50 minutes on 8 cores); results in results/study_home_de. Try one home in the app with the example 'German home, solar + battery + EV (full year)'." },
+    ],
+  },
+  {
     id: "limits", section: "lab", title: "Limits: what Site Lab simplifies",
     summary: "Every simulator leaves things out. Here is everything Site Lab simplifies, and which way each simplification is likely to push the results.",
     blocks: [
@@ -399,14 +440,14 @@ export const PAGES: Page[] = [
       { kind: "h", text: "Wear" },
       { kind: "facts", rows: [
         ["Two cells stand for all batteries", "Wear comes from ageing models of one LFP and one NMC cell, tested at gentle rates and, for LFP, between 10 and 45 °C {blast_lite} {gasper2023}."],
-        ["An empty battery barely ages", "In the LFP model a battery kept empty loses almost no capacity, so an idle battery at 0% shows almost no wear {runs_2026_11c}. Real batteries keep some reserve and age a little."],
+        ["An empty battery barely ages", "In the LFP model a battery kept empty loses almost no capacity {runs_2026_11c}. The idle baseline starts at 0% (CityLearn's default) and stays there, so it shows almost no wear {code_model}. A real unused battery sits at some charge and ages more, so wear savings measured against 'idle' look a little too good. Real batteries also keep some reserve."],
         ["Prices from 2022", "Default replacement costs are 2022 averages, higher than today's {figgener2023}. Pushes results: wear in euros is overstated."],
         ["Lives capped at 40 years", "Longer lives are priced by the capacity actually lost in 40 years {code_wear}."],
       ] },
       { kind: "h", text: "The optimiser" },
       { kind: "facts", rows: [
         ["Approximations", "The 'off or at least 6 A' charger rule is handled by relax-and-fix, within 2% of the exact solution in our tests; a billing month that changes inside the horizon is treated as one month {code_mpc}."],
-        ["Flat wear price", "The MPC decides with one wear price per kWh cycled, calibrated on deep daily cycles, which over-charges shallow cycles; in one setting it made the MPC €0.77 worse than ignoring wear {code_wear} {runs_2026_11c}."],
+        ["Flat wear price", "The MPC decides with one wear price per kWh cycled, calibrated on daily full cycles. It ignores how full the battery is kept (which drives calendar ageing) and, for NMC, how deep the cycles are {code_wear} {runs_2026_11f}; in one setting it made the MPC €0.77 worse than ignoring wear {runs_2026_11c}."],
       ] },
       { kind: "h", text: "How far to trust it: a check against published results" },
       { kind: "p", text: "HTW Berlin simulated a 4 MWh/yr home with 1 kWp of solar and 1 kWh of usable battery per MWh of demand and a simple self-consumption rule: about 30% self-consumption and self-sufficiency without the battery, 59% and 56% with it, and about 270 battery cycles a year {weniger2014}. Site Lab with the same sizes on four measured German homes gives a median of 32% and 33% without the battery, 62% and 58% with it, and 219 cycles {code_validate}. One home that uses most of its power around midday reaches 76% self-sufficiency; HTW reports 43% to 61% across 74 households {code_validate}. Close enough to trust comparisons; not a guarantee for any single home." },
@@ -714,6 +755,7 @@ export const PAGES: Page[] = [
       ] },
     ],
   },
+  ...EXAMPLE_PAGES,
   ...DEEP_PAGES,
   ...MARKET_PAGES,
 ];
