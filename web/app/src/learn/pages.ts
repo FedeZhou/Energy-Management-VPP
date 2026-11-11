@@ -253,7 +253,7 @@ export const PAGES: Page[] = [
         "Cycle-ageing cost modelled as a piecewise-linear function, usable in electricity-market clearing {xu2017}.",
         "EMHASS adds virtual costs that steer behaviour without changing the reported bill: an inverter 'stress cost' that grows with the square of power (approximated piecewise-linearly; recommended 0.05-0.20 per kWh at full power) to prefer running 'low and slow', and a cost per kWh per hour spent above a high state-of-charge threshold, because sitting full accelerates calendar ageing {emhass_lp}.",
         "Batteries are not uniform: optimising each string's ageing separately gave 21% more revenue per unit of health lost {graner2025}.",
-        "Site Lab: the MPC decides with one price per kWh cycled (replacement cost x capacity lost per cycle, calibrated on one full 0-100% cycle a day), while every run is scored by the full ageing model. On the German home week this simple price was too high: the battery cycled shallower than the calibration cycle, so each kWh not cycled saved only about €0.11 of wear against a €0.15 price, and wear-aware MPC ended €0.77 worse than wear-blind MPC once wear was counted {code_wear} {runs_2026_11c}. A depth-aware price is the obvious next step.",
+        "Site Lab: the MPC decides with one price per kWh cycled (replacement cost x capacity lost per cycle, calibrated on one full 0-100% cycle a day), while every run is scored by the full ageing model. On the German home week with the real tariff, pricing wear made the MPC cycle less (4.4 instead of 6.4 full cycles) and it ended €0.43 better once wear was counted (€19.96 against €20.39) {code_wear} {runs_2026_11d}. With exports paid nothing (an earlier setting) the same flat price backfired by €0.77: the battery cycled shallower than the calibration cycle, so each kWh not cycled saved only about €0.11 of wear against a €0.15 price {runs_2026_11c}. A depth-aware price is the obvious next step.",
       ] },
       { kind: "h", text: "What field tests and reviews report" },
       { kind: "list", items: [
@@ -312,7 +312,8 @@ export const PAGES: Page[] = [
       ] },
       { kind: "p", text: "When the forecast is wrong, the MPC lets the battery take up the difference in the current step, so the grid exchange stays as planned, and re-plans from the battery's real state at the next re-plan {code_mpc}." },
       { kind: "h", text: "First result: what deterministic MPC loses" },
-      { kind: "p", text: "On the German home example (one June week, solar, battery and an EV), deterministic MPC cost €13.42 with perfect forecasts and €22.13 with realistic ones. The simple self-consumption rule cost €13.45 either way, because it does not look ahead {runs_2026_11b}. Switching each ingredient back to perfect, one at a time, recovers €5.94 when cars are known in advance, €1.75 with perfect solar, €0.52 with perfect load and nothing with perfect prices, which are published in time {runs_2026_11b}. A plan that trusts its forecast exports midday solar it believes it will not need, then meets the unannounced evening car with an empty battery; the rule stores all spare solar anyway and is robust by accident. On the heat-pump home with a bidirectional car the loss was small (€122.5 to €123.3) {runs_2026_11b}. This is the gap the stochastic and robust methods above are meant to close, and Site Lab's next step." },
+      { kind: "p", text: "On the German home example (one June week, solar, battery and an EV, on a dynamic tariff with the EEG feed-in tariff), deterministic MPC cost €19.96 with perfect forecasts and €25.77 with realistic ones, battery wear included. The simple self-consumption rule cost €21.74 either way, because it does not look ahead {runs_2026_11d}. Switching each ingredient back to perfect, one at a time, recovers €2.33 with perfect solar, €1.87 when cars are known in advance, €0.68 with perfect load and nothing with perfect prices, which are published in time {runs_2026_11d}. A plan that trusts its forecast exports midday solar it believes it will not need, then meets a cloudier day or the unannounced evening car with a battery that is less full; the rule stores all spare solar anyway and is robust by accident. This is the gap the stochastic and robust methods above are meant to close, and Site Lab's next step." },
+      { kind: "p", text: "The tariff changes which forecast matters most. When exports earned nothing (an earlier setting of the same example), not knowing when the car arrives was by far the biggest loss: €5.94 of an €8.71 gap in energy cost {runs_2026_11b}. With a feed-in tariff, exported solar is worth something, so wrongly exporting hurts less and the solar forecast weighs more {runs_2026_11d}." },
       { kind: "h", text: "Go deeper" },
       { kind: "facts", rows: [
         ["Stochastic MPC", "Mesbah 2016: overview and research directions {mesbah2016}; the scenario approach {campi2009}."],
@@ -370,6 +371,49 @@ export const PAGES: Page[] = [
     ],
   },
   {
+    id: "limits", section: "lab", title: "Limits: what Site Lab simplifies",
+    summary: "Every simulator leaves things out. Here is everything Site Lab simplifies, and which way each simplification is likely to push the results.",
+    blocks: [
+      { kind: "p", text: "In plain words: a result is only as trustworthy as its weakest assumption. This page lists them in one place, so you can judge a number before you repeat it. 'Pushes results' says which way each simplification probably biases a comparison, where that is clear." },
+      { kind: "h", text: "Data" },
+      { kind: "facts", rows: [
+        ["Stitched across years and places", "Home loads are measured in 2015-2018, weather, solar and prices are from 2025-2026, the EV visits from Norwegian garages in 2018-2020; each is mapped onto the simulated dates by season and weekday {code_profiles}. Weather-driven load (heating on a cold day) is therefore not aligned with that day's solar and prices. Pushes results: probably understates how often high load, low sun and high prices coincide."],
+        ["Solar is modelled, not metered", "From weather with a standard solar model, checked against a long-term reference to about ±10% {pvgis_check}."],
+        ["Example sizes are choices", "Solar, battery and charger sizes in the examples are typical choices, not sourced; device parameters are sourced {code_model}."],
+        ["Hourly runs average short peaks", "Plan mode averages 15-minute data into hours {code_profiles}. Pushes results: lower peaks and fewer fuse problems than reality."],
+      ] },
+      { kind: "h", text: "Devices and the grid" },
+      { kind: "facts", rows: [
+        ["Battery", "Constant efficiency split equally between charging and discharging; no standby consumption or self-discharge; full power at any state of charge {code_engine}. Real home batteries drew 4 to 64 W in standby in a 2026 lab test of 12 systems {htw_inspektion2026}. Pushes results: batteries look slightly better than in reality."],
+        ["Exact state of charge", "Controllers know the battery's charge exactly; real systems estimate it {code_engine}."],
+        ["One meter, simple phases", "Three-phase devices and the house load are spread evenly over the phases; solar can only be curtailed when an export limit is set {code_engine}."],
+        ["Faster than a time step", "Nothing faster than the time step is simulated (inverter control, frequency response); the plan is assumed to be executed exactly {code_engine}."],
+        ["Heat pumps and cars under MPC", "The MPC runs heat pumps on demand and never discharges cars; the rules can do both {code_mpc}."],
+      ] },
+      { kind: "h", text: "Prices and forecasts" },
+      { kind: "facts", rows: [
+        ["Tariffs", "German home examples: day-ahead price + national average grid fees and taxes + a real supplier's margin (2.50 ct/kWh net) {witten_tariff}; exports earn the EEG feed-in tariff, 7.86 ct/kWh {bnetza_eeg}, but nothing while the spot price is negative, as for new systems with a smart meter {eeg51}. Left out: the monthly base fee (fixed, so it does not change any comparison) and the 60% export cap for systems without a smart meter {eeg9}; dynamic tariffs need a smart meter anyway {mkt_enwg41a}."],
+        ["Fixed winter clock", "European data runs on CET all year {code_profiles}. With realistic forecasts, prices are published at 13:00 on that clock, an hour later than reality in summer {code_forecasts}."],
+        ["Realistic forecasts are simple", "Load = the most recent day repeated; solar = the forecast made 24 hours ahead even for the next hour, hourly and repeated over 15-minute steps {code_forecasts}. Pushes results: real systems that update forecasts during the day would do somewhat better."],
+      ] },
+      { kind: "h", text: "Wear" },
+      { kind: "facts", rows: [
+        ["Two cells stand for all batteries", "Wear comes from ageing models of one LFP and one NMC cell, tested at gentle rates and, for LFP, between 10 and 45 °C {blast_lite} {gasper2023}."],
+        ["An empty battery barely ages", "In the LFP model a battery kept empty loses almost no capacity, so an idle battery at 0% shows almost no wear {runs_2026_11c}. Real batteries keep some reserve and age a little."],
+        ["Prices from 2022", "Default replacement costs are 2022 averages, higher than today's {figgener2023}. Pushes results: wear in euros is overstated."],
+        ["Lives capped at 40 years", "Longer lives are priced by the capacity actually lost in 40 years {code_wear}."],
+      ] },
+      { kind: "h", text: "The optimiser" },
+      { kind: "facts", rows: [
+        ["Approximations", "The 'off or at least 6 A' charger rule is handled by relax-and-fix, within 2% of the exact solution in our tests; a billing month that changes inside the horizon is treated as one month {code_mpc}."],
+        ["Flat wear price", "The MPC decides with one wear price per kWh cycled, calibrated on deep daily cycles, which over-charges shallow cycles; in one setting it made the MPC €0.77 worse than ignoring wear {code_wear} {runs_2026_11c}."],
+      ] },
+      { kind: "h", text: "How far to trust it: a check against published results" },
+      { kind: "p", text: "HTW Berlin simulated a 4 MWh/yr home with 1 kWp of solar and 1 kWh of usable battery per MWh of demand and a simple self-consumption rule: about 30% self-consumption and self-sufficiency without the battery, 59% and 56% with it, and about 270 battery cycles a year {weniger2014}. Site Lab with the same sizes on four measured German homes gives a median of 32% and 33% without the battery, 62% and 58% with it, and 219 cycles {code_validate}. One home that uses most of its power around midday reaches 76% self-sufficiency; HTW reports 43% to 61% across 74 households {code_validate}. Close enough to trust comparisons; not a guarantee for any single home." },
+      { kind: "note", tone: "info", text: "When a result matters, check it two ways: over a full year and several homes (the study runner) rather than one week, and with realistic forecasts rather than perfect ones." },
+    ],
+  },
+  {
     id: "use-cases", section: "lab", title: "Control by use case",
     summary: "How the algorithms are applied to a home, a shared garage, an office or C&I site, a data center and a portfolio of sites: what is optimised, what limits bind, what our runs show and what real systems do.",
     blocks: [
@@ -385,7 +429,7 @@ export const PAGES: Page[] = [
       { kind: "h", text: "1. Home with solar, battery and EV" },
       { kind: "math", tex: String.raw`J_{\text{home}} = \sum_t \big[(p_t + a)\, g^{+}_t - p^{\mathrm{exp}}\, g^{-}_t\big]\,\Delta t, \qquad I_{\phi,t} \le I^{\mathrm{fuse}}`,
         caption: String.raw`On a dynamic tariff the household pays the spot price \(p_t\) plus a fixed add-on \(a\) for network costs and taxes; the example uses \(a = €0.237/\mathrm{kWh}\), derived from Eurostat's 2025 averages for Germany {eurostat_check}. Exports earn \(p^{\mathrm{exp}}\) (zero in the example) {code_engine}.` },
-      { kind: "p", text: "Rules in our example: self-consumption for the battery, cheapest hours for the car. Over one June week the bill fell from €33.70 to €13.45 (−60%), the share of consumption covered on site rose from 31% to 73%, every car reached its target, and the battery did 5.2 equivalent full cycles in the week {runs_2026_11}." },
+      { kind: "p", text: "Rules in our example: self-consumption for the battery, cheapest hours for the car. Over one June week the bill fell from €29.32 (battery idle, car charging on arrival) to €11.57 (−61%), the share of consumption covered on site rose from 31% to 73%, every car reached its target, and the battery did 5.2 equivalent full cycles in the week {runs_2026_11d}." },
       { kind: "p", text: "Real systems do the same with more care: evcc combines solar surplus, a price limit and charging plans at one charging point {evcc_solar} {evcc_tariffs} {evcc_plans}; EMHASS runs the full linear program for Home Assistant households, including deferrable appliances {emhass_lp}. What MPC adds at home: deciding whether battery energy is worth more tonight or tomorrow morning, and charging the car from the battery or from the grid, using the wear cost to avoid cycling for tiny gains." },
 
       { kind: "h", text: "2. Shared garage or apartment block" },
@@ -453,12 +497,13 @@ export const PAGES: Page[] = [
       ] },
       { kind: "h", text: "Worked example: one June week, German home with solar and an EV" },
       { kind: "facts", rows: [
-        ["Self-consumption rule", "Energy €13.45 + wear €10.16 = €23.61; expected life 22.6 years {runs_2026_11c}."],
-        ["MPC, wear not priced", "Energy €13.42 + wear €8.28 = €21.70; life 27.8 years {runs_2026_11c}."],
-        ["MPC, wear priced", "Energy €15.21 + wear €7.26 = €22.47; life 31.7 years: it cycled less (4.3 instead of 5.2 full cycles) but paid more for energy than it saved in wear {runs_2026_11c}."],
-        ["Price arbitrage rule", "Barely used the battery: wear €4.57 but energy €29.36 {runs_2026_11c}."],
+        ["Self-consumption rule", "Energy €11.57 + wear €10.16 = €21.74; expected life 22.6 years {runs_2026_11d}."],
+        ["MPC, wear not priced", "Energy €10.06 + wear €10.34 = €20.39; life 22.3 years, 6.4 full cycles {runs_2026_11d}."],
+        ["MPC, wear priced", "Energy €12.32 + wear €7.64 = €19.96; life 30.1 years: it cycled less (4.4 full cycles), paid €2.26 more for energy and saved €2.70 of wear {runs_2026_11d}."],
+        ["Price arbitrage rule", "Barely used the battery: wear €4.57 but energy €26.22 {runs_2026_11d}."],
+        ["Battery idle", "Energy €29.32, wear €0.00 {runs_2026_11d}."],
       ] },
-      { kind: "p", text: "Once wear is counted, the gap between the rule and the optimiser grows (€23.61 vs €21.70), because the optimiser cycled more gently for the same savings. And the idle battery in this example ages almost not at all: in the LFP model, a battery kept empty barely loses capacity {runs_2026_11c}." },
+      { kind: "p", text: "On energy alone the simple rule beat the wear-aware optimiser (€11.57 against €12.32); with wear counted the optimiser wins by €1.78, because it cycled more gently {runs_2026_11d}. And the idle battery ages almost not at all: in the LFP model, a battery kept empty barely loses capacity {runs_2026_11d}." },
     ],
   },
   {

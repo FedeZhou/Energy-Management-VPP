@@ -270,12 +270,16 @@ This is why real "solar charging" products switch to one phase.
   (EMHASS's "naive" method), the weather forecast made a day earlier for solar (Open-Meteo keeps an archive of past
   forecasts), day-ahead prices only once published (auction closes 12:00, results about 13:00), and cars only once
   they plug in. "Compare forecasts" runs both.
-- **Deterministic MPC can lose to a simple rule once forecasts are real.** On the German home week, MPC cost €13.42
-  with perfect forecasts and €22.13 with realistic ones; the self-consumption rule cost €13.45 either way. Putting each
-  piece of knowledge back one at a time: knowing when cars arrive was worth €5.94, perfect solar €1.75, perfect load
-  €0.52, perfect prices nothing (they are published in time). An optimiser that trusts its forecast exports solar it
-  thinks it will not need; the rule stores everything and is robust by accident. This is the case for stochastic or
-  robust MPC, and for forecasting car visits.
+- **Deterministic MPC can lose to a simple rule once forecasts are real.** On the German home week (real tariff:
+  dynamic price, 7.86 ct/kWh feed-in, no export pay at negative prices), MPC cost €19.96 with perfect forecasts and
+  €25.77 with realistic ones, wear included; the self-consumption rule cost €21.74 either way. Putting each piece of
+  knowledge back one at a time: perfect solar was worth €2.33, knowing car arrivals €1.87, perfect load €0.68,
+  perfect prices nothing (they are published in time). An optimiser that trusts its forecast exports solar it thinks
+  it will not need; the rule stores everything and is robust by accident. This is the case for stochastic or robust
+  MPC, and for forecasting car visits.
+- **The tariff decides which forecast matters.** With exports paid nothing (our earlier setting) not knowing the car's
+  arrival dominated (€5.94 of €8.71). With a feed-in tariff, wrongly exported solar still earns something, so solar
+  forecasts weigh more. Get the tariff right before drawing conclusions.
 - **Day-ahead weather forecasts are rough at the hour level.** Across 10 solar profiles (Oct 2025 to Nov 2026) the
   day-ahead forecast missed daytime output by 17-30% of its mean on average, while yearly totals were within about 10%.
 - **Watch the end of the data.** A forecast that pads beyond the last data point with the last value (night: no sun,
@@ -293,11 +297,27 @@ This is why real "solar charging" products switch to one phase.
   a run by its share of a whole life avoids charging the first weeks' steep loss to whoever runs first.
 - **Chemistry matters a lot.** At one full cycle a day and 25 °C, the LFP model lasts about 6,150 cycles (19 years) to
   80%, the NMC model about 2,260 (7 years). In the LFP model an empty battery barely ages; a full one ages fastest.
-- **A single price per kWh cycled is too crude.** Calibrated on deep daily cycles it is about €0.15/kWh for a home
-  LFP battery at 2022 prices. On the German home week the optimiser's cycles were shallower and wore the battery
-  less, so the price was too high: wear-aware MPC cycled less but lost more energy savings than it saved in wear
-  (€22.47 vs €21.70 with wear counted). Wear is also why the simple rule falls behind once it is counted: €23.61.
+- **A single price per kWh cycled is crude, and whether it pays depends on the tariff.** Calibrated on deep daily
+  cycles it is about €0.15/kWh for a home LFP battery at 2022 prices. On the German home week with the real tariff,
+  wear-aware MPC cycled less and won once wear was counted (€19.96 vs €20.39 for wear-blind MPC); with exports paid
+  nothing it backfired by €0.77, because the battery's shallow cycles wore it less than the price assumed. On energy
+  alone the simple rule beat the wear-aware optimiser (€11.57 vs €12.32); with wear counted it lost (€21.74).
 - **Replacement prices move fast.** German home storage cost about 2,500 €/kWh in 2013, 920 in 2021 and an estimated
   1,200 in 2022 (Figgener et al. 2023, excluding VAT); prices have fallen since. Wear in euros is only as good as
   that number, so it is a setting.
+
+## 15. Real-world rules change the numbers
+
+- **German small solar is paid for exports, but not at negative prices.** New rooftop systems up to 10 kWp earn
+  7.86 ct/kWh for partial feed-in (commissioned Aug 2025 - Jan 2026, Bundesnetzagentur). Since the 2025
+  "Solarspitzengesetz", new systems with a smart meter earn nothing while the spot price is negative (§ 51 EEG). In
+  our June week that rule alone cost the home €3.89 against being paid for every exported kWh, because many sunny
+  midday hours had negative prices.
+- **A dynamic tariff is mostly fixed fees.** A real price sheet (Stadtwerke Witten, June 2026) adds to the spot price a
+  2.50 ct/kWh supplier price, about 11 ct network fee, levies and 19% VAT, plus a monthly base fee. Only the spot part
+  moves, so the swing between cheap and dear hours is smaller than the bill suggests.
+- **Check the simulator against a published study.** With HTW Berlin's normalised sizes (1 kWp solar and 1 kWh
+  battery per MWh of demand) our four measured homes reach a median 58% self-sufficiency (published 56%) and 219
+  battery cycles a year (published about 270). Our data is 15-minute, theirs one-minute; the measured homes range from
+  49% to 76%, one of them using most of its power around midday.
 

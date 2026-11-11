@@ -62,7 +62,7 @@ companies rely on that our simulator cannot represent?* If we cannot simulate it
 
 | # | Capability | Who relies on it | emsbench today | Gap size | Priority |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **Forecast-driven control** using price, solar and load forecasts | Everyone with "AI" in the pitch (Heartbeat, Gridshare, Furo, traders) | Deterministic MPC (`sim/mpc.py`) with **perfect or realistic** forecasts (`sim/forecasts.py`: yesterday's load, archived day-ahead weather forecasts for solar, prices once published, cars once plugged in) and a "Compare forecasts" view; in the June home week the MPC cost €13.42 with perfect and €22.13 with realistic forecasts vs €13.45 for the self-consumption rule (our runs, 10 Nov 2026) | Medium | **High**: better forecast models, probabilistic forecasts and an error sweep are missing |
+| 1 | **Forecast-driven control** using price, solar and load forecasts | Everyone with "AI" in the pitch (Heartbeat, Gridshare, Furo, traders) | Deterministic MPC (`sim/mpc.py`) with **perfect or realistic** forecasts (`sim/forecasts.py`: yesterday's load, archived day-ahead weather forecasts for solar, prices once published, cars once plugged in) and a "Compare forecasts" view; in the June home week (real tariff, wear included) the MPC cost €19.96 with perfect and €25.77 with realistic forecasts vs €21.74 for the self-consumption rule (our runs, 11 Nov 2026) | Medium | **High**: better forecast models, probabilistic forecasts and an error sweep are missing |
 | 2 | **Fleet / portfolio aggregation**: many homes behind many meters, bid as one | All residential VPPs and aggregators | One site, one meter | Large | **High**: needed for "residential at scale" (section 3) |
 | 3 | **Heat pumps and thermal storage** (comfort as a constraint) | 1KOMMA5°, Axle, Kraken, Renew Home (thermostats are over half its 16.8 GW) | **Built 2026-11-09**: heat pump asset (When2Heat heat demand + COP, hot-water tank, unmet heat reported), rule strategies; not yet in the MPC; no building thermal model | Small (remaining) | MPC scheduling of the tank |
 | 4 | **Reserve markets** (FCR, aFRR) and value stacking with energy trading | enspired (FCR, aFRR), 1KOMMA5° (FCR-D, unverified), Capalo | Energy price and demand charges only | Medium | Medium: needs a 1-15 min reserve model and availability penalties |
@@ -110,7 +110,8 @@ of the claimed fleet flexibility survives forecast error, opt-outs and a transfo
 The principle: **we reproduce their behaviour in simulation so we can measure it, not their product.** Each step
 below is a deliverable that unlocks a new benchmark question. Step 1 comes first: an MPC that sees the future perfectly is an
 upper bound, not a fair stand-in for a commercial "AI" controller (realistic forecasts landed on 10 Nov 2026 and showed exactly
-that: the June-week MPC went from €13.42 to €22.13, worse than the simple rule).
+that: with the real German tariff and battery wear included, the June-week MPC went from €19.96 to €25.77, worse
+than the simple rule at €21.74; our runs, 11 Nov 2026).
 
 | Step | What we build | What it lets us benchmark | Whose behaviour it reproduces | Size |
 | --- | --- | --- | --- | --- |
@@ -171,10 +172,11 @@ is becoming a business of its own: Kraken was spun out, and Enpal now sells its 
 
 1. **Their results depend on imperfect information.** Fuse's margin depends on its forecasts; its EV control depends
    on the departure time and target a customer types in. Our first results show how much this matters: in the June
-   home week, the MPC cost €13.42 with perfect forecasts but €22.13 with realistic ones (yesterday's load, archived
-   weather forecasts, prices once published, cars only once plugged in), worse than the simple self-consumption rule
-   at €13.45. Most of the gap came from not knowing when cars arrive (worth €5.94), then solar (€1.75) and load
-   (€0.52); prices cost nothing, since day-ahead prices are published in advance (our runs, 10 Nov 2026). Knowing
+   home week (real German tariff, battery wear included), the MPC cost €19.96 with perfect forecasts but €25.77 with
+   realistic ones (yesterday's load, archived weather forecasts, prices once published, cars only once plugged in),
+   worse than the simple self-consumption rule at €21.74. The gap came from solar (worth €2.33), not knowing when cars
+   arrive (€1.87) and load (€0.68); prices cost nothing, since day-ahead prices are published in advance. With exports
+   paid nothing (an earlier setting) car arrivals dominated: €5.94 of an €8.71 gap (our runs, 10-11 Nov 2026). Knowing
    the car's plan is exactly what Fuse asks its customers for in the app. This is the forecast-error question at the
    centre of emsbench.
 2. **Time-window tariffs synchronise fleets.** With hundreds of thousands of customers on the same cheap window, the
@@ -192,7 +194,8 @@ is becoming a business of its own: Kraken was spun out, and Enpal now sells its 
 
 **Where we are (2026-11-09).** Site Lab simulates one site at a time (home, garage, office, data center) on open
 measured data, with rule controllers and a deterministic MPC that plans on perfect or, since 10 Nov 2026, realistic
-forecasts (in the June home week: €13.42 perfect, €22.13 realistic, vs €13.45 for the self-consumption rule). It has
+forecasts (in the June home week, wear included: €19.96 perfect, €25.77 realistic, vs €21.74 for the
+self-consumption rule). It has
 batteries, solar, EV chargers including bidirectional ones (V2H/V2G), a heat pump asset (When2Heat data), a data
 center asset, German §14a dimming (BNetzA BK6-22-300, Annex 1) and time-variable network fees (Modul 3) from two real
 2026 price sheets, plus demand charges and fuses. Not yet: forecasts with errors, battery wear in the objective, a

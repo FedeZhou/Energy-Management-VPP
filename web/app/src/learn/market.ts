@@ -121,7 +121,7 @@ export const MARKET_PAGES: Page[] = [
         "Markets and value stacking: reserve products (FCR, aFRR), intraday prices, battery wear as a cost, revenue split between operator and households {mkt_svk}.",
         "The trust report: a public, reproducible scoreboard of every controller at every scale, under the same forecast error {mkt_doc}.",
       ] },
-      { kind: "note", tone: "info", text: "Order matters: forecasts before market features, because comparing a perfect-foresight MPC with a commercial product would flatter us (in our June week the MPC cost €13.42 with perfect forecasts and €22.13 with realistic ones) {runs_2026_11b}; the fleet layer before the neighbourhood, because a street is a small fleet with a shared limit {mkt_doc}." },
+      { kind: "note", tone: "info", text: "Order matters: forecasts before market features, because comparing a perfect-foresight MPC with a commercial product would flatter us (in our June week the MPC cost €19.96 with perfect forecasts and €25.77 with realistic ones, wear included, against €21.74 for the simple rule) {runs_2026_11d}; the fleet layer before the neighbourhood, because a street is a small fleet with a shared limit {mkt_doc}." },
     ],
   },
 
