@@ -391,6 +391,15 @@ class ControllerSpec(BaseModel):
         help="Only used by mpc. How often it re-optimises (also immediately when a car arrives). Shorter is more "
         "responsive but slower to simulate.",
     )
+    mpc_scenarios: int = param(
+        1, "MPC scenarios", ge=1, le=10,
+        help="Only used by mpc with realistic forecasts. 1: plan for one forecast. More: plan for several possible "
+        "futures at once, each replayed from one of the last days (that day's load, that day's solar forecast error, "
+        "that day's car visits), committing only to the next re-plan interval and minimising the average cost. "
+        "Slower roughly in proportion.",
+        source="Two-stage scenario-based stochastic MPC (scenario approach: Campi et al. 2009); "
+        "the number is an example choice",
+    )
     mpc_wear_cost: bool = param(
         True, "MPC prices battery wear",
         help="Only used by mpc. Charge each kWh cycled through the battery at its wear price (replacement cost x "

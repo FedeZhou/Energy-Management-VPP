@@ -121,3 +121,55 @@ def test_export_earns_nothing_at_negative_spot_prices_when_the_rule_applies() ->
 
     # hours 11-14: 4 kW exported at 0.08 for 4 h per day over 2 days = 2.56 more without the rule
     assert run(True) - run(False) == pytest.approx(4 * 0.08 * 4 * 2)
+
+
+def test_persistence_can_replay_an_earlier_day() -> None:
+    history = np.arange(0, 2 * D, dtype=float)  # two days before the run
+    actual = np.arange(100, 100 + 3 * D, dtype=float)
+    fc = persistence(history, actual, t=D, steps=D, period=D, extra_periods=1)
+    assert np.array_equal(fc, history[D:])  # two days back from day 1 = the last history day
+
+
+def test_history_scenarios_replay_past_car_visits_only() -> None:
+    from emsbench.sim.forecasts import FutureSession
+
+    z = np.zeros(4 * D)
+    visits = [[FutureSession(18, 24, 5.0, 7.0, 4.1), FutureSession(42, 48, 6.0, 7.0, 4.1)]]
+    fc = RealisticForecast({"load": z, "pv": z, "price": z, "demand_rate": z}, np.zeros(D), np.zeros(D), None, D, 0,
+                           None, ev_visits=visits)
+    # At step 30 (day 1, 06:00) the day-0 visit (18-24 h) has been seen, the day-1 visit (42 h) not yet.
+    assert [(s.arrive, s.energy_kwh) for s in fc.scenario(0).sessions(0, 30, D)] == [(42, 5.0)]
+    assert fc.scenario(1).sessions(0, 30, D) == []  # two days back is before the run: nothing seen
+    assert fc.sessions(0, 30, D) == []  # the single realistic forecast knows no future cars
+
+
+def test_scenario_mpc_plans_for_the_evening_car_seen_on_past_days(monkeypatch: pytest.MonkeyPatch) -> None:
+    from emsbench.sim import mpc as mpc_module
+
+    lib = _library()
+    days = 3
+    sess = tuple(EVSession(START + dt.timedelta(days=k, hours=18), START + dt.timedelta(days=k, hours=22), 8.0, "car")
+                 for k in range(days))
+    lib.ev_sets = {"ev": EVSessionSet("ev", "ev", "test", sess, START, START + dt.timedelta(days=days))}
+    charger = EVCharger(id="c", sessions="ev", max_power_kw=11.0, efficiency=1.0)
+    pv = SolarPV(id="pv", capacity_kwp=6.0, profile="pv")
+    plans: dict[int, object] = {}
+    solve = mpc_module.MPCController.solve
+
+    def spy(self, obs):  # type: ignore[no-untyped-def]
+        plan = solve(self, obs)
+        plans[obs.t] = plan
+        return plan
+
+    monkeypatch.setattr(mpc_module.MPCController, "solve", spy)
+
+    def planned_car_energy_at_noon_day2(n: int) -> float:
+        plans.clear()
+        s = _site(HOME, pv, BAT, charger, forecast="realistic")
+        s = s.model_copy(update={"days": days, "controller": s.controller.model_copy(update={"mpc_scenarios": n})})
+        r = simulate(s, lib)
+        assert r.kpis["ev_unmet_kwh"] == pytest.approx(0.0, abs=1e-6)
+        return float(plans[36].ev_kw[0].sum())  # type: ignore[attr-defined]
+
+    assert planned_car_energy_at_noon_day2(1) == pytest.approx(0.0)  # no car known before it plugs in
+    assert planned_car_energy_at_noon_day2(3) > 1.0  # the car seen yesterday at 18:00 is expected again

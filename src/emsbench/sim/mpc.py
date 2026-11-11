@@ -185,6 +185,9 @@ class _LP:
         return np.asarray(m.x[:n0], dtype=float)
 
 
+_ScenarioVars = tuple[NDArray[np.int_], NDArray[np.int_], list[tuple[int, int, str, NDArray[np.int_]]], FloatArray]
+
+
 @dataclass
 class Plan:
     t0: int
@@ -226,27 +229,71 @@ class MPCController:
         error = actual_net - float(self.plan.net_kw[k])
         return Action(battery_kw=float(self.plan.battery_kw[k]) - error, ev_kw=tuple(ev_kw))
 
-    def solve(self, obs: Observation) -> Plan:
-        lim, H, dt = self.lim, self.horizon, self.lim.step_hours
-        load = self.forecast.window("load", obs.t, H)
-        pv = self.forecast.window("pv", obs.t, H)
-        price = self.forecast.window("price", obs.t, H)
-        rate = self.forecast.window("demand_rate", obs.t, H)
-        net0 = load - pv
-        lp = _LP()
-        big = 10.0 * max(1.0, float(np.abs(price).max()), lim.demand_rate_flat)  # per kWh of missed EV energy
-        huge = 100.0 * big  # per kWh over a limit
+    def _scenarios(self) -> list[Forecast]:
+        """The futures to plan for: one forecast, or several replayed from history (scenario MPC)."""
+        make = getattr(self.forecast, "scenario", None)
+        if self.spec.mpc_scenarios <= 1 or make is None:
+            return [self.forecast]
+        return [make(b) for b in range(self.spec.mpc_scenarios)]
 
-        imp = lp.var(H, cost=price * dt)
+    def solve(self, obs: Observation) -> Plan:
+        """One LP over all scenarios. Decisions until the next re-plan are shared (one battery power and one charging
+        power per plugged-in car, whatever happens); later steps may differ per scenario. The objective is the
+        average cost over the scenarios (two-stage stochastic MPC). With one scenario this is the deterministic MPC."""
+        lim, H = self.lim, self.horizon
+        fcs = self._scenarios()
+        weight = 1.0 / len(fcs)
+        n_shared = min(self.replan_every, H)
+        prices = [fc.window("price", obs.t, H) for fc in fcs]
+        big = 10.0 * max(1.0, max(float(np.abs(p).max()) for p in prices), lim.demand_rate_flat)
+        lp = _LP()
+        shared: dict[str, NDArray[np.int_]] = {}
+        results = [self._add_scenario(lp, obs, fc, weight, shared, n_shared, big) for fc in fcs]
+        x = lp.solve(exact=self.exact)
+        self.solves += 1
+        ch, dis, blocks, _ = results[0]
+        bat = x[ch] - x[dis]
+        ev_plan = np.zeros((len(obs.evs), H))
+        for i, k0, _, car_vars in blocks:
+            ev_plan[i, k0: k0 + car_vars.size] = x[car_vars]
+        net = np.mean([r[3] for r in results], axis=0)  # the battery absorbs deviations from the average net load
+        return Plan(obs.t, bat, ev_plan, net)
+
+    def _add_scenario(self, lp: _LP, obs: Observation, fc: Forecast, weight: float,
+                      shared: dict[str, NDArray[np.int_]], n_shared: int, big: float) -> _ScenarioVars:
+        """Variables and constraints of one scenario, its costs weighted by `weight`."""
+        lim, H, dt = self.lim, self.horizon, self.lim.step_hours
+        load = fc.window("load", obs.t, H)
+        pv = fc.window("pv", obs.t, H)
+        price = fc.window("price", obs.t, H)
+        rate = fc.window("demand_rate", obs.t, H)
+        net0 = load - pv
+        huge = 100.0 * big  # per kWh over a limit
+        w = weight
+
+        def first_stage(key: str, n: int, ub: float, cost: float | FloatArray) -> NDArray[np.int_]:
+            """n variables whose first n_shared (or fewer) are shared by all scenarios."""
+            costs = np.broadcast_to(np.asarray(cost, dtype=float), (n,))
+            m = min(n, n_shared)
+            if key not in shared:
+                shared[key] = lp.var(m, ub=ub, cost=w * costs[:m])
+            else:
+                for j, c in zip(shared[key], costs[:m], strict=True):
+                    lp.c[int(j)] += w * float(c)
+            own = lp.var(n - m, ub=ub, cost=w * costs[m:])
+            both: NDArray[np.int_] = np.concatenate([shared[key], own]).astype(np.int_)
+            return both
+
+        imp = lp.var(H, cost=w * price * dt)
         # One meter cannot import and export at once. If the import price falls below the export price (negative
         # wholesale prices), importing to export would look like free money in the LP, so in those steps exported
         # energy is valued at no more than the import price.
         try:  # the export price per step (e.g. zero at negative spot prices), else the fixed one
-            export_price = self.forecast.window("export_price", obs.t, H)
+            export_price = fc.window("export_price", obs.t, H)
         except KeyError:
             export_price = np.full(H, lim.export_price)
         exp = lp.var(H, ub=lim.export_limit_kw if lim.export_limit_kw is not None else INF,
-                     cost=-np.minimum(export_price, price) * dt)
+                     cost=-w * np.minimum(export_price, price) * dt)
         # Curtailment only exists with an export limit; battery variables are fixed at 0 without a battery.
         cur = lp.var(H, ub=np.maximum(pv, 0.0) if lim.export_limit_kw is not None else 0.0)
         has_bat = lim.battery_capacity_kwh > 0 and lim.battery_power_kw > 0
@@ -254,8 +301,8 @@ class MPCController:
         # Cycling costs battery life: half the wear price per kWh charged, half per kWh discharged (one equivalent
         # full cycle = one capacity in and out). The tie-break avoids pointless cycling when wear is not priced.
         cycle_cost = max(lim.battery_wear_per_kwh / 2, TIE_BREAK_PER_KWH)
-        ch = lp.var(H, ub=p_bat, cost=cycle_cost * dt)
-        dis = lp.var(H, ub=p_bat, cost=cycle_cost * dt)
+        ch = first_stage("ch", H, p_bat, cycle_cost * dt)
+        dis = first_stage("dis", H, p_bat, cycle_cost * dt)
         if has_bat:
             e0 = float(np.clip(obs.battery_energy_kwh, lim.battery_min_kwh, lim.battery_max_kwh))
             energy = lp.var(H + 1, lb=lim.battery_min_kwh, ub=lim.battery_max_kwh)
@@ -265,31 +312,39 @@ class MPCController:
                        int(dis[k]): dt / lim.battery_eta}, 0.0)
             # value of energy left at the end (see module docstring); 0 when the cheapest price is negative
             leftover_value = lim.battery_eta * max(0.0, float(price.min()), lim.export_price)
-            lp.c[int(energy[H])] -= leftover_value
+            lp.c[int(energy[H])] -= w * leftover_value
 
-        # EV blocks: the plugged-in car and the cars expected to arrive inside the horizon, each with
-        # power variables from arrival to departure (or the horizon end).
+        # EV blocks: the plugged-in car (its first steps shared by all scenarios) and the cars this scenario
+        # expects inside the horizon, each with power variables from arrival to departure (or the horizon end).
         blocks: list[tuple[int, int, str, NDArray[np.int_]]] = []  # (charger, first step, phase, variables)
         for i, ev in enumerate(obs.evs):
             eff = lim.charger_efficiency[i]
-            visits: list[tuple[int, int, float, float, float, str]] = []  # (offset, steps left, kWh, max, min, phase)
+            visits: list[tuple[int, int, float, float, float, str, bool]] = []  # last field: the plugged-in car
+            free_from = ev.steps_left if ev.connected else 0
             if ev.connected and ev.remaining_kwh > 1e-9:
-                visits.append((0, ev.steps_left, ev.remaining_kwh, ev.max_kw, ev.min_kw, ev.phase))
-            for fs in self.forecast.sessions(i, obs.t, H):
-                visits.append((fs.arrive - obs.t, fs.depart - fs.arrive, fs.energy_kwh, fs.max_kw, fs.min_kw, fs.phase))
-            for k0, steps_left, kwh, max_kw, min_kw, phase in visits:
+                visits.append((0, ev.steps_left, ev.remaining_kwh, ev.max_kw, ev.min_kw, ev.phase, True))
+            for fs in fc.sessions(i, obs.t, H):
+                k0 = fs.arrive - obs.t
+                if k0 < free_from:  # the charger is still busy: the engine would skip this car
+                    continue
+                visits.append((k0, fs.depart - fs.arrive, fs.energy_kwh, fs.max_kw, fs.min_kw, fs.phase, False))
+                free_from = k0 + (fs.depart - fs.arrive)
+            for k0, steps_left, kwh, max_kw, min_kw, phase, plugged in visits:
                 n = max(0, min(steps_left, H - k0))
                 if n == 0:
                     continue
-                car_vars = lp.var(n, ub=max_kw)
+                key = f"ev{i}"
+                first_time = key not in shared
+                car_vars = first_stage(key, n, max_kw, 0.0) if plugged else lp.var(n, ub=max_kw)
                 blocks.append((i, k0, phase, car_vars))
-                # Off, or at least the minimum power (less only for the final top-up, as the engine allows).
+                # Off, or at least the minimum power (less only for the final top-up, as the engine allows). Shared
+                # variables are registered once, with the first scenario.
                 lo = min(min_kw, kwh / eff / dt)
-                lp.off_or_at_least(car_vars, lo)
+                lp.off_or_at_least(car_vars if (not plugged or first_time) else car_vars[len(shared[key]):], lo)
                 # energy that cannot wait until after the horizon must be delivered inside it
                 need = max(0.0, kwh - (steps_left - n) * max_kw * eff * dt)
                 if need > 0:
-                    short = lp.var(1, cost=big)
+                    short = lp.var(1, cost=w * big)
                     terms: dict[int, float] = {int(j): -eff * dt for j in car_vars}
                     terms[int(short[0])] = -1.0
                     lp.le(terms, -need)
@@ -307,13 +362,13 @@ class MPCController:
             lp.eq(bal, float(net0[k]))
 
         if lim.import_limit_kw is not None:
-            over = lp.var(H, cost=huge * dt)
+            over = lp.var(H, cost=w * huge * dt)
             for k in range(H):
                 lp.le({int(imp[k]): 1.0, int(over[k]): -1.0}, lim.import_limit_kw)
 
         if lim.fuse_kw is not None:
             for name in ("L1", "L2", "L3"):
-                slack = lp.var(H, cost=huge * dt)
+                slack = lp.var(H, cost=w * huge * dt)
                 for k in range(H):
                     row = {int(slack[k]): -1.0, int(ch[k]): 1 / 3, int(dis[k]): -1 / 3, int(cur[k]): 1 / 3}
                     for j, b in ev_at[k]:
@@ -325,19 +380,12 @@ class MPCController:
                     lp.le(row, lim.fuse_kw - float(net0[k]) / 3)
 
         if lim.demand_rate_flat > 0:
-            peak = lp.var(1, lb=max(0.0, obs.month_peak_kw), cost=lim.demand_rate_flat)
+            peak = lp.var(1, lb=max(0.0, obs.month_peak_kw), cost=w * lim.demand_rate_flat)
             for k in range(H):
                 lp.le({int(imp[k]): 1.0, int(peak[0]): -1.0}, 0.0)
         tou_seen = dict(obs.tou_peaks)
         for r in np.unique(rate[rate > 0]):
-            peak = lp.var(1, lb=max(0.0, tou_seen.get(float(r), 0.0)), cost=float(r))
+            peak = lp.var(1, lb=max(0.0, tou_seen.get(float(r), 0.0)), cost=w * float(r))
             for k in np.flatnonzero(rate == r):
                 lp.le({int(imp[k]): 1.0, int(peak[0]): -1.0}, 0.0)
-
-        x = lp.solve(exact=self.exact)
-        self.solves += 1
-        bat = x[ch] - x[dis]
-        ev_plan = np.zeros((len(obs.evs), H))
-        for i, k0, _, car_vars in blocks:
-            ev_plan[i, k0: k0 + car_vars.size] = x[car_vars]
-        return Plan(obs.t, bat, ev_plan, net0)
+        return ch, dis, blocks, net0

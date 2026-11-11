@@ -87,18 +87,20 @@ class PerfectForecast:
         return [s for s in self.ev[charger] if t < s.arrive < t + steps]
 
 
-def persistence(history: FloatArray, actual: FloatArray, t: int, steps: int, period: int) -> FloatArray:
-    """Repeat the most recent `period` steps observed before step t.
+def persistence(history: FloatArray, actual: FloatArray, t: int, steps: int, period: int,
+                extra_periods: int = 0) -> FloatArray:
+    """Repeat the most recent `period` steps observed before step t (`extra_periods` more periods back).
 
-    `history` holds the `period` steps just before step 0, `actual` the run itself. Step t is not yet
-    observed, so the forecast for step t + k is the value one, two, ... periods earlier, whichever is the
-    latest already seen.
+    `history` holds the steps just before step 0 (at least one period), `actual` the run itself. Step t is not
+    yet observed, so the forecast for step t + k is the value one, two, ... periods earlier, whichever is the
+    latest already seen; `extra_periods` = 1 uses the day before that, and so on. Where the history is too short,
+    the earliest value available is used.
     """
     ext = np.concatenate([history, actual])
-    now = t + period  # index of step t in ext
+    now = t + history.size  # index of step t in ext
     k = now + np.arange(steps)
-    back = ((k - now) // period + 1) * period
-    out: FloatArray = ext[np.minimum(k - back, ext.size - 1)].astype(float)
+    back = ((k - now) // period + 1 + extra_periods) * period
+    out: FloatArray = ext[np.clip(k - back, 0, ext.size - 1)].astype(float)
     return out
 
 
@@ -113,6 +115,11 @@ class RealisticForecast:
     steps_per_day: int
     first_step_of_day: int  # steps from midnight to the run's first step
     price_published_step: int | None  # step of the day when tomorrow's prices are published; None = known
+    ev_visits: list[list[FutureSession]] = field(default_factory=list)  # per charger; only past ones are used
+
+    def scenario(self, back: int) -> HistoryScenario:
+        """A possible future replayed from `back` + 1 days ago (see HistoryScenario)."""
+        return HistoryScenario(self, back)
 
     def window(self, name: str, t: int, steps: int) -> FloatArray:
         d = self.steps_per_day
@@ -135,7 +142,7 @@ class RealisticForecast:
         end_of_today = t - tod + d
         return end_of_today + (d if tod >= self.price_published_step else 0)
 
-    def _published(self, name: str, t: int, steps: int) -> FloatArray:
+    def _published(self, name: str, t: int, steps: int, extra_days: int = 0) -> FloatArray:
         truth = _pad(self.actual[name], t, steps, self.steps_per_day)
         known = self.known_until(t) - t
         if known >= steps:
@@ -143,9 +150,58 @@ class RealisticForecast:
         d, series = self.steps_per_day, self.actual[name]
         out = truth.copy()
         for k in range(max(known, 0), steps):  # beyond the published prices: repeat the last known day
-            j = t + k - ((k - known) // d + 1) * d  # same time of day, before the first unpublished step
+            j = t + k - ((k - known) // d + 1 + extra_days) * d  # same time of day, before the first unpublished step
             out[k] = series[min(max(j, 0), series.size - 1)]
         return out
 
     def sessions(self, charger: int, t: int, steps: int) -> list[FutureSession]:
         return []
+
+
+@dataclass
+class HistoryScenario:
+    """One possible future for scenario-based (stochastic) MPC, replayed from the recent past.
+
+    Scenario `back` = b replays the day b + 1 days ago (b = 0 is yesterday), using only what was observed before
+    step t: that day's load; today's day-ahead solar forecast corrected by that day's forecast error (or that
+    day's solar where no forecast archive exists); prices as published, then that day's prices; and the car
+    visits the driver made that day, at the same times. Several scenarios together show the controller how
+    much the future can differ from its single best guess.
+    """
+
+    base: RealisticForecast
+    back: int
+
+    def window(self, name: str, t: int, steps: int) -> FloatArray:
+        b, d = self.base, self.base.steps_per_day
+        if name == "load":
+            return persistence(b.load_before, b.actual["load"], t, steps, d, self.back)
+        if name == "pv":
+            if b.pv_dayahead is None:
+                return persistence(b.pv_before, b.actual["pv"], t, steps, d, self.back)
+            k = t + np.arange(steps)
+            j = k - ((k - t) // d + 1 + self.back) * d  # the same time on the replayed day (observed)
+            fc = _pad(b.pv_dayahead, t, steps, d)
+            ok = (j >= 0) & (j < b.actual["pv"].size)
+            residual = np.zeros(steps)
+            jj = j[ok]
+            residual[ok] = b.actual["pv"][jj] - b.pv_dayahead[jj]
+            out: FloatArray = np.clip(fc + residual, 0.0, None)
+            return out
+        if name in ("price", "export_price"):
+            return b._published(name, t, steps, self.back)
+        return b.window(name, t, steps)
+
+    def sessions(self, charger: int, t: int, steps: int) -> list[FutureSession]:
+        """The driver's visits on the replayed day(s), moved to the same times ahead; only visits already seen."""
+        if charger >= len(self.base.ev_visits):
+            return []
+        d, out = self.base.steps_per_day, []
+        for q in range(-(-steps // d)):
+            shift = (self.back + q + 1) * d
+            for v in self.base.ev_visits[charger]:
+                a = v.arrive + shift
+                if v.arrive < t and t < a < t + steps and t + q * d <= a < t + (q + 1) * d:
+                    out.append(FutureSession(a, a + (v.depart - v.arrive), v.energy_kwh, v.max_kw, v.min_kw, v.phase))
+        out.sort(key=lambda s: s.arrive)
+        return out

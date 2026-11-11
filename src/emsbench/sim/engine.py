@@ -244,22 +244,24 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     forecast: Forecast
     actual = {"load": load_tot + hp_need_tot, "pv": pv_tot, "price": price_ext, "export_price": export_ext,
               "demand_rate": demand_rate}
+    # The sessions the engine will accept (a car arriving while the charger is busy is skipped). A perfect
+    # forecast knows them in advance; a realistic one only those already seen (for scenario MPC).
+    upcoming: list[list[FutureSession]] = []
+    for i in range(n_c):
+        accepted: list[FutureSession] = []
+        free_from = -1
+        for a in sorted(arrivals[i]):
+            dep, s = arrivals[i][a]
+            if a < free_from:
+                continue
+            mx, car_phase, mn = car_limits(i, s)
+            accepted.append(FutureSession(int(a), int(dep), float(s.energy_kwh), mx, mn, car_phase))
+            free_from = int(dep)
+        upcoming.append(accepted)
     if site.controller.forecast == "realistic":
         forecast = _realistic_forecast(site, lib, actual, used, start, T, step_s, pvs, warnings)
+        forecast.ev_visits = upcoming
     else:
-        # The sessions the engine will accept (a car arriving while the charger is busy is skipped).
-        upcoming: list[list[FutureSession]] = []
-        for i in range(n_c):
-            accepted: list[FutureSession] = []
-            free_from = -1
-            for a in sorted(arrivals[i]):
-                dep, s = arrivals[i][a]
-                if a < free_from:
-                    continue
-                mx, car_phase, mn = car_limits(i, s)
-                accepted.append(FutureSession(int(a), int(dep), float(s.energy_kwh), mx, mn, car_phase))
-                free_from = int(dep)
-            upcoming.append(accepted)
         forecast = PerfectForecast(actual, upcoming, int(round(86400 / step_s)))
 
     # Battery wear: replacement value per battery (None = not priced) and the MPC's wear price per kWh.
@@ -617,15 +619,23 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                      price_profile.currency, warnings)
 
 
+HISTORY_DAYS = 8  # days of data before the run handed to realistic forecasts (scenario MPC replays up to 7)
+
+
 def _realistic_forecast(site: Site, lib: ProfileLibrary, actual: dict[str, FloatArray],
                         used: dict[tuple[str, str], tuple[Profile, dt.datetime]], start: dt.datetime, T: int,
                         step_s: int, pvs: list[SolarPV], warnings: list[str]) -> RealisticForecast:
     """Forecasts from what a real controller knows (see emsbench.sim.forecasts)."""
     day = int(round(86400 / step_s))
+    hist = HISTORY_DAYS * day  # the days before the run: yesterday for persistence, more for scenarios
 
     def before(asset_id: str, kind: str) -> FloatArray | None:
         p, src = used[(asset_id, kind)]
-        return p.before(src, day, step_s)
+        vals = p.before(src, hist, step_s)
+        if vals is None:  # less history than that: repeat the last day before the run, if there is one
+            last = p.before(src, day, step_s)
+            vals = None if last is None else np.tile(last, HISTORY_DAYS)
+        return vals
 
     # The day before the run, for "repeat the most recent day". Missing data: use the run's first day.
     parts: list[FloatArray | None] = []
@@ -639,20 +649,20 @@ def _realistic_forecast(site: Site, lib: ProfileLibrary, actual: dict[str, Float
         elif isinstance(a, HeatPump):
             q, c = before(a.id, "heat"), before(a.id, "cop")
             parts.append(None if q is None or c is None else q * a.annual_heat_kwh / np.maximum(c, 1.0))
-    first_day = np.resize(actual["load"][:day], day)
+    first_day = np.resize(actual["load"][:day], hist)
     if any(x is None for x in parts):
         load_before = first_day
         warnings.append("Realistic forecast: no load data before the start, so the first day's load forecast uses "
                         "that day's actual load.")
     else:
-        load_before = np.sum([x for x in parts if x is not None], axis=0) if parts else np.zeros(day)
+        load_before = np.sum([x for x in parts if x is not None], axis=0) if parts else np.zeros(hist)
 
     pv_parts = [before(p.id, "pv") for p in pvs]
     if any(x is None for x in pv_parts):
-        pv_before = np.resize(actual["pv"][:day], day)
+        pv_before = np.resize(actual["pv"][:day], hist)
     else:
         pv_before = np.sum([x * p.capacity_kwp for x, p in zip(pv_parts, pvs, strict=True) if x is not None],
-                           axis=0) if pvs else np.zeros(day)
+                           axis=0) if pvs else np.zeros(hist)
 
     # Solar: the archived day-ahead weather forecast through the same model, aligned with the actual data.
     pv_dayahead: FloatArray | None = np.zeros(T + 2 * day) if pvs else None

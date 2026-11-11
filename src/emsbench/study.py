@@ -33,6 +33,7 @@ CONTROLLERS: dict[str, dict[str, Any]] = {
     "rule": {"battery": "self_consumption", "ev": "cheapest_hours"},
     "mpc_wear_blind": {"battery": "mpc", "mpc_wear_cost": False},
     "mpc_wear_priced": {"battery": "mpc", "mpc_wear_cost": True},
+    "mpc_scenarios3": {"battery": "mpc", "mpc_wear_cost": True, "mpc_scenarios": 3},  # only differs when realistic
 }
 FORECASTS = ("perfect", "realistic")
 METRICS = ("total_cost", "battery_wear_cost", "total_cost_with_wear", "self_sufficiency_share", "peak_import_kw",
@@ -91,14 +92,23 @@ def main() -> None:
     ap.add_argument("--out", default="results/study_home_de")
     ap.add_argument("--days", type=int, default=None, help="shorter runs for a quick check")
     ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--controllers", nargs="*", default=list(CONTROLLERS), help="subset of controllers to run")
+    ap.add_argument("--forecasts", nargs="*", default=list(FORECASTS), help="subset of forecast modes to run")
+    ap.add_argument("--merge", action="store_true", help="add to the existing runs.csv instead of replacing it")
     args = ap.parse_args()
     base = yaml.safe_load(Path(args.base).read_text(encoding="utf-8"))["site"]
-    jobs = [(base, h, e, c, f, args.days) for h, e in HOMES for c in CONTROLLERS for f in FORECASTS]
+    jobs = [(base, h, e, c, f, args.days) for h, e in HOMES for c in args.controllers for f in args.forecasts]
     t0 = time.time()
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         rows = list(pool.map(_run, jobs))
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    if args.merge and (out / "runs.csv").exists():
+        with (out / "runs.csv").open(encoding="utf-8") as f:
+            old = [{k: (v if k in ("home", "ev", "controller", "forecast") else float(v)) for k, v in r.items()}
+                   for r in csv.DictReader(f)]
+        new_keys = {(r["home"], r["controller"], r["forecast"]) for r in rows}
+        rows = [r for r in old if (r["home"], r["controller"], r["forecast"]) not in new_keys] + rows
     with (out / "runs.csv").open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
