@@ -45,7 +45,7 @@ class EpisodeTrace:
     month: NDArray[np.int_]
     battery_terminal_kwh: FloatArray
     battery_capacity_kwh: FloatArray
-    export_price_per_kwh: float = 0.0
+    export_price_per_kwh: float | FloatArray = 0.0  # one price, or one per step (shape (T,))
 
     def __post_init__(self) -> None:
         if self.net_grid_kwh.ndim != 2:
@@ -110,7 +110,7 @@ def compute_kpis(trace: EpisodeTrace) -> EpisodeKPIs:
 
     return EpisodeKPIs(
         energy_cost=float((imports * trace.price_per_kwh).sum())
-        - float(exports.sum()) * trace.export_price_per_kwh,
+        - float((exports * trace.export_price_per_kwh).sum()),
         grid_import_kwh=float(imports.sum()),
         grid_export_kwh=float(exports.sum()),
         peak_import_kw=float(site_import_kw.max()) if site_import_kw.size else 0.0,

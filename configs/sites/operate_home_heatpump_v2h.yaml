@@ -19,10 +19,14 @@ site:
   days: 7
   step_minutes: 15
   grid: {fuse_a: 25}
-  # Price adder: Eurostat 2025 German household taxes incl. VAT (0.1241 EUR/kWh, nrg_pc_204_c, band DC). The
-  # network part comes from the time-variable fee profile instead (Düsseldorf 2026, net of VAT), so it is not in
-  # the adder. Spot + fee + adder approximates a dynamic tariff without supplier margin.
-  tariff: {price_profile: ec/de_lu_da, price_adder: 0.1241, network_fee_profile: netfee/de_duesseldorf_2026}
+  # Price adder: Eurostat 2025 German household taxes incl. VAT (0.1241 EUR/kWh, nrg_pc_204_c, band DC) + supplier
+  # margin 0.02975 (2.50 ct/kWh net, Stadtwerke Witten dynamic tariff price sheet, June 2026) = 0.15385. The network
+  # part comes from the time-variable fee profile instead (Düsseldorf 2026, net of VAT), so it is not in the adder.
+  # Export: EEG feed-in tariff for a new rooftop system up to 10 kWp with partial feed-in, commissioned
+  # 1 Aug 2025 - 31 Jan 2026: 7.86 ct/kWh (Bundesnetzagentur, VergSaetzeAug25bisJan26.xlsx, "Teileinspeisung").
+  # No pay while the spot price is negative (§ 51 EEG): applies once a smart meter is fitted (§ 41a EnWG).
+  tariff: {price_profile: ec/de_lu_da, price_adder: 0.15385, network_fee_profile: netfee/de_duesseldorf_2026,
+           export_price: 0.0786, export_unpaid_at_negative_prices: true}
   controller: {battery: self_consumption, ev: cheapest_hours, heat_pump: cheap_hours, ev_discharge: high_prices}
   assets:
     - {type: building, id: home, name: Home, load_profile: opsd/residential3, ui: {x: 420, y: 40}}

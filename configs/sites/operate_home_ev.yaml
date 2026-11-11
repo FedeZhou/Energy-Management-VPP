@@ -14,9 +14,15 @@ site:
   days: 7
   step_minutes: 15
   grid: {fuse_a: 25}
-  # Price adder: Eurostat 2025 German household network costs (0.1130) + taxes incl. VAT (0.1241) =
-  # 0.2371 EUR/kWh (nrg_pc_204_c, band DC). Spot + adder approximates a dynamic tariff without supplier margin.
-  tariff: {price_profile: ec/de_lu_da, price_adder: 0.2371}
+  # Supplier margin: 2.50 ct/kWh net = 2.975 ct gross (Stadtwerke Witten dynamic tariff price sheet, June 2026,
+  # "Arbeitspreis Vertrieb"); the Eurostat figures below cover network costs and taxes only.
+  # Price adder: Eurostat 2025 German household network costs (0.1130) + taxes incl. VAT (0.1241) + margin (0.02975)
+  # = 0.26685 EUR/kWh (nrg_pc_204_c, band DC).
+  # Export: EEG feed-in tariff for a new rooftop system up to 10 kWp with partial feed-in, commissioned
+  # 1 Aug 2025 - 31 Jan 2026: 7.86 ct/kWh (Bundesnetzagentur, VergSaetzeAug25bisJan26.xlsx, "Teileinspeisung").
+  # No pay while the spot price is negative (§ 51 EEG, Solarspitzengesetz 2025): applies once a smart meter is fitted,
+  # which a dynamic tariff requires (§ 41a EnWG).
+  tariff: {price_profile: ec/de_lu_da, price_adder: 0.26685, export_price: 0.0786, export_unpaid_at_negative_prices: true}
   controller: {battery: self_consumption, ev: cheapest_hours}
   assets:
     - {type: building, id: home, name: Home, load_profile: opsd/residential4, ui: {x: 420, y: 40}}

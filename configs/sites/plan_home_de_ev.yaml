@@ -1,0 +1,33 @@
+# Plan example and base of the flagship study: a German home with solar, battery and EV over a full year.
+# Data: measured German home load (OPSD home 4, 2015-16, heat pump included, EV removed, mapped onto the same season and weekday), solar modelled
+# from Konstanz weather (Open-Meteo + pvlib), measured Norwegian home EV sessions (SINTEF), German day-ahead prices
+# (Energy-Charts / SMARD). The load and the weather come from different years: weather-driven load (heating on cold
+# days) is not aligned with the solar and prices. See the Learn page "Limits".
+# Equipment sizes (8 kWp, 10 kWh / 5 kW LFP battery, 11 kW charger, 3 x 25 A) are example choices, not sourced.
+label: German home, solar + battery + EV (full year)
+description: >-
+  Measured German household with 8 kWp solar, a 10 kWh battery and an 11 kW charger on a dynamic tariff
+  (day-ahead price plus grid fees and taxes), November 2025 to October 2026, hourly. Base case of the study
+  "What is smart control worth?".
+site:
+  name: German home, full year
+  mode: plan
+  start: 2025-11-01
+  days: 365
+  step_minutes: 60
+  grid: {fuse_a: 25}
+  # Supplier margin: 2.50 ct/kWh net = 2.975 ct gross (Stadtwerke Witten dynamic tariff price sheet, June 2026,
+  # "Arbeitspreis Vertrieb"); the Eurostat figures below cover network costs and taxes only.
+  # Price adder: Eurostat 2025 German household network costs (0.1130) + taxes incl. VAT (0.1241) + margin (0.02975)
+  # = 0.26685 EUR/kWh (nrg_pc_204_c, band DC).
+  # Export: EEG feed-in tariff for a new rooftop system up to 10 kWp with partial feed-in, commissioned
+  # 1 Aug 2025 - 31 Jan 2026: 7.86 ct/kWh (Bundesnetzagentur, VergSaetzeAug25bisJan26.xlsx, "Teileinspeisung").
+  # No pay while the spot price is negative (§ 51 EEG, Solarspitzengesetz 2025): applies once a smart meter is fitted,
+  # which a dynamic tariff requires (§ 41a EnWG).
+  tariff: {price_profile: ec/de_lu_da, price_adder: 0.26685, export_price: 0.0786, export_unpaid_at_negative_prices: true}
+  controller: {battery: self_consumption, ev: cheapest_hours}
+  assets:
+    - {type: building, id: home, name: Home, load_profile: opsd/residential4, ui: {x: 420, y: 40}}
+    - {type: pv, id: pv, name: Rooftop solar, capacity_kwp: 8, profile: om/konstanz_south30, ui: {x: 100, y: 40}}
+    - {type: battery, id: battery, name: Home battery, capacity_kwh: 10, power_kw: 5, ui: {x: 100, y: 380}}
+    - {type: ev_charger, id: charger, name: Wallbox, sessions: sintef/BOD_02H0505, phases: 3, ui: {x: 420, y: 380}}

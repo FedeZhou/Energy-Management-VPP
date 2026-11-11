@@ -143,7 +143,12 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
             base = window("tariff", profile_id, kind)
             return np.concatenate([base, base[-look:] if T >= look else np.resize(base, look)])
 
-    price_ext = window_ahead(site.tariff.price_profile, "price") + site.tariff.price_adder
+    spot_ext = window_ahead(site.tariff.price_profile, "price")
+    price_ext = spot_ext + site.tariff.price_adder
+    # Export price per step: the feed-in tariff, zero while the spot price is negative if that rule applies.
+    export_ext = np.full(spot_ext.size, site.tariff.export_price)
+    if site.tariff.export_unpaid_at_negative_prices:
+        export_ext[spot_ext < 0] = 0.0
     if site.tariff.network_fee_profile:  # §14a Modul 3: a time-of-day network fee on every imported kWh
         price_ext = price_ext + window_ahead(site.tariff.network_fee_profile, "netfee")
     price = price_ext[:T]
@@ -237,7 +242,8 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
 
     # What the controllers are told about the future (heat pumps run on demand in these series).
     forecast: Forecast
-    actual = {"load": load_tot + hp_need_tot, "pv": pv_tot, "price": price_ext, "demand_rate": demand_rate}
+    actual = {"load": load_tot + hp_need_tot, "pv": pv_tot, "price": price_ext, "export_price": export_ext,
+              "demand_rate": demand_rate}
     if site.controller.forecast == "realistic":
         forecast = _realistic_forecast(site, lib, actual, used, start, T, step_s, pvs, warnings)
     else:
@@ -525,7 +531,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     trace = EpisodeTrace(
         step_hours=dth, net_grid_kwh=rec_grid[None, :] * dth, price_per_kwh=price.astype(float),
         month=month, battery_terminal_kwh=rec_bat * dth, battery_capacity_kwh=cap,
-        export_price_per_kwh=site.tariff.export_price,
+        export_price_per_kwh=export_ext[:T],
     )
     k = compute_kpis(trace).as_dict()
     import_kw = np.clip(rec_grid, 0, None)

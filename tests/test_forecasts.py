@@ -104,3 +104,20 @@ def test_profile_before_is_continuous_with_the_window() -> None:
     before = p.before(info.source_start, 24, 3600)
     assert before is not None and np.array_equal(before, vals - 24)
     assert p.before(START - dt.timedelta(days=1), 24, 3600) is None  # no data before the start
+
+
+def test_export_earns_nothing_at_negative_spot_prices_when_the_rule_applies() -> None:
+    lib = _library()
+    hour = np.tile(np.arange(24), 4)
+    lib.add(Profile("neg", "price", "neg", "test", np.where((hour >= 11) & (hour <= 14), -0.05, 0.2),
+                    START - dt.timedelta(days=1), 3600))
+    pv = SolarPV(id="pv", capacity_kwp=6.0, profile="pv")
+
+    def run(rule: bool) -> float:
+        s = _site(HOME, pv, forecast="perfect", battery="idle")
+        s = s.model_copy(update={"tariff": Tariff(price_profile="neg", export_price=0.08,
+                                                  export_unpaid_at_negative_prices=rule)})
+        return float(simulate(s, lib).kpis["total_cost"])
+
+    # hours 11-14: 4 kW exported at 0.08 for 4 h per day over 2 days = 2.56 more without the rule
+    assert run(True) - run(False) == pytest.approx(4 * 0.08 * 4 * 2)

@@ -327,8 +327,17 @@ class Tariff(BaseModel):
     )
     export_price: float = param(
         0.0, "Export price", unit="per kWh", ge=0,
-        help="What exported energy earns.",
+        help="What exported energy earns (e.g. a feed-in tariff). German examples use the EEG rate for new small "
+        "rooftop systems.",
         source="CityLearn convention: exports earn nothing",
+    )
+    export_unpaid_at_negative_prices: bool = param(
+        False, "No export pay at negative spot prices",
+        help="German rule for new systems (since Feb 2025) once a smart meter is fitted: exported energy earns "
+        "nothing while the day-ahead spot price is negative.",
+        source="§ 51 (1) EEG 2023 (Solarspitzengesetz, BGBl. 2025 I Nr. 51): 'Fuer Zeitraeume, in denen der "
+        "Spotmarktpreis negativ ist, verringert sich der anzulegende Wert auf null'; § 51 (2) Nr. 1: systems below "
+        "100 kW only from the year after a smart meter is fitted. https://www.gesetze-im-internet.de/eeg_2014/__51.html",
     )
     demand_charge_per_kw_month: float = param(
         0.0, "Demand charge", unit="per kW per month", ge=0,

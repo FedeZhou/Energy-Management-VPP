@@ -122,8 +122,8 @@ class RealisticForecast:
             if self.pv_dayahead is not None:
                 return _pad(self.pv_dayahead, t, steps, d)
             return persistence(self.pv_before, self.actual["pv"], t, steps, d)
-        if name == "price":
-            return self._price(t, steps)
+        if name in ("price", "export_price"):  # both follow the day-ahead price, so both are known once published
+            return self._published(name, t, steps)
         return _pad(self.actual[name], t, steps, d)
 
     def known_until(self, t: int) -> int:
@@ -135,12 +135,12 @@ class RealisticForecast:
         end_of_today = t - tod + d
         return end_of_today + (d if tod >= self.price_published_step else 0)
 
-    def _price(self, t: int, steps: int) -> FloatArray:
-        truth = _pad(self.actual["price"], t, steps, self.steps_per_day)
+    def _published(self, name: str, t: int, steps: int) -> FloatArray:
+        truth = _pad(self.actual[name], t, steps, self.steps_per_day)
         known = self.known_until(t) - t
         if known >= steps:
             return truth
-        d, series = self.steps_per_day, self.actual["price"]
+        d, series = self.steps_per_day, self.actual[name]
         out = truth.copy()
         for k in range(max(known, 0), steps):  # beyond the published prices: repeat the last known day
             j = t + k - ((k - known) // d + 1) * d  # same time of day, before the first unpublished step

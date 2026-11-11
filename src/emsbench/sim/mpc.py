@@ -241,8 +241,12 @@ class MPCController:
         # One meter cannot import and export at once. If the import price falls below the export price (negative
         # wholesale prices), importing to export would look like free money in the LP, so in those steps exported
         # energy is valued at no more than the import price.
+        try:  # the export price per step (e.g. zero at negative spot prices), else the fixed one
+            export_price = self.forecast.window("export_price", obs.t, H)
+        except KeyError:
+            export_price = np.full(H, lim.export_price)
         exp = lp.var(H, ub=lim.export_limit_kw if lim.export_limit_kw is not None else INF,
-                     cost=-np.minimum(lim.export_price, price) * dt)
+                     cost=-np.minimum(export_price, price) * dt)
         # Curtailment only exists with an export limit; battery variables are fixed at 0 without a battery.
         cur = lp.var(H, ub=np.maximum(pv, 0.0) if lim.export_limit_kw is not None else 0.0)
         has_bat = lim.battery_capacity_kwh > 0 and lim.battery_power_kw > 0
