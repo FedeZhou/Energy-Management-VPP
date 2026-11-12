@@ -1,6 +1,9 @@
 import { MARKET_SOURCES } from "./market";
 import { DEEP_SOURCES } from "./deepdive";
 import { EXAMPLE_SOURCES } from "./examples";
+import { GUIDE_CONTROL_SOURCES } from "./guide_control";
+import { GUIDE_IMPL_SOURCES } from "./guide_impl";
+import { GUIDE_SYSTEMS_SOURCES } from "./guide_systems";
 
 // Every source cited on the Learn pages. `read` says how deeply it was checked (2026-11-08):
 // "abstract" = publisher/arXiv/OpenAlex abstract read; "docs" = official documentation page read;
@@ -266,6 +269,9 @@ const list: Source[] = [
     authors: "Wilson, Parker, Fontanini, Present, Reyna et al.", year: 2022, venue: "NREL technical report",
     url: "https://doi.org/10.2172/1854582", read: "metadata", note: "Cited by the ComStock release; report not read here." },
   ...EXAMPLE_SOURCES,
+  ...GUIDE_SYSTEMS_SOURCES,
+  ...GUIDE_IMPL_SOURCES,
+  ...GUIDE_CONTROL_SOURCES,
   ...DEEP_SOURCES,
   ...MARKET_SOURCES,
 ];

@@ -2,6 +2,9 @@
 import { MARKET_PAGES } from "./market";
 import { DEEP_PAGES } from "./deepdive";
 import { EXAMPLE_PAGES } from "./examples";
+import { GUIDE_CONTROL_PAGES } from "./guide_control";
+import { GUIDE_IMPL_PAGES } from "./guide_impl";
+import { GUIDE_SYSTEMS_PAGES } from "./guide_systems";
 
 // Learn pages. Text may cite sources inline with {sourceId}; every id must exist in sources.ts.
 // Rule: only statements backed by a cited source (or by this repository / our own runs, labelled as such).
@@ -18,7 +21,7 @@ export type Block =
 
 export interface Page {
   id: string;
-  section: "lab" | "examples" | "systems" | "control" | "battery" | "research" | "market";
+  section: "guide" | "lab" | "examples" | "systems" | "control" | "battery" | "research" | "market";
   title: string;
   summary: string;
   status?: "built" | "planned";
@@ -26,6 +29,7 @@ export interface Page {
 }
 
 export const SECTIONS: Record<Page["section"], { title: string; intro: string }> = {
+  guide: { title: "The complete guide", intro: "How the whole thing works, chapter by chapter: the energy systems, the data, the simulator, the controllers and the results, in enough detail to explain it to someone else." },
   lab: { title: "How Site Lab works", intro: "What the simulator does, step by step, and how each control strategy is implemented." },
   examples: { title: "Practical examples", intro: "Real-world situations worked through in Site Lab, each teaching one idea, with numbers from our own runs and a link to try it." },
   systems: { title: "How the systems behave", intro: "Batteries, solar, EV charging, grid connections, tariffs, buildings and data centers." },
@@ -36,6 +40,9 @@ export const SECTIONS: Record<Page["section"], { title: string; intro: string }>
 };
 
 export const PAGES: Page[] = [
+  ...GUIDE_SYSTEMS_PAGES,
+  ...GUIDE_IMPL_PAGES,
+  ...GUIDE_CONTROL_PAGES,
   // ============================== HOW SITE LAB WORKS ==============================
   {
     id: "loop", section: "lab", title: "The simulation loop", status: "built",
