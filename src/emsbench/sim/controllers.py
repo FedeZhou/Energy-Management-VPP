@@ -106,6 +106,8 @@ def battery_power(spec: ControllerSpec, obs: Observation, net_kw: float) -> floa
         cheapest, dearest = float(window.min()), float(window.max())
         if net_kw < 0:
             return -net_kw  # always store spare solar first
+        if dearest - cheapest < 1e-9:
+            return -net_kw  # flat prices ahead: nothing to arbitrage, so behave like self-consumption
         if dearest > cheapest and obs.price >= dearest - 1e-9:
             return -net_kw  # most expensive step of the coming day: cover the site
         if dearest > cheapest and obs.price <= cheapest + 1e-9:

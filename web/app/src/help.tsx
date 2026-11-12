@@ -82,7 +82,7 @@ export const HELP = {
           <dt>Self-consumption</dt><dd>Stores spare solar and covers demand from storage when solar is short.</dd>
           <dt>Price arbitrage</dt><dd>Stores spare solar, fills up from the grid at the cheapest step of the next 24 hours, and covers the site at the most expensive one.</dd>
           <dt>Peak shaving</dt><dd>Discharges when demand is above the threshold and recharges below it.</dd>
-          <dt>MPC</dt><dd>Model predictive control: every re-plan (hourly by default, and when a car plugs in) it solves an optimisation over the next 24 hours for the battery and all cars together, minimising energy cost, any demand charges and, when the battery has a replacement cost, battery wear (a price per kWh cycled from the same ageing model), and follows the plan until the next re-plan. The EV strategy below is then ignored. Heat pumps run on demand and cars are not discharged under MPC yet.</dd>
+          <dt>MPC</dt><dd>Model predictive control: every re-plan (hourly by default, and when a car plugs in) it solves an optimisation over the planning horizon (24 hours by default) for the battery and all cars together, minimising energy cost, any demand charges and, when the battery has a replacement cost, battery wear (a price per kWh cycled from the same ageing model). How the plan is carried out is the <b>MPC execution</b> setting: <i>plan</i> follows it and lets the battery absorb forecast errors; <i>hybrid</i> stores all spare solar like the self-consumption rule and lets the plan only add to it; <i>cautious</i> plans from this step's measured load and solar, never trades extra with the grid to keep to a wrong plan, and values leftover energy net of wear (the best choice with realistic forecasts in our tests). <b>MPC scenarios</b> above 1 plan for several futures replayed from recent days. The EV strategy below is then ignored. Heat pumps run on demand and cars are not discharged under MPC yet.</dd>
         </dl>
         <h5>EV charging</h5>
         <dl>
@@ -125,11 +125,13 @@ export const HELP = {
         <dl>
           <dt>Import price</dt><dd>A price profile per time step. Wholesale spot prices exclude network fees and taxes.</dd>
           <dt>Price adder</dt><dd>Added to every import price, to turn a wholesale price into a realistic retail one.</dd>
-          <dt>Export price</dt><dd>What each exported kWh earns.</dd>
+          <dt>Export price</dt><dd>What each exported kWh earns, for example a feed-in tariff.</dd>
+          <dt>No export pay at negative spot prices</dt><dd>The German rule for new systems with a smart meter (§ 51 EEG): exports earn nothing while the day-ahead price is negative.</dd>
           <dt>Demand charge</dt><dd>Billed per kW of each month's highest import, averaged over one time step.</dd>
+          <dt>Peak-window demand charge</dt><dd>Optional: a charge per kW on the highest import inside set hours (for example 14:00 to 18:00 on summer weekdays), from a real US tariff.</dd>
           <dt>Time-variable network fee</dt><dd>German "Modul 3" under §14a: a low, standard and high network fee by time of day, added to every imported kWh. Two real 2026 price sheets are included (Düsseldorf and Mosbach). If you use it, leave the network fee out of the price adder.</dd>
         </dl>
-        <p>Total cost = imports × price − exports × export price + demand charges.</p>
+        <p>Total cost = imports × price − exports × export price (per step) + demand charges. Battery wear is shown separately, and added in "Cost incl. wear".</p>
       </>
     ),
   },
@@ -171,7 +173,7 @@ export const HELP = {
       <>
         <p><b>Capacity</b> (kWh) is how much energy it holds; <b>power</b> (kW) is how fast it can charge or discharge.</p>
         <p>Round-trip losses are split evenly between charging and discharging. The charge level stays between the minimum and maximum you set.</p>
-        <p>Cycles (energy discharged ÷ capacity) are reported as a simple proxy for wear.</p>
+        <p><b>Wear</b>: each run is scored with NREL's BLAST-Lite ageing model for the chosen chemistry (LFP or NMC) at the set temperature, giving an expected life and a wear cost from the replacement cost and the end-of-life capacity. Cycles (energy discharged ÷ capacity) are shown too, as a simple count.</p>
       </>
     ),
   },
@@ -210,7 +212,7 @@ export const HELP = {
     title: "Baseline",
     body: (
       <>
-        <p>Every run is simulated twice. The baseline is the same site with the <b>battery idle</b> and <b>EVs charging at full power on arrival</b>.</p>
+        <p>Every run is simulated twice. The baseline is the same site with the <b>battery idle</b>, <b>EVs charging at full power on arrival</b>, <b>heat pumps heating on demand</b> and <b>no car discharging</b>. Forecast settings do not matter for the baseline, which does not look ahead.</p>
         <p>The arrows show the change from the baseline: green is better, red is worse. This isolates what your control strategy adds.</p>
       </>
     ),
@@ -225,7 +227,7 @@ export const HELP = {
         <dt>Self-sufficiency</dt><dd>The share of demand (including EVs) not bought from the grid.</dd>
         <dt>Solar self-use</dt><dd>The share of solar used on site rather than exported.</dd>
         <dt>Cost incl. wear</dt><dd>Total cost plus battery wear: the share of the battery's value this period used up.</dd>
-        <dt>Battery wear</dt><dd>NREL's BLAST-Lite ageing model (LFP or NMC; calendar and cycle ageing, depth of discharge, state of charge, temperature) estimates how many years the battery would last if it were always run like this, until it holds 80% of its capacity. Wear = replacement cost × the share of that life this period used. An idle battery ages too, so the baseline has wear. Default replacement costs are 2022 German averages excluding VAT (1,200 €/kWh for home systems), higher than today's prices; set your own in the battery. Without a price (non-EUR sites) only the life is shown.</dd>
+        <dt>Battery wear</dt><dd>NREL's BLAST-Lite ageing model (LFP or NMC; calendar and cycle ageing, depth of discharge, state of charge, temperature) estimates how many years the battery would last if it were always run like this, until it holds its end-of-life share of its capacity (80% by default). Wear = replacement cost × the share of that life this period used. An idle battery ages too, so the baseline has wear. Default replacement costs are 2022 German averages excluding VAT (1,200 €/kWh for home systems), higher than today's prices; set your own in the battery. Without a price (non-EUR sites) only the life is shown.</dd>
         <dt>EV energy</dt><dd>Energy delivered to cars, and how much was missing at departure.</dd>
         <dt>Import limit</dt><dd>Energy above the limit that the safety layer could not avoid.</dd>
         <dt>Heat pump</dt><dd>Electricity used, the average COP over the period, and any heat demand left unmet.</dd>

@@ -210,3 +210,13 @@ def test_hybrid_execution_never_stores_less_solar_than_the_rule() -> None:
     expected = np.minimum.reduce([surplus, np.full(T, BAT.power_kw), fits])
     assert np.all(r.site["battery_kw"][sunny] >= expected[sunny] - 1e-6)
     assert balance_ok(r)
+
+
+def test_price_arbitrage_covers_the_site_when_prices_are_flat() -> None:
+    lib = library()
+    lib.profiles["price"] = Profile("price", "price", "flat", "test", np.full(T, 0.3), START, 3600)
+    pv = SolarPV(id="pv", capacity_kwp=6.0, profile="pv")
+    arb = simulate(site(HOME, pv, BAT, battery="price_arbitrage"), lib)
+    rule = simulate(site(HOME, pv, BAT, battery="self_consumption"), lib)
+    assert arb.kpis["battery_discharge_kwh"] > 1.0  # it used the stored solar, as self-consumption does
+    assert arb.kpis["total_cost"] == pytest.approx(rule.kpis["total_cost"])

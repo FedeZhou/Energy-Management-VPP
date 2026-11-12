@@ -17,7 +17,8 @@ https://emhass.readthedocs.io/en/latest/advanced_math_model.html), extended with
 - the site import limit and per-phase fuse (soft, very large penalty), export limit with solar
   curtailment;
 - demand charges: flat monthly (on top of this month's peak so far) and time-of-use windows;
-- a tiny per-kWh battery throughput cost that breaks ties (no wear model yet).
+- battery wear: a price per kWh cycled from the ageing model in sim/wear.py (`mpc_wear_cost`), or a tiny
+  per-kWh throughput cost that only breaks ties when wear is not priced.
 
 A charger is either off or at least at its minimum current (IEC 61851: 6 A). Without that rule a plan
 for a trickle of spare solar would be rounded up to the minimum and the grid would pay the difference.
@@ -347,7 +348,8 @@ class MPCController:
             # value of energy left at the end (see module docstring); 0 when the cheapest price is negative
             # (cautious: less what it costs in wear to take it out again, else the plan hoards)
             use_cost = cycle_cost if cautious else 0.0
-            leftover_value = lim.battery_eta * max(0.0, float(price.min()) - use_cost, lim.export_price)
+            # exporting it later earns at least the lowest export price ahead (zero at negative spot prices)
+            leftover_value = lim.battery_eta * max(0.0, float(price.min()) - use_cost, float(export_price.min()))
             lp.c[int(energy[H])] -= w * leftover_value
             if cautious:  # of two plans with the same cost, store earlier: the later chance is only a forecast
                 for k in range(1, H):

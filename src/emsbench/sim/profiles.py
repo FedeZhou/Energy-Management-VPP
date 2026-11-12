@@ -211,8 +211,10 @@ class ProfileLibrary:
 
     def get(self, profile_id: str, kind: str) -> Profile:
         p = self.profiles.get(profile_id)
-        if p is None or p.kind != kind:
+        if p is None:
             raise KeyError(f"unknown {kind} profile: {profile_id}")
+        if p.kind != kind:
+            raise KeyError(f"'{profile_id}' is a {p.kind} profile, but a {kind} profile is needed here")
         return p
 
     def get_ev(self, set_id: str) -> EVSessionSet:

@@ -126,7 +126,7 @@ SOURCES: list[dict[str, Any]] = [
         "attribution": "Clark, S. and Strelka, J. NLR HPC Facility Power Usage Effectiveness (PUE) Data. National "
                        "Laboratory of the Rockies, 2026. https://data.openei.org/submissions/8616",
         "url": "https://data.openei.org/submissions/8616",
-        "caveats": "One facility. Cooling is best-in-class (PUE about 1.05, industry average 1.54), so the "
+        "caveats": "One facility. Cooling is best-in-class (PUE about 1.07-1.08, industry average 1.54), so the "
                    "facility profile understates cooling for a typical site. HPC jobs, not a cloud or AI-inference "
                    "mix.",
     },
@@ -200,7 +200,7 @@ RULES: list[str] = [
 
 STATIC_CHECKS: list[dict[str, str]] = [
     {"what": "Engine vs CityLearn, same home without a battery",
-     "result": "Grid power and cost match to 5 significant digits (automated test)."},
+     "result": "Grid power within 0.0001 kW and cost within 0.001% over 47 hours (automated test)."},
     {"what": "Eurostat components vs published all-in household price",
      "result": "Energy + network + taxes reproduces the total within about 0.5% (DE, NL, FR, DK)."},
 ]

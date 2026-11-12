@@ -26,7 +26,7 @@ DIM_LARGE_KW = 11.0
 DIM_LARGE_FACTOR = 0.4
 DIM_GZF = {2: 0.8, 3: 0.75, 4: 0.7, 5: 0.65, 6: 0.6, 7: 0.55, 8: 0.5}  # 9 or more devices: 0.45
 DIM_GZF_MANY = 0.45
-MAX_STEPS = 110_000  # keeps a run under ~20 s; e.g. a year at 5-minute steps
+MAX_STEPS = 110_000  # e.g. a year at 5-minute steps; rule runs take seconds, MPC runs can take minutes
 
 
 def param(
@@ -149,6 +149,14 @@ class Battery(AssetBase):
         help="Assumed constant. Warmer batteries age faster. The ageing models were fitted between 10 and 45 °C.",
         source="Example choice (indoor installation); fitting range from the BLAST-Lite model notes",
     )
+
+
+    @model_validator(mode="after")
+    def _check_soc(self) -> Battery:
+        if self.soc_min > self.soc_max:
+            raise ValueError(f"Battery {self.id}: minimum state of charge ({self.soc_min:.0%}) is above the maximum "
+                             f"({self.soc_max:.0%}).")
+        return self
 
 
 class EVCharger(AssetBase):
@@ -469,6 +477,10 @@ class Site(BaseModel):
 
     @model_validator(mode="after")
     def _check_size(self) -> Site:
+        ids = [a.id for a in self.assets]
+        dupes = sorted({i for i in ids if ids.count(i) > 1})
+        if dupes:
+            raise ValueError(f"Each component needs its own ID; used more than once: {', '.join(dupes)}.")
         if self.steps > MAX_STEPS:
             raise ValueError(
                 f"{self.days} days at {self.step_minutes}-minute steps is {self.steps:,} steps; "

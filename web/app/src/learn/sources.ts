@@ -49,6 +49,8 @@ const list: Source[] = [
   { id: "code_wear", title: "Site Lab battery wear: src/emsbench/sim/wear.py (+ tests/test_wear.py)", read: "code" },
   { id: "runs_2026_11f", title: "Site Lab check of the ageing models: capacity lost per full cycle at 10-100% depth (5 years of daily cycles around 50%, 25 °C), 11 Nov 2026", read: "data",
     note: "LFP model: 2.8 to 3.1 x 10^-5 per full cycle at every depth. NMC model: 4.4 x 10^-6 at 10% depth rising to 7.8 x 10^-5 at 100%." },
+  { id: "code_pv_bias", title: "Site Lab check of two solar-model biases on om/konstanz_south30 (reflection loss, sun-position timing), 12 Nov 2026", read: "data",
+    note: "Yearly yield 1,183 kWh/kWp as built; 1,186 with the sun position at the preceding mid-interval; 1,152 with that and pvlib's physical incidence-angle model (iam.physical). Not yet applied to the data." },
   { id: "code_validate", title: "Site Lab sanity check against HTW Berlin: src/emsbench/validate.py, results/validation_htw2014.md", read: "data" },
   { id: "bnetza_eeg", title: "Bundesnetzagentur: EEG feed-in tariffs for solar (VergSaetzeAug25bisJan26.xlsx: partial feed-in up to 10 kWp, 7.86 ct/kWh)",
     venue: "Bundesnetzagentur", read: "data",

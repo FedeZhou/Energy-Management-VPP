@@ -532,7 +532,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     month = np.array([(start + dt.timedelta(seconds=step_s * i)).month for i in range(0, T)])
     trace = EpisodeTrace(
         step_hours=dth, net_grid_kwh=rec_grid[None, :] * dth, price_per_kwh=price.astype(float),
-        month=month, battery_terminal_kwh=rec_bat * dth, battery_capacity_kwh=cap,
+        month=bill_month.astype(int), battery_terminal_kwh=rec_bat * dth, battery_capacity_kwh=cap,
         export_price_per_kwh=export_ext[:T],
     )
     k = compute_kpis(trace).as_dict()

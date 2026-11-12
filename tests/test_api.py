@@ -87,3 +87,15 @@ def test_tariffs_are_consistent() -> None:
     for r in rows:
         assert r["total"] == pytest.approx(r["energy_supply"] + r["network"] + r["taxes"], abs=2e-4)
         assert r["adder"] == pytest.approx(r["network"] + r["taxes"], abs=2e-4)
+
+
+def test_invalid_sites_are_rejected_with_a_clear_message() -> None:
+    from pydantic import ValidationError
+
+    from emsbench.sim.model import Battery, Building, Site
+
+    with pytest.raises(ValidationError, match="used more than once: home"):
+        Site(assets=[Building(id="home", load_profile="cl2022/home_1"),
+                     Building(id="home", load_profile="cl2022/home_2")])
+    with pytest.raises(ValidationError, match="minimum state of charge"):
+        Battery(id="b", soc_min=0.8, soc_max=0.2)
