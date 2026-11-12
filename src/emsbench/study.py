@@ -31,9 +31,10 @@ HOMES = (
 CONTROLLERS: dict[str, dict[str, Any]] = {
     "idle": {"battery": "idle", "ev": "as_fast_as_possible"},
     "rule": {"battery": "self_consumption", "ev": "cheapest_hours"},
-    "mpc_wear_blind": {"battery": "mpc", "mpc_wear_cost": False},
-    "mpc_wear_priced": {"battery": "mpc", "mpc_wear_cost": True},
-    "mpc_scenarios3": {"battery": "mpc", "mpc_wear_cost": True, "mpc_scenarios": 3},  # only differs when realistic
+    "mpc_wear_blind": {"battery": "mpc", "mpc_wear_cost": False, "mpc_execution": "plan"},
+    "mpc_wear_priced": {"battery": "mpc", "mpc_wear_cost": True, "mpc_execution": "plan"},
+    # scenarios only differ from plain MPC when forecasts are realistic
+    "mpc_scenarios3": {"battery": "mpc", "mpc_wear_cost": True, "mpc_scenarios": 3, "mpc_execution": "plan"},
     "mpc_hybrid": {"battery": "mpc", "mpc_wear_cost": True, "mpc_execution": "hybrid"},
     "mpc_cautious": {"battery": "mpc", "mpc_wear_cost": True, "mpc_execution": "cautious"},
 }

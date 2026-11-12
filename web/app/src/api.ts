@@ -71,7 +71,7 @@ export interface Site {
     network_fee_profile?: string };
   controller: {
     battery: string; peak_threshold_kw: number; ev: string; heat_pump?: string; ev_discharge?: string;
-    forecast?: "perfect" | "realistic";
+    forecast?: "perfect" | "realistic"; mpc_execution?: "plan" | "hybrid" | "cautious";
   };
   assets: Asset[];
 }

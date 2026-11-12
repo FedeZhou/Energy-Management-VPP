@@ -503,6 +503,7 @@ C_{\mathrm{total}} &= C_{\mathrm{energy}} + C_{\mathrm{demand}}, \qquad C_{\math
         ["#operate-run", "Switches to Operate and runs its first example {gi_code_web}."],
         ["#<example id>-run", "Loads and runs that example, e.g. #operate_shared_garage-run {gi_code_web}."],
         ["-mpc", "Switches the battery to the MPC, e.g. #operate_home_ev-mpc-run {gi_code_web}."],
+        ["-plan", "With -mpc: uses the plain plan-following optimiser instead of the default cautious one, to reproduce the plain-MPC numbers quoted on these pages, e.g. #operate_home_ev-mpc-plan-run {gi_code_web}."],
         ["-compare", "Runs Compare forecasts instead of Run, e.g. #operate_home_ev-mpc-compare {gi_code_web}."],
         ["#guide, #guide-5", "Opens the tour, optionally at step 5 {gi_code_web}."],
         ["#help-topic, #learn-page", "Opens one '?' explanation, or one Learn page {gi_code_help} {gi_code_learn}."],

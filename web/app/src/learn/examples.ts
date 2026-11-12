@@ -122,7 +122,7 @@ export const EXAMPLE_PAGES: Page[] = [
         "What helps is moving consumption into those hours: the car, a heat pump, hot water. Here the car happened to be home and took 24.6 kWh during negative-price hours, the same with every charging strategy {ex_week}.",
       ] },
       { kind: "note", tone: "warn", text: "One week, one home, one region's prices. How often negative prices occur changes from year to year; the full-year study includes all of them {runs_2026_11e}." },
-      { kind: "note", tone: "info", text: "Try it: open Site Lab at #operate_home_ev-run. In the Inspector's Tariff section, untick 'No export pay at negative spot prices' and run again, then set Export price to 0. Then open #operate_home_ev-mpc-run and look at the battery on Saturday and Sunday." },
+      { kind: "note", tone: "info", text: "Try it: open Site Lab at #operate_home_ev-run. In the Inspector's Tariff section, untick 'No export pay at negative spot prices' and run again, then set Export price to 0. Then open #operate_home_ev-mpc-plan-run and look at the battery on Saturday and Sunday." },
     ],
   },
 
@@ -160,7 +160,7 @@ export const EXAMPLE_PAGES: Page[] = [
         "Not all forecasts matter equally. Solar and car arrivals were worth most; prices nothing, because they are published a day ahead {runs_2026_11d}. For a product, that says where to invest: better solar forecasts and asking drivers for their plans.",
         "To beat a good rule, the optimiser must plan for uncertainty instead of trusting one forecast; see 'Planning under uncertainty'. Until then, a well-chosen rule is a hard baseline {runs_2026_11e}.",
       ] },
-      { kind: "note", tone: "info", text: "Try it: open Site Lab at #operate_home_ev-mpc-compare. It runs the MPC with perfect and with realistic forecasts side by side (the Compare forecasts button in the toolbar does the same). To run one by hand, change Forecasts in the Inspector's Control strategy section. Then set Battery strategy to Self-consumption and compare again: the rule does not change." },
+      { kind: "note", tone: "info", text: "Try it: open Site Lab at #operate_home_ev-mpc-plan-compare. It runs the MPC with perfect and with realistic forecasts side by side (the Compare forecasts button in the toolbar does the same). To run one by hand, change Forecasts in the Inspector's Control strategy section. Then set Battery strategy to Self-consumption and compare again: the rule does not change." },
     ],
   },
 
@@ -198,7 +198,7 @@ export const EXAMPLE_PAGES: Page[] = [
         "The right wear price depends on what the battery costs. At half the 2022 price the advantage of pricing wear almost disappears {ex_week}.",
       ] },
       { kind: "note", tone: "warn", text: "One more twist from the same week: with realistic forecasts, MPC ignoring wear (€24.37) beat MPC pricing wear (€25.77) {runs_2026_11d}. One week is an anecdote; over the full year both saved €239 (median) with realistic forecasts {runs_2026_11e}." },
-      { kind: "note", tone: "info", text: "Try it: open Site Lab at #operate_home_ev-mpc-run. In the Inspector's Control strategy section, untick 'MPC prices battery wear' and run again; compare the wear card and the battery life. Then click the battery and change Replacement cost (empty means 1,200 for a home battery)." },
+      { kind: "note", tone: "info", text: "Try it: open Site Lab at #operate_home_ev-mpc-plan-run. In the Inspector's Control strategy section, untick 'MPC prices battery wear' and run again; compare the wear card and the battery life. Then click the battery and change Replacement cost (empty means 1,200 for a home battery)." },
     ],
   },
 
@@ -233,7 +233,7 @@ export const EXAMPLE_PAGES: Page[] = [
         "Strategies built for energy prices can backfire. In our California office example, price arbitrage cut the energy bill by 12.7% but raised the peak from 158 to 218 kW, which a demand charge would bill every month {runs_2026_11}.",
       ] },
       { kind: "note", tone: "warn", text: "Battery wear is not priced here: Site Lab only has a default replacement cost for euro sites. Set one on the battery to include it {code_wear}." },
-      { kind: "note", tone: "info", text: "Try it: open Site Lab at #operate_data_center-run and change Peak-shaving threshold in the Inspector's Control strategy section (try 5,300 or 5,500). Then open #operate_data_center-mpc-run for the planner, and #operate_data_center-mpc-compare to see perfect and realistic forecasts side by side." },
+      { kind: "note", tone: "info", text: "Try it: open Site Lab at #operate_data_center-run and change Peak-shaving threshold in the Inspector's Control strategy section (try 5,300 or 5,500). Then open #operate_data_center-mpc-plan-run for the planner, and #operate_data_center-mpc-plan-compare to see perfect and realistic forecasts side by side." },
     ],
   },
 ];

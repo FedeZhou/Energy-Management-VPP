@@ -401,7 +401,7 @@ class ControllerSpec(BaseModel):
         "responsive but slower to simulate.",
     )
     mpc_execution: MPCExecution = param(
-        "plan", "MPC execution",
+        "cautious", "MPC execution",
         help="Only used by mpc. plan: follow the optimiser's battery plan; the battery takes up forecast errors. "
         "hybrid: behave like the self-consumption rule (store all spare solar, cover the home from the battery) and "
         "let the optimiser only add to it: charge more (e.g. from the grid before an expensive stretch) or hold "

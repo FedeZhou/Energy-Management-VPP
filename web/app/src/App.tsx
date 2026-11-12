@@ -32,7 +32,9 @@ export function App() {
       // "scene" or "diagram" in the hash picks the site view for this visit (not remembered).
       if (/(^|[#-])scene($|-)/.test(h)) useView.setState({ view: "scene" });
       if (/(^|[#-])diagram($|-)/.test(h)) useView.setState({ view: "diagram" });
-      if (/(^|[#-])mpc($|-)/.test(h))useStore.getState().updateSection("controller", { battery: "mpc" });
+      if (/(^|[#-])mpc($|-)/.test(h)) useStore.getState().updateSection("controller", { battery: "mpc" });
+      // "-plan" picks the plain plan-following optimiser (the default is "cautious"), to reproduce older results.
+      if (/(^|[#-])plan($|-)/.test(h)) useStore.getState().updateSection("controller", { mpc_execution: "plan" });
       if (h.includes("compare")) useStore.getState().compareForecasts();
       else if (h.includes("run")) useStore.getState().run();
       // #guide or #guide-4 opens the tour (at step 4); a first visit without a demo link opens it too.

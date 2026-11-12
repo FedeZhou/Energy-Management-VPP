@@ -309,9 +309,9 @@ solar_surplus:      return on_demand + max(surplus, 0)    # spare solar goes int
 \end{aligned}`,
         caption: String.raw`\(n\) is load (with heat pumps on demand) minus solar, \(b^{\mathrm{plan}}_k\) the planned battery power for this step \(k\) of the plan, \(n^{\mathrm{plan}}_k\) the net load the plan assumed {code_mpc}.` },
       { kind: "facts", rows: [
-        ["plan (default)", "The battery takes up this step's forecast error, so the grid exchange stays as planned (zero error with a perfect forecast). The next re-plan starts from the battery's real state. Example: the plan assumed a 3 kW surplus and planned 2 kW of charging (1 kW export). A cloud leaves a 1 kW surplus: error = -1 - (-3) = +2, so the battery is set to 2 - 2 = 0, and the export stays at 1 kW as planned {code_mpc} {gc_calc}."],
+        ["plan", "The battery takes up this step's forecast error, so the grid exchange stays as planned (zero error with a perfect forecast). The next re-plan starts from the battery's real state. Example: the plan assumed a 3 kW surplus and planned 2 kW of charging (1 kW export). A cloud leaves a 1 kW surplus: error = -1 - (-3) = +2, so the battery is set to 2 - 2 = 0, and the export stays at 1 kW as planned {code_mpc} {gc_calc}."],
         ["hybrid", "Behave like the self-consumption rule and let the plan only add to it: charge harder (for example from the grid before an expensive stretch) or discharge less to hold a reserve. Example: surplus 3 kW, plan says charge 1 kW: the battery charges 3 kW, never storing less solar than the rule. Evening, the house needs 2 kW and the plan says 0 (hold the energy): the battery stays at 0 and the house imports {code_mpc} {gc_calc}."],
-        ["cautious", "Like plan, with a guard, plus three changes to the plan itself (below) {code_mpc}."],
+        ["cautious (default)", "Like plan, with a guard, plus three changes to the plan itself (below) {code_mpc}."],
       ] },
       { kind: "h", text: "The cautious mode: four habits" },
       { kind: "p", text: "The cautious mode is 'four habits of a planner that does not trust its forecast', in the docstring's words {code_mpc}. Two change the data and the execution, two change the objective:" },
