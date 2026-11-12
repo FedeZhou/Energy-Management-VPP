@@ -9,7 +9,8 @@ pump" that are not in pump_kw. Raw samples are irregular (about one per minute);
 
 This is a warm-water liquid-cooled supercomputer centre with heat reuse: its measured PUE (facility energy over
 IT energy, in our processed profiles) is about 1.07-1.08, far better than the 2025 industry average of 1.54
-(Uptime Institute Global Data Center Survey 2025, Fig. 2). The IT profile is representative of an HPC/AI load; the facility profile is a
+(Uptime Institute Global Data Center Survey 2025, Fig. 2). The IT profile is representative of an HPC/AI load;
+the facility profile is a
 best-case cooling overhead, not a typical one.
 """
 
