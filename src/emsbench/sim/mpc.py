@@ -26,9 +26,18 @@ we use relax-and-fix instead: solve the LP; if a car has steps planned between 0
 re-solve twice, once with those steps off and once with the largest forced up to the minimum (others
 off), keep the cheaper plan, and repeat until no plan sits in between.
 
+Planning on a forecast that may be wrong (`ControllerSpec.mpc_execution = "cautious"`): four habits of a planner
+that does not trust its forecast. (1) This step's load and solar are taken from the meter, not from the forecast.
+(2) Between re-plans the battery still takes up forecast error, but never by trading more with the grid: no charging
+from an import, no discharging into an export (without this, a solar shortfall made the battery discharge into a
+planned export at the feed-in price). (3) Leftover energy is valued net of the wear it costs to use it later;
+without that the plan hoards energy it would have to pay wear to use. (4) When storing energy now or later costs the
+same, store it now (`EARLY_PER_KWH_HOUR`, a tie-break): the later opportunity is only a forecast. Tuned on drivers
+the full-year study does not use; see results/study_home_de/README_cautious.md.
+
 Limitations, stated: billing months that change inside the horizon are
-treated as one month. Forecasts are perfect for now, including the car visits ahead
-(`PerfectForecast`); the forecast-error harness will supply imperfect ones through the same interface.
+treated as one month. Forecasts come through the `Forecast` interface (`sim/forecasts.py`): perfect, realistic,
+or several replayed scenarios.
 """
 
 from __future__ import annotations
@@ -52,6 +61,11 @@ TIE_BREAK_PER_KWH = 1e-4  # tiny battery throughput cost: avoids pointless cycli
 RELAX_AND_FIX_ROUNDS = 5  # re-solves allowed to push EV plans out of the band between 0 and the minimum
 MILP_GAP = 1e-4  # exact mode: stop when the plan is provably within 0.01% of the best possible plan
 MILP_TIME_LIMIT_S = 10.0  # exact mode, per solve; the best plan found so far is used if it runs out
+# Tie-break of the cautious mode: a reward per kWh in the battery per hour, so that of two plans with the same cost
+# the one that stores energy earlier wins. Our choice; it must only be far below any real price difference (a kWh
+# held for a whole day earns 0.00024, against tariffs of 0.08 to 0.40 per kWh). On the tuning set 1e-5 and 1e-4 gave
+# the same result within 2 EUR in 2,000 and 1e-3 was 23 EUR worse (results/study_home_de/README_cautious.md).
+EARLY_PER_KWH_HOUR = 1e-5
 
 
 @dataclass(frozen=True)
@@ -232,7 +246,18 @@ class MPCController:
         # The battery takes up the forecast error of this step, so the grid exchange stays as planned
         # (zero with a perfect forecast). The next re-plan starts from the battery's real state.
         error = actual_net - float(self.plan.net_kw[k])
-        return Action(battery_kw=planned - error, ev_kw=tuple(ev_kw))
+        battery = planned - error
+        if self.spec.mpc_execution == "cautious" and abs(error) > 1e-9:
+            # ... but never by trading more with the grid than without the correction: no charging from an import
+            # the plan did not ask for (less demand than forecast: import less instead), no discharging into an
+            # export (less solar than forecast: export less instead).
+            lo, hi = -obs.battery_max_discharge_kw, obs.battery_max_charge_kw
+            grid = actual_net + sum(ev_kw) + min(max(battery, lo), hi)
+            if error < 0 and grid > 0:
+                battery = max(planned, battery - grid)
+            elif error > 0 and grid < 0:
+                battery = min(planned, battery - grid)
+        return Action(battery_kw=battery, ev_kw=tuple(ev_kw))
 
     def _scenarios(self) -> list[Forecast]:
         """The futures to plan for: one forecast, or several replayed from history (scenario MPC)."""
@@ -268,8 +293,12 @@ class MPCController:
                       shared: dict[str, NDArray[np.int_]], n_shared: int, big: float) -> _ScenarioVars:
         """Variables and constraints of one scenario, its costs weighted by `weight`."""
         lim, H, dt = self.lim, self.horizon, self.lim.step_hours
-        load = fc.window("load", obs.t, H)
-        pv = fc.window("pv", obs.t, H)
+        load = fc.window("load", obs.t, H).copy()
+        pv = fc.window("pv", obs.t, H).copy()
+        cautious = self.spec.mpc_execution == "cautious"
+        if cautious:  # this step's load and solar are measured, not forecast
+            load[0] = obs.load_kw + sum(h.heat_kw / max(h.cop, 1.0) for h in obs.heat_pumps)
+            pv[0] = obs.pv_kw
         price = fc.window("price", obs.t, H)
         rate = fc.window("demand_rate", obs.t, H)
         net0 = load - pv
@@ -316,8 +345,13 @@ class MPCController:
                 lp.eq({int(energy[k + 1]): 1.0, int(energy[k]): -1.0, int(ch[k]): -lim.battery_eta * dt,
                        int(dis[k]): dt / lim.battery_eta}, 0.0)
             # value of energy left at the end (see module docstring); 0 when the cheapest price is negative
-            leftover_value = lim.battery_eta * max(0.0, float(price.min()), lim.export_price)
+            # (cautious: less what it costs in wear to take it out again, else the plan hoards)
+            use_cost = cycle_cost if cautious else 0.0
+            leftover_value = lim.battery_eta * max(0.0, float(price.min()) - use_cost, lim.export_price)
             lp.c[int(energy[H])] -= w * leftover_value
+            if cautious:  # of two plans with the same cost, store earlier: the later chance is only a forecast
+                for k in range(1, H):
+                    lp.c[int(energy[k])] -= w * EARLY_PER_KWH_HOUR * dt
 
         # EV blocks: the plugged-in car (its first steps shared by all scenarios) and the cars this scenario
         # expects inside the horizon, each with power variables from arrival to departure (or the horizon end).

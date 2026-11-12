@@ -363,7 +363,7 @@ EVStrategy = Literal["as_fast_as_possible", "spread_until_departure", "cheapest_
 HeatPumpStrategy = Literal["on_demand", "cheap_hours", "solar_surplus"]
 EVDischargeStrategy = Literal["never", "high_prices"]
 ForecastMode = Literal["perfect", "realistic"]
-MPCExecution = Literal["plan", "hybrid"]
+MPCExecution = Literal["plan", "hybrid", "cautious"]
 
 
 class ControllerSpec(BaseModel):
@@ -397,9 +397,14 @@ class ControllerSpec(BaseModel):
         help="Only used by mpc. plan: follow the optimiser's battery plan; the battery takes up forecast errors. "
         "hybrid: behave like the self-consumption rule (store all spare solar, cover the home from the battery) and "
         "let the optimiser only add to it: charge more (e.g. from the grid before an expensive stretch) or hold "
-        "energy back as a reserve. Never stores less solar than the rule would.",
-        source="Design choice: local self-consumption control with a planning layer on top, as in the layered "
-        "architectures on the Learn page 'Control layers and time scales'",
+        "energy back as a reserve. Never stores less solar than the rule would. cautious: plan for a forecast that "
+        "may be wrong: use the meter for the current step; never let the battery trade extra with the grid to make up "
+        "for a forecast error; value energy left at the end of the plan net of the wear of using it; store energy now "
+        "rather than later when the cost is the same (the last two change the plan itself, not only how it is "
+        "followed).",
+        source="hybrid: design choice, local self-consumption control with a planning layer on top, as in the layered "
+        "architectures on the Learn page 'Control layers and time scales'. cautious: our own design, tuned on drivers "
+        "the full-year study does not use (results/study_home_de/README_cautious.md)",
     )
     mpc_scenarios: int = param(
         1, "MPC scenarios", ge=1, le=10,
