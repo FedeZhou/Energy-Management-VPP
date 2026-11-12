@@ -201,7 +201,7 @@ export const HELP = {
           <dt>Prices</dt><dd>Day-ahead market prices only once published, around 13:00 for the next day; beyond that, the last known day repeated. Fixed tariffs are known in advance.</dd>
           <dt>Cars</dt><dd>Unknown until they plug in; then their departure time and energy are known, as if the driver had entered them in an app.</dd>
         </dl>
-        <p><b>Compare forecasts</b> runs the site both ways. The difference is what perfect knowledge would be worth, and shows how much a strategy depends on its forecast. Simple reactive rules (self-consumption) do not look ahead, so they are unaffected. When the forecast is wrong, MPC lets the battery take up the difference so the grid exchange stays as planned, then re-plans.</p>
+        <p><b>Compare forecasts</b> runs the site both ways. The difference is what perfect knowledge would be worth, and shows how much a strategy depends on its forecast. Simple reactive rules (self-consumption) do not look ahead, so they are unaffected. When the forecast is wrong, MPC lets the battery take up the difference so the grid exchange stays as planned, then re-plans. With <b>MPC execution: cautious</b> it never trades extra with the grid to do so, plans with the measured present and stores solar at the first chance: with realistic forecasts that beat the simple rule in our full-year study, where the plain plan did not.</p>
         <p>A realistic run can occasionally come out cheaper: a plan that is optimal for a forecast is not always best for the real day, and the end of the period is valued differently.</p>
       </>
     ),

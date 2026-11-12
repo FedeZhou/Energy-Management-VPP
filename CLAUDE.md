@@ -102,9 +102,10 @@ cd web/app && npm run build      # after frontend changes, or: npm run dev (API 
 - Profiles carry calendars: a run uses the same season and weekday from another year when needed
   (`sim/profiles.py`). European data uses fixed CET (UTC+1).
 - Free APIs (Energy-Charts, Open-Meteo): keep requests polite (`data/cache.py` pauses and backs off on 429).
-- `web/app/node_modules` is a junction to `%USERPROFILE%\.cache\emsbench
-ode_modules` (keeps OneDrive from
-  syncing it). Recreate with `mklink /J` if missing.
+- `web/app/node_modules` was meant to be a junction to `%USERPROFILE%\.cache\emsbench
+ode_modules` (keeps
+  OneDrive from syncing it), but as of Nov 2026 it is a real folder in the main checkout and the cache target is
+  empty. In a git worktree, run `npm ci` in `web/app` or `mklink /J` to an existing `node_modules`.
 - Example sites: `configs/sites/{plan,operate}_*.yaml`. Sizes there are example choices; device parameters
   cite sources in `sim/model.py`.
 - Add an asset type: model class in `sim/model.py` (+ `ASSET_TYPES`), physics in `sim/engine.py`, tests, then

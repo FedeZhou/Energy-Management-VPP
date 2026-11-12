@@ -323,3 +323,21 @@ This is why real "solar charging" products switch to one phase.
   battery cycles a year (published about 270). Our data is 15-minute, theirs one-minute; the measured homes range from
   49% to 76%, one of them using most of its power around midday.
 
+## 16. Planning on a wrong forecast: habits beat scenarios here
+
+- **Most of the realistic-forecast loss was the plan's reaction, not the forecast.** The plain MPC kept its planned
+  grid exchange when the forecast missed, so a cloud made the battery discharge into the grid at the feed-in price;
+  it valued leftover energy without the wear of using it, so it hoarded; and with a flat feed-in tariff "store now"
+  and "store later" tie, so it often exported morning sun and met the evening car with an empty battery.
+- **Four habits fixed it** (`mpc_execution: cautious`): plan with the metered present, never trade extra with the grid
+  to absorb a forecast error, value leftover energy net of wear, store at the first chance on ties. Full year, four
+  German homes, realistic forecasts: median EUR 1,108 incl. wear vs 1,160 for the rule and 1,229 for the plain MPC,
+  better than the rule in every home (results/study_home_de/README_cautious.md).
+- **Scenario planning and a rule-plus-plan hybrid did not.** Replaying 3 recent days (EUR 1,243) and the hybrid
+  (EUR 1,230) both stayed behind the rule. With this tariff a stored kWh replaces a ~30 ct import and gives up a
+  7.86 ct export, so "store whenever you can" is nearly optimal; perfect foresight is worth only ~3% over the rule.
+  Expect scenarios to matter more where a wrong guess is expensive (small connections, demand charges).
+- **This contradicts docs/research.md's premise** that stochastic or robust MPC is what closes the forecast gap: on
+  these homes, simple robustness habits closed about half the gap to perfect foresight.
+- **Tune and test on different data.** The habits were chosen on four other drivers and fixed before the test; only
+  the drivers differed, though (same home loads, weather and prices), so the result is weaker than a true holdout.

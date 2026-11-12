@@ -65,6 +65,8 @@ const list: Source[] = [
     url: "https://solar.htw-berlin.de/wp-content/uploads/WENIGER-2013-Sizing-and-Grid-Integration-of-Residential-PV-Battery-Systems.pdf" },
   { id: "runs_2026_11d", title: "Site Lab runs: German home EV week with the real tariff (feed-in tariff, no export pay at negative prices, supplier margin), 11 Nov 2026", read: "data",
     note: "Our own simulations of configs/sites/operate_home_ev.yaml, 8-14 June 2026; wear priced with the default home replacement cost (1,200 EUR/kWh, 2022) and the LFP model at 25 °C." },
+  { id: "runs_2026_11g", title: "Site Lab: how the cautious MPC was chosen and tested, 11-12 Nov 2026 (results/study_home_de/README_cautious.md)", read: "data",
+    note: "Our own simulations. Designed on a tuning set of the four study homes with four other drivers (4 x 28 days), then tested on the study's own drivers over the full year; some single-ingredient tuning rows came from temporary switches that the final code no longer has." },
   { id: "runs_2026_11e", title: "Site Lab study: four measured German homes with solar, battery and EV, full year Nov 2025 - Oct 2026 (results/study_home_de)", read: "data",
     note: "Our own simulations (python -m emsbench.study); sizes are example choices." },
   { id: "runs_2026_11c", title: "Site Lab runs: battery wear on the German home EV week, 10 Nov 2026 (export paid nothing, an earlier setting)", read: "data",
