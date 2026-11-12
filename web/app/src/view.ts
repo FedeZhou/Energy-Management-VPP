@@ -5,8 +5,9 @@ import { create } from "zustand";
 export type View = "scene" | "diagram";
 
 const KEY = "sitelab.view";
+/** The one-line diagram is the default (engineers draw sites this way); the scene is the alternative. */
 function initial(): View {
-  try { return localStorage.getItem(KEY) === "diagram" ? "diagram" : "scene"; } catch { return "scene"; }
+  try { return localStorage.getItem(KEY) === "scene" ? "scene" : "diagram"; } catch { return "diagram"; }
 }
 
 export const useView = create<{ view: View; setView: (v: View) => void }>((set) => ({
@@ -34,7 +35,7 @@ function cell(i: number, j: number) {
  *  cable can run along j to the hub's row (j = 0) and then along that row into the hub without
  *  passing under another component. Row j = 0 holds only the hub; the back row (j = -1) holds
  *  loads, solar and overflow chargers from i = 1; the front row (j = 1) holds up to five chargers
- *  at i >= 0 and the batteries at i < 0. The utility sits straight behind the hub at (0, -2) and
+ *  at i >= 0 and the batteries at i < 0. The utility sits straight behind the hub at (0, -3) and
  *  has its own cable: it is on the grid side of the meter, so it must not share the site busbar.
  *  FlowEdge's isoPath draws exactly this route (j first, then i). */
 export function sceneLayout(assets: { id: string; type: string }[]) {
@@ -47,5 +48,6 @@ export function sceneLayout(assets: { id: string; type: string }[]) {
   [...loads, ...overflow].forEach((a, k) => { pos[a.id] = cell(1 + k, -1); });
   front.forEach((a, k) => { pos[a.id] = cell(k, 1); });
   batteries.forEach((a, k) => { pos[a.id] = cell(-1 - k, 1); });
-  return { assets: pos, meter: cell(0, 0), utility: cell(0, -2) };
+  // Three rows back (not two): its label then clears the illustration on the back row's first cell.
+  return { assets: pos, meter: cell(0, 0), utility: cell(0, -3) };
 }

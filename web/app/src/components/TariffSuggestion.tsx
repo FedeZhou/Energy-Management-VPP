@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type TariffComponents } from "../api";
 import { useStore } from "../store";
+import { money } from "../util";
 import "./data-panel.css";
 
 // Spot-price profiles -> Eurostat country code.
@@ -11,7 +12,7 @@ const SPOT_COUNTRY: Record<string, string> = {
 let cache: Promise<TariffComponents[]> | null = null;
 const loadTariffs = () => (cache ??= api.tariffs().catch(() => { cache = null; return []; }));
 
-const eur = (v: number) => `${v < 0 ? "−" : ""}€${Math.abs(v).toFixed(3)}`;
+const eur = (v: number) => money(v, "EUR", 3);
 
 /** Suggests a realistic price adder (network costs + taxes) for the chosen spot-price zone,
  *  from Eurostat's published price components, and explains flat or non-European tariffs. */

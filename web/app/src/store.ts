@@ -15,6 +15,8 @@ interface State {
   result: SimResponse | null;
   stale: boolean;
   running: boolean;
+  /** What is running ("run" or "compare") and since when (ms), for the progress label. */
+  job: { kind: "run" | "compare"; started: number } | null;
   error: string | null;
   cursor: number;
   playing: boolean;
@@ -42,6 +44,8 @@ interface State {
   select: (id: string | null) => void;
   run: () => Promise<void>;
   compareForecasts: () => Promise<void>;
+  /** Stop the running simulation; the previous result stays. */
+  cancel: () => void;
   setCursor: (i: number) => void;
   setPlaying: (p: boolean) => void;
   setSpeed: (s: number) => void;
@@ -97,7 +101,17 @@ function startCursor(result: SimResponse, mode: Mode): number {
   return 0;
 }
 
-export const useStore = create<State>((set, get) => ({
+/** The simulation in flight; a newer run or a cancel replaces it, and late answers are ignored. */
+let current: AbortController | null = null;
+
+export const useStore = create<State>((set, get) => {
+  function startJob(kind: "run" | "compare"): AbortController {
+    current?.abort();
+    current = new AbortController();
+    set({ running: true, job: { kind, started: Date.now() }, error: null, playing: false });
+    return current;
+  }
+  return {
   catalog: null,
   profiles: null,
   presets: [],
@@ -107,6 +121,7 @@ export const useStore = create<State>((set, get) => ({
   result: null,
   stale: false,
   running: false,
+  job: null,
   error: null,
   cursor: 0,
   playing: false,
@@ -211,12 +226,17 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async run() {
-    set({ running: true, error: null, playing: false, compare: null });
+    const ctrl = startJob("run");
     try {
-      const result = await api.simulate(get().site);
-      set({ result, stale: false, running: false, cursor: startCursor(result, get().site.mode), maxPower: maxPower(result) });
+      const result = await api.simulate(get().site, ctrl.signal);
+      if (ctrl !== current) return;
+      current = null;
+      set({ result, compare: null, stale: false, running: false, job: null,
+        cursor: startCursor(result, get().site.mode), maxPower: maxPower(result) });
     } catch (e) {
-      set({ running: false, error: (e as Error).message });
+      if (ctrl !== current) return; // cancelled or superseded: keep the previous result
+      current = null;
+      set({ running: false, job: null, error: (e as Error).message });
     }
   },
 
@@ -224,16 +244,26 @@ export const useStore = create<State>((set, get) => ({
     // The same site twice: what controllers would achieve knowing the future, and with what a real system knows.
     // The realistic run becomes the main result (charts, numbers); the panel shows the difference.
     const site = get().site;
-    set({ running: true, error: null, playing: false });
+    const ctrl = startJob("compare");
     try {
       const withForecast = (forecast: "perfect" | "realistic") =>
-        api.simulate({ ...site, controller: { ...site.controller, forecast } });
+        api.simulate({ ...site, controller: { ...site.controller, forecast } }, ctrl.signal);
       const [perfect, realistic] = await Promise.all([withForecast("perfect"), withForecast("realistic")]);
-      set({ result: realistic, compare: { perfect, realistic }, stale: false, running: false,
+      if (ctrl !== current) return;
+      current = null;
+      set({ result: realistic, compare: { perfect, realistic }, stale: false, running: false, job: null,
         cursor: startCursor(realistic, site.mode), maxPower: maxPower(realistic) });
     } catch (e) {
-      set({ running: false, error: (e as Error).message });
+      if (ctrl !== current) return;
+      current = null;
+      set({ running: false, job: null, error: (e as Error).message });
     }
+  },
+
+  cancel() {
+    current?.abort();
+    current = null;
+    set({ running: false, job: null });
   },
 
   setCursor(i) {
@@ -248,7 +278,8 @@ export const useStore = create<State>((set, get) => ({
   setSpeed(s) {
     set({ speed: s });
   },
-}));
+};
+});
 
 // Live values for the current playhead position. Undefined when no fresh result.
 export function useLive(): { r: SimResponse; i: number } | null {

@@ -1,7 +1,7 @@
 import type { NodeProps } from "@xyflow/react";
 import type { Asset } from "../../api";
 import { useLive, useStore } from "../../store";
-import { ASSET_COLOR, kw, money, pct, timeAt } from "../../util";
+import { ASSET_COLOR, kw, pct, perKwh, qty, timeAt } from "../../util";
 import { Handles, reading, spec } from "../Nodes";
 import { Apartments, Battery, Charger, Cooling, DataCenter, HeatPumpArt, House, Office, Pylon, Solar, Transformer } from "./Art";
 import { Tile, VIEW_H, VIEW_W } from "./iso";
@@ -100,7 +100,7 @@ export function SceneMeter({ selected }: NodeProps) {
   const grid = useStore((s) => s.site.grid);
   const live = useLive();
   const g = live ? live.r.result.site.grid_kw[live.i] : null;
-  const limits = [grid.import_limit_kw != null ? `${grid.import_limit_kw} kW` : "", grid.fuse_a != null ? `3 × ${grid.fuse_a} A` : ""].filter(Boolean);
+  const limits = [grid.import_limit_kw != null ? kw(grid.import_limit_kw) : "", grid.fuse_a != null ? `3 × ${qty(grid.fuse_a, "A", 0)}` : ""].filter(Boolean);
   const over = g != null && grid.import_limit_kw != null && g > grid.import_limit_kw + 0.01;
   const phases = live && grid.fuse_a != null
     ? (["phase_l1_a", "phase_l2_a", "phase_l3_a"] as const).map((k) => live.r.result.site[k][live.i])
@@ -114,7 +114,7 @@ export function SceneMeter({ selected }: NodeProps) {
       <Art selected={selected} tint="var(--c-grid)"><Transformer /></Art>
       <Label name="Grid connection" value={value} tone={over ? "var(--bad)" : ASSET_COLOR.grid} selected={selected}>
         {phases && (
-          <div className="sl-phases" title={phases.map((a, k) => `L${k + 1}: ${a.toFixed(1)} A of ${grid.fuse_a} A`).join("\n")}>
+          <div className="sl-phases" title={phases.map((a, k) => `L${k + 1}: ${qty(a, "A", 1)} of ${qty(grid.fuse_a!, "A", 0)}`).join("\n")}>
             {phases.map((amps, k) => (
               <div key={k} className="track"><div className={amps > grid.fuse_a! * 0.95 ? "hot" : ""}
                 style={{ width: `${Math.min(100, (Math.max(amps, 0) / grid.fuse_a!) * 100)}%` }} /></div>
@@ -137,7 +137,7 @@ export function SceneUtility() {
       <Handles />
       <Art><Pylon /></Art>
       <Label name="Utility grid" tone={ASSET_COLOR.grid}
-        value={price != null ? `${money(price, info?.currency, 3)} / kWh` : info?.label.split(" (")[0] ?? tariff.price_profile} />
+        value={price != null ? perKwh(price, info?.currency) : info?.label.split(" (")[0] ?? tariff.price_profile} />
     </div>
   );
 }

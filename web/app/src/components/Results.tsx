@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronUp, Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { useStore } from "../store";
-import { dayLabel, money, num, pct, stepLabel, timeAt } from "../util";
-import { Charts } from "./Charts";
+import { dayLabel, kw, money, num, pct, pts, qty, signed, stepLabel, timeAt } from "../util";
 import { Help } from "./Help";
 import { Sessions } from "./Sessions";
+
+// ECharts is large: it loads with the first result, not with the lab.
+const Charts = lazy(() => import("./Charts").then((m) => ({ default: m.Charts })));
 
 interface Card { label: string; value: string; delta?: string; good?: boolean | null; dir?: 1 | -1; detail?: string }
 
@@ -12,12 +14,11 @@ interface Card { label: string; value: string; delta?: string; good?: boolean | 
  *  (relative = false) show only the point change, since a percentage of a percentage confuses. */
 function delta(cur: number, base: number, fmt: (v: number) => string, lowerIsGood: boolean, relative = true): Pick<Card, "delta" | "good" | "dir"> {
   const d = cur - base;
-  // A change that rounds to zero at the precision shown is "No change", not "-0 pts".
+  // A change that rounds to zero at the precision shown is "No change", not "−0 pts".
   if (Math.abs(d) < 1e-6 * Math.max(1, Math.abs(base)) || fmt(Math.abs(d)) === fmt(0)) return { delta: "No change", good: null };
-  const sign = d < 0 ? "−" : "+";
   const r = relative && base ? Math.abs((d / base) * 100) : 0;
-  const rel = r ? ` (${sign}${r < 10 ? r.toFixed(1) : Math.round(r)}%)` : "";
-  return { delta: `${sign}${fmt(Math.abs(d))}${rel}`, good: lowerIsGood ? d < 0 : d > 0, dir: d > 0 ? 1 : -1 };
+  const rel = r ? ` (${signed(d, () => `${num(r, r < 10 ? 1 : 0)}%`)})` : "";
+  return { delta: `${signed(d, fmt)}${rel}`, good: lowerIsGood ? d < 0 : d > 0, dir: d > 0 ? 1 : -1 };
 }
 
 function Kpis() {
@@ -28,27 +29,30 @@ function Kpis() {
   const cur = r.result.currency;
   const m = (v: number) => money(v, cur);
   const has = (t: string) => site.assets.some((a) => a.type === t);
+  const batteryKwh = site.assets.filter((a) => a.type === "battery").reduce((s, a) => s + (Number(a.capacity_kwh) || 0), 0);
   const stepTxt = r.time.step_minutes >= 60 ? "hourly" : `${r.time.step_minutes}-min`;
   const cards: Card[] = [
     { label: "Total cost", value: m(k.total_cost), ...delta(k.total_cost, b.total_cost, m, true),
       detail: k.demand_charge_cost > 0 ? `Includes ${m(k.demand_charge_cost)} demand charges` : site.tariff.price_adder ? "Energy, incl. price adder" : "Energy only" },
-    { label: "Peak import", value: `${num(k.peak_import_kw, 1)} kW`, ...delta(k.peak_import_kw, b.peak_import_kw, (v) => `${num(v, 1)} kW`, true),
+    { label: "Peak import", value: kw(k.peak_import_kw), ...delta(k.peak_import_kw, b.peak_import_kw, (v) => kw(v), true),
       detail: `Highest ${stepTxt} average grid import` },
   ];
   if (site.grid.fuse_a != null) {
     const over = k.fuse_overload_kwh > 0.01;
-    cards.push({ label: "Max phase current", value: `${num(k.max_phase_current_a, 1)} A`,
-      ...delta(k.max_phase_current_a, b.max_phase_current_a, (v) => `${num(v, 1)} A`, true),
+    cards.push({ label: "Max phase current", value: qty(k.max_phase_current_a, "A", 1),
+      ...delta(k.max_phase_current_a, b.max_phase_current_a, (v) => qty(v, "A", 1), true),
       detail: over ? `Fuse ${site.grid.fuse_a} A exceeded` : `Fuse ${site.grid.fuse_a} A respected` });
   }
-  cards.push({ label: "Self-sufficiency", value: pct(k.self_sufficiency_share),
-    ...delta(k.self_sufficiency_share, b.self_sufficiency_share, (v) => `${Math.round(v * 100)} pts`, false, false),
+  // Without local generation the share is zero by construction: nothing to show.
+  const generates = has("pv") || k.self_sufficiency_share > 0.005 || b.self_sufficiency_share > 0.005;
+  if (generates) cards.push({ label: "Self-sufficiency", value: pct(k.self_sufficiency_share),
+    ...delta(k.self_sufficiency_share, b.self_sufficiency_share, pts, false, false),
     detail: "Share of demand not bought from the grid" });
   if (has("pv")) cards.push({ label: "Solar self-use", value: pct(k.self_consumption_share),
-    ...delta(k.self_consumption_share, b.self_consumption_share, (v) => `${Math.round(v * 100)} pts`, false, false),
-    detail: `Share of solar used on site. ${k.pv_curtailed_kwh > 0.5 ? `${num(k.pv_curtailed_kwh)} kWh curtailed` : `${num(k.grid_export_kwh)} kWh exported`}` });
-  if (has("battery")) {
-    const life = k.battery_life_capped ? `${num(k.battery_life_years)}+ yr` : `${num(k.battery_life_years, 1)} yr`;
+    ...delta(k.self_consumption_share, b.self_consumption_share, pts, false, false),
+    detail: `Share of solar used on site. ${k.pv_curtailed_kwh > 0.5 ? `${qty(k.pv_curtailed_kwh, "kWh", 0)} curtailed` : `${qty(k.grid_export_kwh, "kWh", 0)} exported`}` });
+  if (has("battery") && batteryKwh > 0) {
+    const life = k.battery_life_capped ? `${num(k.battery_life_years)}+ yr` : qty(k.battery_life_years, "yr", 1);
     const cycles = `${num(k.battery_equivalent_full_cycles, k.battery_equivalent_full_cycles < 10 ? 1 : 0)} full cycles`;
     const lifeTxt = `At this pace the battery would last ${life} until end of life (NREL BLAST-Lite ageing model, ${Math.round(k.battery_cycle_wear_share * 100)}% of the ageing from cycling, the rest from time).`;
     if (k.battery_wear_priced) {
@@ -65,30 +69,30 @@ function Kpis() {
   }
   if (has("ev_charger")) {
     const short = k.ev_unmet_kwh > 0.5;
-    cards.push({ label: "EV energy", value: `${num(k.ev_delivered_kwh)} kWh`,
-      delta: short ? `${num(k.ev_unmet_kwh, 1)} kWh short` : "All targets met", good: !short,
+    cards.push({ label: "EV energy", value: qty(k.ev_delivered_kwh, "kWh", 0),
+      delta: short ? `${qty(k.ev_unmet_kwh, "kWh", 1)} short` : "All targets met", good: short ? false : null,
       detail: short ? `${k.ev_sessions_unmet} of ${k.ev_sessions} finished visits left short` : `${k.ev_sessions} finished visits` });
   }
   if (has("heat_pump")) {
     const unmet = k.hp_unmet_heat_kwh > 0.5;
-    cards.push({ label: "Heat pump", value: `${num(k.hp_electric_kwh)} kWh`,
-      delta: unmet ? `${num(k.hp_unmet_heat_kwh)} kWh heat unmet` : `COP ${num(k.hp_scop, 2)} average`, good: unmet ? false : null,
-      detail: `Electricity used for ${num(k.hp_heat_kwh)} kWh of heat (seasonal COP ${num(k.hp_scop, 2)})` });
+    cards.push({ label: "Heat pump", value: qty(k.hp_electric_kwh, "kWh", 0),
+      delta: unmet ? `${qty(k.hp_unmet_heat_kwh, "kWh", 0)} heat unmet` : `COP ${num(k.hp_scop, 2)} average`, good: unmet ? false : null,
+      detail: `Electricity used for ${qty(k.hp_heat_kwh, "kWh", 0)} of heat (seasonal COP ${num(k.hp_scop, 2)})` });
   }
   if (site.assets.some((a) => a.type === "ev_charger" && a.bidirectional)) {
-    cards.push({ label: "Car to home", value: `${num(k.ev_discharged_kwh, 1)} kWh`,
+    cards.push({ label: "Car to home", value: qty(k.ev_discharged_kwh, "kWh", 1),
       detail: "Energy cars gave back through bidirectional chargers (counted at the car battery)" });
   }
   if (site.grid.dimming && site.grid.dimming !== "off") {
-    cards.push({ label: "Dimmed (§14a)", value: `${num(k.dimmed_kwh, 1)} kWh`,
+    cards.push({ label: "Dimmed (§14a)", value: qty(k.dimmed_kwh, "kWh", 1),
       delta: `${site.grid.dimming === "ems" ? "EMS" : "direct"} · ${site.grid.dimming_hours ?? 0} h/day`,
       detail: "Energy the grid operator's limit held back from controllable devices" });
   }
   if (site.grid.import_limit_kw != null) {
     const over = k.grid_overload_kwh > 0.01;
-    cards.push({ label: "Import limit", value: over ? `${num(k.grid_overload_kwh)} kWh over` : "Respected",
-      delta: !over && b.grid_overload_kwh > 0.01 ? `Baseline ${num(b.grid_overload_kwh)} kWh over` : `${site.grid.import_limit_kw} kW`,
-      good: !over && b.grid_overload_kwh > 0.01 ? true : over ? false : null, detail: `Limit ${site.grid.import_limit_kw} kW` });
+    cards.push({ label: "Import limit", value: over ? `${qty(k.grid_overload_kwh, "kWh", 0)} over` : "Respected",
+      delta: !over && b.grid_overload_kwh > 0.01 ? `Baseline ${qty(b.grid_overload_kwh, "kWh", 0)} over` : `Limit ${kw(site.grid.import_limit_kw)}`,
+      good: !over && b.grid_overload_kwh > 0.01 ? true : over ? false : null, detail: `Limit ${kw(site.grid.import_limit_kw)}` });
   }
   return (
     <div className="kpis" data-tour="kpis">
@@ -97,8 +101,13 @@ function Kpis() {
           <span className="kpi-label">{c.label}</span>
           <span className="kpi-value">{c.value}</span>
           {c.delta && (
-            <span className={`kpi-delta ${c.good === true ? "good" : c.good === false ? "bad" : ""}`}>
-              {c.delta}
+            <span className="kpi-delta">
+              {c.good != null && (c.dir === 1 || c.dir === -1)
+                ? <span className={`kpi-arrow ${c.good ? "good" : "bad"}`} aria-label={c.good ? "better" : "worse"}>
+                    {c.dir === 1 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                  </span>
+                : c.good === false && <AlertTriangle size={12} className="kpi-arrow bad" aria-label="problem" />}
+              <span className="kpi-delta-text">{c.delta}</span>
             </span>
           )}
         </div>
@@ -139,20 +148,22 @@ function Transport() {
   const perDay = 1440 / step;
   return (
     <div className="transport" data-tour="transport">
-      <button className="icon-btn" onClick={() => setCursor(cursor - perDay)} title="Back one day" aria-label="Back one day"><SkipBack size={15} /></button>
-      <button className="btn primary play" onClick={() => setPlaying(!playing)} title={playing ? "Pause" : "Play"} aria-label={playing ? "Pause" : "Play"}>
-        {playing ? <Pause size={14} /> : <Play size={14} />}
-      </button>
-      <button className="icon-btn" onClick={() => setCursor(cursor + perDay)} title="Forward one day" aria-label="Forward one day"><SkipForward size={15} /></button>
+      <div className="transport-buttons">
+        <button className="icon-btn sm" onClick={() => setCursor(cursor - perDay)} title="Back one day" aria-label="Back one day"><SkipBack size={14} /></button>
+        <button className="icon-btn sm play" onClick={() => setPlaying(!playing)} title={playing ? "Pause" : "Play"} aria-label={playing ? "Pause" : "Play"}>
+          {playing ? <Pause size={14} /> : <Play size={14} />}
+        </button>
+        <button className="icon-btn sm" onClick={() => setCursor(cursor + perDay)} title="Forward one day" aria-label="Forward one day"><SkipForward size={14} /></button>
+      </div>
       <input type="range" min={0} max={T - 1} value={cursor} onChange={(e) => { setPlaying(false); setCursor(Number(e.target.value)); }} aria-label="Time" />
-      <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))} aria-label="Playback speed" title="Playback speed">
+      <span className="time">{stepLabel(start, step, cursor)}</span>
+      <select className="speed" value={speed} onChange={(e) => setSpeed(Number(e.target.value))} aria-label="Playback speed" title="Playback speed">
         <option value={0.5}>30 min/s</option>
         <option value={1}>1 h/s</option>
         <option value={4}>4 h/s</option>
         <option value={12}>12 h/s</option>
         <option value={48}>2 d/s</option>
       </select>
-      <span className="time">{stepLabel(start, step, cursor)}</span>
     </div>
   );
 }
@@ -163,23 +174,25 @@ function Sources() {
   const name = (id: string) => (id === "tariff" ? "Price" : site.assets.find((a) => a.id === id)?.name || id);
   const start = timeAt(r.time.start, r.time.step_minutes, 0);
   return (
-    <table className="table">
-      <thead><tr><th>Used for</th><th>Data</th><th>Dates used</th><th>Resolution</th></tr></thead>
-      <tbody>
-        {r.result.sources.map((s) => {
-          const used = new Date(`${s.source_start.slice(0, 19)}Z`);
-          const same = used.toISOString().slice(0, 10) === start.toISOString().slice(0, 10);
-          return (
-            <tr key={`${s.asset}-${s.profile}`}>
-              <td>{name(s.asset)}</td>
-              <td>{s.label}</td>
-              <td>{same ? "As simulated" : `From ${dayLabel(used)} ${used.getUTCFullYear()} (same season and weekday)`}</td>
-              <td className={s.resampling.startsWith("repeated") ? "warn-text" : ""}>{s.resampling}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <div className="table-wrap">
+      <table className="table">
+        <thead><tr><th>Used for</th><th>Data</th><th>Dates used</th><th>Resolution</th></tr></thead>
+        <tbody>
+          {r.result.sources.map((s) => {
+            const used = new Date(`${s.source_start.slice(0, 19)}Z`);
+            const same = used.toISOString().slice(0, 10) === start.toISOString().slice(0, 10);
+            return (
+              <tr key={`${s.asset}-${s.profile}`}>
+                <td>{name(s.asset)}</td>
+                <td>{s.label}</td>
+                <td>{same ? "As simulated" : `From ${dayLabel(used)} ${used.getUTCFullYear()} (same season and weekday)`}</td>
+                <td className={s.resampling.startsWith("repeated") ? "warn-text" : ""}>{s.resampling}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -190,44 +203,48 @@ function ForecastCompare() {
   const p = cmp.perfect.result.kpis, q = cmp.realistic.result.kpis;
   const cur = cmp.realistic.result.currency;
   const m = (v: number) => money(v, cur);
-  type Row = [string, number, number, (v: number) => string, boolean];  // label, perfect, realistic, format, lower is better
+  // label, perfect, realistic, value format, difference format, lower is better
+  type Row = [string, number, number, (v: number) => string, (v: number) => string, boolean];
   const rows: Row[] = [
-    ["Total cost", p.total_cost, q.total_cost, m, true],
-    ["Peak import", p.peak_import_kw, q.peak_import_kw, (v) => `${num(v, 1)} kW`, true],
-    ["Self-sufficiency", p.self_sufficiency_share, q.self_sufficiency_share, pct, false],
+    ["Total cost", p.total_cost, q.total_cost, m, m, true],
+    ["Peak import", p.peak_import_kw, q.peak_import_kw, (v) => kw(v), (v) => kw(v), true],
   ];
-  if (site.assets.some((a) => a.type === "battery") && q.battery_wear_priced) rows.splice(1, 0, ["Cost incl. battery wear", p.total_cost_with_wear, q.total_cost_with_wear, m, true]);
-  if (site.assets.some((a) => a.type === "ev_charger")) rows.push(["EV energy short", p.ev_unmet_kwh, q.ev_unmet_kwh, (v) => `${num(v, 1)} kWh`, true]);
+  if (site.assets.some((a) => a.type === "pv")) rows.push(["Self-sufficiency", p.self_sufficiency_share, q.self_sufficiency_share, pct, pts, false]);
+  if (site.assets.some((a) => a.type === "battery") && q.battery_wear_priced) rows.splice(1, 0, ["Cost incl. battery wear", p.total_cost_with_wear, q.total_cost_with_wear, m, m, true]);
+  if (site.assets.some((a) => a.type === "ev_charger")) rows.push(["EV energy short", p.ev_unmet_kwh, q.ev_unmet_kwh, (v) => qty(v, "kWh", 1), (v) => qty(v, "kWh", 1), true]);
   const extra = q.total_cost - p.total_cost;
   const share = p.total_cost ? (extra / Math.abs(p.total_cost)) * 100 : 0;
-  const ctrl = site.controller.battery === "mpc" ? "MPC" : "rule-based control";
+  const ctrl = site.controller.battery === "mpc" ? "the optimiser (MPC)" : "rule-based control";
   return (
-    <div className="fc-compare" aria-label="Perfect versus realistic forecasts">
+    <section className="fc-compare" aria-label="Perfect versus realistic forecasts">
       <div className="fc-head">
-        <b>Forecasts: perfect vs realistic</b> <Help topic="forecasts" />
-        <span className="muted">
+        <h4 className="with-help">Perfect vs realistic forecasts <Help topic="forecasts" /></h4>
+        <p className="muted">
           {Math.abs(extra) < 0.005 ? `Real-world forecasts cost ${ctrl} nothing here.`
-            : extra > 0 ? `Real-world forecasts cost ${ctrl} ${m(extra)} more (${share.toFixed(1)}%). Charts and numbers below show the realistic run.`
-            : `The realistic run came out ${m(-extra)} cheaper; see the help for why this can happen. Charts below show the realistic run.`}
-        </span>
+            : extra > 0 ? `Real-world forecasts cost ${ctrl} ${m(extra)} more (${num(share, 1)}%).`
+            : `The realistic run came out ${m(-extra)} cheaper; see the help for why this can happen.`}
+          {" "}Everything below shows the realistic run.
+        </p>
       </div>
-      <table className="table fc-table">
-        <thead><tr><th></th><th>Perfect forecast</th><th>Realistic forecast</th><th>Difference</th></tr></thead>
-        <tbody>
-          {rows.map(([label, a, b, f, lower]) => {
-            const d = b - a;
-            const same = f(Math.abs(d)) === f(0);  // no difference at the precision shown
-            const worse = lower ? d > 0 : d < 0;
-            return (
-              <tr key={label}>
-                <td>{label}</td><td>{f(a)}</td><td>{f(b)}</td>
-                <td className={same ? "muted" : worse ? "warn-text" : ""}>{same ? "same" : `${d > 0 ? "+" : "−"}${f(Math.abs(d))}`}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+      <div className="table-wrap">
+        <table className="table fc-table">
+          <thead><tr><th>Metric</th><th>Perfect</th><th>Realistic</th><th>Difference</th></tr></thead>
+          <tbody>
+            {rows.map(([label, a, b, f, fd, lower]) => {
+              const d = b - a;
+              const same = fd(Math.abs(d)) === fd(0); // no difference at the precision shown
+              const worse = lower ? d > 0 : d < 0;
+              return (
+                <tr key={label}>
+                  <td>{label}</td><td>{f(a)}</td><td>{f(b)}</td>
+                  <td className={same ? "muted" : worse ? "worse" : "better"}>{same ? "Same" : signed(d, fd)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -254,6 +271,8 @@ export function Results() {
     { id: "sources", label: "Data sources" },
   ];
   const active = tabs.some((t) => t.id === tab) ? tab : "charts";
+  const comparing = !!compare && compare.realistic === r && !stale;
+  const alerts = [...(error ? [error] : []), ...(r?.result.warnings ?? [])];
 
   const startResize = (e: React.PointerEvent) => {
     const y0 = e.clientY, h0 = height;
@@ -280,29 +299,38 @@ export function Results() {
           </nav>
         )}
         <div className="results-meta">
-          {error && <span className="badge bad" title={error}><AlertTriangle size={12} /> {error.length > 80 ? `${error.slice(0, 80)}…` : error}</span>}
-          {r?.result.warnings.map((w) => <span key={w} className="badge bad" title={w}><AlertTriangle size={12} /> {w}</span>)}
-          {stale && <span className="badge warn">Out of date</span>}
+          {stale && <span className="chip warn">Out of date</span>}
+          {comparing && <span className="chip" title="Compare forecasts ran the site twice; the numbers and charts show the run with realistic forecasts. Your Forecasts setting is unchanged.">Showing: realistic forecasts</span>}
           {r && (
-            <span className="muted">
-              Compared with baseline <Help topic="baseline" /> · {r.runtime_s}s
+            <span className="meta-text">
+              <span className="hide-narrow">vs baseline</span> <Help topic="baseline" /> <span className="num">{num(r.runtime_s, 1)}{" "}s</span>
             </span>
           )}
         </div>
         {r && (
-          <button className="icon-btn" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? "Expand results" : "Collapse results"} title={collapsed ? "Expand" : "Collapse"}>
+          <button className="icon-btn sm" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? "Expand results" : "Collapse results"} title={collapsed ? "Expand" : "Collapse"}>
             {collapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
         )}
       </div>
+      {alerts.length > 0 && (
+        <div className="results-alerts" role="status">
+          {alerts.map((a) => <p key={a} className={a === error ? "alert bad" : "alert warn"}><AlertTriangle size={13} /><span>{a}</span></p>)}
+        </div>
+      )}
       {open && (
         <div className="results-body">
-          {compare && compare.realistic === r && !stale && <ForecastCompare />}
+          {comparing && <ForecastCompare />}
           <Kpis />
           <Transport />
-          {active === "charts" && <div className="tab-pane"><div className="pane-help"><Help topic="charts" /></div><Charts /></div>}
+          {active === "charts" && (
+            <div className="tab-pane">
+              <p className="pane-intro">Power, battery, phases and price over time. Click a chart to move the playhead. <Help topic="charts" /></p>
+              <Suspense fallback={<div className="pane-loading">Loading charts…</div>}><Charts /></Suspense>
+            </div>
+          )}
           {active === "sessions" && <Sessions />}
-          {active === "sources" && <div className="tab-pane"><p className="pane-intro">The data behind each component in this run <Help topic="sources" /></p><Sources /></div>}
+          {active === "sources" && <div className="tab-pane"><p className="pane-intro">The data behind each component in this run. <Help topic="sources" /></p><Sources /></div>}
         </div>
       )}
     </section>

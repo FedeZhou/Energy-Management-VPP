@@ -169,7 +169,7 @@ export function Charger({ car, charging }: { car: boolean; charging: boolean }) 
     <g>
       <polygon points={bay} className="iso-bay" />
       <Box x={-28} y={-16} w={6} d={7} h={32} c={{ top: "var(--iso-top)" }} />
-      <polygon points={onLeft(-9, -27, -23, 20, 28)} style={{ fill: charging ? "var(--c-batt)" : "var(--iso-dark)" }} />
+      <polygon points={onLeft(-9, -27, -23, 20, 28)} style={{ fill: charging ? "var(--c-ev)" : "var(--iso-dark)" }} />
       {car && (
         <>
           <path d={`M${px},${py} Q${gx},${gy} ${cx},${cy}`} className="iso-cable" />
@@ -181,7 +181,7 @@ export function Charger({ car, charging }: { car: boolean; charging: boolean }) 
 }
 
 function Car() {
-  const body = { top: "color-mix(in srgb, var(--c-ev) 78%, white)", left: "var(--c-ev)", right: "color-mix(in srgb, var(--c-ev) 72%, black)" };
+  const body = { top: "color-mix(in srgb, var(--iso-car) 70%, white)", left: "var(--iso-car)", right: "color-mix(in srgb, var(--iso-car) 72%, black)" };
   const wheel = (p: P3) => { const [x, y] = screen(p); return <ellipse cx={x} cy={y} rx={3.6} ry={4.2} style={{ fill: "var(--iso-tyre)" }} />; };
   return (
     <g>
@@ -189,7 +189,7 @@ function Car() {
       <Box x={-12} y={-9} z={3} w={42} d={20} h={9} c={body} />
       {/* cabin: a box whose front and back faces are glass */}
       <Box x={-3} y={-7} z={12} w={22} d={16} h={8} c={{ top: body.top, left: "var(--iso-car-glass)", right: "var(--iso-car-glass)" }} />
-      <polygon points={onLeft(11, -12, 30, 7, 8.5)} style={{ fill: "color-mix(in srgb, var(--c-ev) 60%, black)" }} />
+      <polygon points={onLeft(11, -12, 30, 7, 8.5)} style={{ fill: "color-mix(in srgb, var(--iso-car) 60%, black)" }} />
       {wheel([-6, 11, 3])}{wheel([20, 11, 3])}
     </g>
   );

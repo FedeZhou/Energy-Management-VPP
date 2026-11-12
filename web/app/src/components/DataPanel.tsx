@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, ExternalLink, X } from "lucide-react";
 import { api, type DataSource, type DataSources } from "../api";
 import { useStore } from "../store";
+import { num } from "../util";
 import "./data-panel.css";
 
 const KIND: Record<DataSource["kind"], { label: string; hint: string }> = {
@@ -104,8 +105,8 @@ export function DataPanel() {
                           <tr key={c.profile}>
                             <td>{c.place}</td>
                             <td>{c.orientation}</td>
-                            <td className="num">{c.ours_last_12_months.toLocaleString("en-GB")}</td>
-                            <td className="num">{c.pvgis_mean.toLocaleString("en-GB")} ± {c.pvgis_sd}</td>
+                            <td className="num">{num(c.ours_last_12_months)}</td>
+                            <td className="num">{num(c.pvgis_mean)} ± {num(c.pvgis_sd)}</td>
                             <td className={`num ${c.within_2_sd ? "" : "warn"}`}>
                               {c.difference_pct > 0 ? "+" : ""}{c.difference_pct}%{c.within_2_sd ? "" : " (outside normal weather range)"}
                             </td>

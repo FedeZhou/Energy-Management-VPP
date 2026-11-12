@@ -3,7 +3,7 @@ import { Gauge, UtilityPole } from "lucide-react";
 import type { Asset } from "../api";
 import { ASSET_ICON } from "../icons";
 import { METER_ID, useLive, useStore } from "../store";
-import { ASSET_COLOR, kw, money, pct } from "../util";
+import { ASSET_COLOR, kw, pct, perKwh, qty } from "../util";
 
 const tone = (c: string) => ({ "--tone": c }) as React.CSSProperties;
 
@@ -17,6 +17,9 @@ export function Handles() {
   );
 }
 
+/** A rating as entered: whole numbers without decimals ("11 kW", "7.4 kW"). */
+const rating = (v: unknown, unit: string) => qty(Number(v), unit, Number.isInteger(Number(v)) ? 0 : "auto");
+
 export function spec(a: Asset, profileLabel: (id: string) => string): string {
   switch (a.type) {
     case "building":
@@ -24,13 +27,13 @@ export function spec(a: Asset, profileLabel: (id: string) => string): string {
     case "data_center":
       return `IT ${profileLabel(String(a.it_load_profile)).replace(/^Data center IT load, /, "")}${Number(a.it_scale) !== 1 ? ` × ${a.it_scale}` : ""} · PUE ${a.pue}`;
     case "pv":
-      return `${a.capacity_kwp} kWp`;
+      return rating(a.capacity_kwp, "kWp");
     case "battery":
-      return `${a.capacity_kwh} kWh · ${a.power_kw} kW`;
+      return `${rating(a.capacity_kwh, "kWh")} · ${rating(a.power_kw, "kW")}`;
     case "ev_charger":
-      return `${a.max_power_kw} kW · ${a.phases === 1 ? `1-phase ${a.phase}` : "3-phase"}${a.bidirectional ? " · V2H" : ""}`;
+      return `${rating(a.max_power_kw, "kW")} · ${a.phases === 1 ? `1-phase ${a.phase}` : "3-phase"}${a.bidirectional ? " · V2H" : ""}`;
     case "heat_pump":
-      return `${Math.round(Number(a.annual_heat_kwh)).toLocaleString("en-GB")} kWh heat/yr · ${String(a.cop_profile).includes("gshp") ? "ground" : "air"} source`;
+      return `${qty(Number(a.annual_heat_kwh), "kWh", 0)} heat/yr · ${String(a.cop_profile).includes("gshp") ? "ground" : "air"} source`;
   }
 }
 
@@ -49,7 +52,7 @@ export function reading(a: Asset, live: ReturnType<typeof useLive>): { value: st
       };
     case "ev_charger":
       return s.connected[live.i] > 0.5
-        ? { value: kw(p), caption: `${s.remaining_kwh[live.i].toFixed(1)} kWh left` }
+        ? { value: kw(p), caption: `${qty(s.remaining_kwh[live.i], "kWh", 1)} left` }
         : { value: "—", caption: "No car" };
     case "pv":
       return { value: kw(Math.abs(p)), caption: "Generating" };
@@ -100,7 +103,7 @@ export function MeterNode({ selected }: NodeProps) {
   const grid = useStore((s) => s.site.grid);
   const live = useLive();
   const g = live ? live.r.result.site.grid_kw[live.i] : null;
-  const limits = [grid.import_limit_kw != null ? `${grid.import_limit_kw} kW` : "", grid.fuse_a != null ? `3 × ${grid.fuse_a} A` : ""].filter(Boolean);
+  const limits = [grid.import_limit_kw != null ? rating(grid.import_limit_kw, "kW") : "", grid.fuse_a != null ? `3 × ${qty(grid.fuse_a, "A", 0)}` : ""].filter(Boolean);
   const over = g != null && grid.import_limit_kw != null && g > grid.import_limit_kw + 0.01;
   const phases = live && grid.fuse_a != null
     ? (["phase_l1_a", "phase_l2_a", "phase_l3_a"] as const).map((k) => live.r.result.site[k][live.i])
@@ -131,11 +134,11 @@ export function MeterNode({ selected }: NodeProps) {
             </div>
           )}
           {phases?.map((amps, k) => (
-            <div key={k} className="bar-row labelled" title={`L${k + 1}: ${amps.toFixed(1)} A of ${grid.fuse_a} A`}>
+            <div key={k} className="bar-row labelled" title={`L${k + 1}: ${qty(amps, "A", 1)} of ${qty(grid.fuse_a!, "A", 0)}`}>
               <span>L{k + 1}</span>
               <div className="track"><div className={amps > grid.fuse_a! * 0.95 ? "hot" : ""}
                 style={{ width: `${Math.min(100, (Math.max(amps, 0) / grid.fuse_a!) * 100)}%` }} /></div>
-              <span>{Math.max(amps, 0).toFixed(0)} A</span>
+              <span>{qty(Math.max(amps, 0), "A", 0)}</span>
             </div>
           ))}
         </div>
@@ -158,7 +161,7 @@ export function UtilityNode() {
         <div className="node-text">
           <span className="node-name">Utility grid</span>
           <span className="node-spec" title={info?.label}>
-            {price != null ? `${money(price, info?.currency, 3)} / kWh` : info?.label.split(" (")[0] ?? tariff.price_profile}
+            {price != null ? perKwh(price, info?.currency) : info?.label.split(" (")[0] ?? tariff.price_profile}
           </span>
         </div>
       </div>

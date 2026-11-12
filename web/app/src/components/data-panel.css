@@ -6,13 +6,13 @@
 .dp-dialog {
   width: min(1040px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column;
   background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r-md);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-pop);
 }
 .dp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 18px 20px 14px; border-bottom: 1px solid var(--border); }
 .dp-head h2 { font-size: 16px; font-weight: 600; }
 .dp-head p { color: var(--ink-2); margin-top: 4px; max-width: 70ch; }
 .dp-body { overflow: auto; padding: 16px 20px 22px; display: flex; flex-direction: column; gap: 22px; }
-.dp-body h3 { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+.dp-body h3 { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
 
 .dp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
 .dp-card { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); min-width: 0; }
@@ -20,7 +20,7 @@
 .dp-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .dp-card-head h4 { font-size: 13px; font-weight: 600; }
 .dp-provider { color: var(--muted); font-size: 12px; }
-.dp-kind { flex: none; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--ink-2); background: var(--surface-2); white-space: nowrap; }
+.dp-kind { flex: none; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: var(--r-sm); border: 1px solid var(--border); color: var(--ink-2); background: var(--surface-2); white-space: nowrap; }
 .dp-kind.measured { color: var(--primary-ink); background: var(--primary); border-color: var(--primary); }
 .dp-kind.modelled { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 .dp-kind.statistics { color: var(--ink-2); }

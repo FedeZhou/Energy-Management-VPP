@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BookOpen, ExternalLink, Search } from "lucide-react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, ExternalLink, Search } from "lucide-react";
 import { PAGES, SECTIONS, type Block, type Page } from "../learn/pages";
 import { READ_LABEL, SOURCES } from "../learn/sources";
 import { useStore } from "../store";
@@ -29,7 +29,53 @@ function Tex({ tex, display = false }: { tex: string; display?: boolean }) {
   return <span dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-function Cited({ text, order, k }: { text: string; order: string[]; k: string }) {
+/** A display formula that always fits: scaled down to 60% if needed, then scrolled sideways with a
+ *  visible hint (never clipped). */
+function MathBlock({ tex }: { tex: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [wide, setWide] = useState(false);
+  const applied = useRef(1);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    let adjustments = 0; // KaTeX does not scale perfectly linearly: settle after a few steps
+    const fit = () => {
+      const html = el.querySelector<HTMLElement>(".katex-display .katex-html");
+      if (!html) return;
+      const range = document.createRange();
+      range.selectNodeContents(html);
+      const shown = range.getBoundingClientRect().width;
+      const style = getComputedStyle(el);
+      const room = el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      if (room <= 0 || shown <= 0) return;
+      const natural = shown / applied.current; // the formula's width at full size
+      const next = natural > room ? Math.max(0.6, Math.floor((room / natural) * 100) / 100) : 1;
+      if (Math.abs(next - applied.current) > 0.015 && adjustments < 6) {
+        adjustments++;
+        applied.current = next;
+        setScale(next);
+      }
+      setWide(natural * applied.current > room + 1);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    void document.fonts?.ready.then(fit); // KaTeX's fonts change the width once they arrive
+    return () => ro.disconnect();
+  }, [tex]);
+  return (
+    <>
+      <div ref={box} className={`ln-math-body ${wide ? "wide" : ""}`} style={{ "--fit": scale } as React.CSSProperties}
+        tabIndex={0} aria-label="Formula">
+        <Tex tex={tex} display />
+      </div>
+      {wide && <p className="ln-math-hint">Wide formula: scroll sideways to see all of it.</p>}
+    </>
+  );
+}
+
+function Cited({ text, order, k, afterMath = false }: { text: string; order: string[]; k: string; afterMath?: boolean }) {
   const parts: React.ReactNode[] = [];
   let last = 0;
   let prevCite = false;
@@ -41,10 +87,13 @@ function Cited({ text, order, k }: { text: string; order: string[]; k: string })
     prevCite = true;
     const n = order.indexOf(m[1]) + 1;
     const src = SOURCES[m[1]];
+    // Straight after a formula a bare superscript would read as an exponent: bracket it.
+    const bracket = afterMath && last === 0 && before === "";
     parts.push(
-      <a key={`${k}c${m.index}`} className="ln-cite" href={`#src-${m[1]}`} title={src ? src.title : m[1]}
+      <a key={`${k}c${m.index}`} className={`ln-cite ${bracket ? "bracket" : ""}`} href={`#src-${m[1]}`} title={src ? src.title : m[1]}
+        aria-label={`Source ${n}`}
         onClick={(e) => { e.preventDefault(); document.getElementById(`src-${m[1]}`)?.scrollIntoView({ behavior: "smooth", block: "center" }); }}>
-        {n}
+        {bracket ? `[${n}]` : n}
       </a>,
     );
     last = (m.index ?? 0) + m[0].length;
@@ -57,11 +106,11 @@ function Rich({ text, order }: { text: string; order: string[] }) {
   const parts: React.ReactNode[] = [];
   let last = 0;
   for (const m of text.matchAll(INLINE_MATH)) {
-    parts.push(<Cited key={`s${m.index}`} k={`s${m.index}`} text={text.slice(last, m.index)} order={order} />);
+    parts.push(<Cited key={`s${m.index}`} k={`s${m.index}`} text={text.slice(last, m.index)} order={order} afterMath={last > 0} />);
     parts.push(<Tex key={`m${m.index}`} tex={m[1]} />);
     last = (m.index ?? 0) + m[0].length;
   }
-  parts.push(<Cited key="rest" k="rest" text={text.slice(last)} order={order} />);
+  parts.push(<Cited key="rest" k="rest" text={text.slice(last)} order={order} afterMath={last > 0} />);
   return <>{parts}</>;
 }
 
@@ -75,7 +124,7 @@ function BlockView({ b, order }: { b: Block; order: string[] }) {
     case "math":
       return (
         <div className="ln-math">
-          <Tex tex={b.tex} display />
+          <MathBlock tex={b.tex} />
           {b.caption && <p className="ln-math-cap"><Rich text={b.caption} order={order} /></p>}
         </div>
       );
@@ -90,6 +139,16 @@ function BlockView({ b, order }: { b: Block; order: string[] }) {
       );
   }
 }
+
+/** "13. The control problem" -> chapter 13. Guide chapters are listed in this order. */
+function chapter(p: Page): { n: number | null; title: string } {
+  const m = /^(\d+)\.\s+(.*)$/.exec(p.title);
+  return m ? { n: Number(m[1]), title: m[2] } : { n: null, title: p.title };
+}
+const ORDERED: Page[] = [...PAGES].sort((a, b) => {
+  if (a.section !== b.section || a.section !== "guide") return 0;
+  return (chapter(a).n ?? 999) - (chapter(b).n ?? 999);
+});
 
 function pageFromHash(): string {
   const m = /^#learn-([a-z0-9-]+)$/.exec(location.hash);
@@ -110,7 +169,12 @@ export function LearnPage() {
   }, [page.id]);
 
   const q = query.trim().toLowerCase();
-  const visible = PAGES.filter((p) => !q || `${p.title} ${p.summary}`.toLowerCase().includes(q));
+  const visible = ORDERED.filter((p) => !q || `${p.title} ${p.summary}`.toLowerCase().includes(q));
+  const siblings = ORDERED.filter((p) => p.section === page.section);
+  const at = siblings.findIndex((p) => p.id === page.id);
+  const prev = at > 0 ? siblings[at - 1] : null;
+  const next = at >= 0 && at < siblings.length - 1 ? siblings[at + 1] : null;
+  const ch = chapter(page);
 
   return (
     <div className="ln-root">
@@ -128,13 +192,17 @@ export function LearnPage() {
           return (
             <div key={sec} className="ln-group">
               <h2>{SECTIONS[sec].title}</h2>
-              {items.map((p) => (
-                <button key={p.id} className={`ln-link ${p.id === page.id ? "on" : ""}`} onClick={() => setCurrent(p.id)}
-                  aria-current={p.id === page.id ? "page" : undefined}>
-                  {p.title}
-                  {p.status === "planned" && <span className="ln-pill planned">Planned</span>}
-                </button>
-              ))}
+              {items.map((p) => {
+                const c = chapter(p);
+                return (
+                  <button key={p.id} className={`ln-link ${p.id === page.id ? "on" : ""} ${c.n != null ? "numbered" : ""}`} onClick={() => setCurrent(p.id)}
+                    aria-current={p.id === page.id ? "page" : undefined}>
+                    {c.n != null && <span className="ln-num">{c.n}</span>}
+                    <span className="ln-link-title">{c.title}</span>
+                    {p.status === "planned" && <span className="ln-pill planned">Planned</span>}
+                  </button>
+                );
+              })}
             </div>
           );
         })}
@@ -143,10 +211,9 @@ export function LearnPage() {
 
       <article className="ln-article">
         <div className="ln-inner">
-          <p className="ln-section"><BookOpen size={14} /> {SECTIONS[page.section].title}</p>
-          <h1>{page.title}
-            {page.status && <span className={`ln-pill ${page.status}`}>{page.status === "built" ? "Built in Site Lab" : "Planned, not built"}</span>}
-          </h1>
+          <p className="ln-section">{SECTIONS[page.section].title}{ch.n != null ? ` · Chapter ${ch.n}` : ""}</p>
+          <h1>{ch.title}</h1>
+          {page.status && <p className="ln-status"><span className={`ln-pill ${page.status}`}>{page.status === "built" ? "Built in Site Lab" : "Planned, not built"}</span></p>}
           <p className="ln-summary">{page.summary}</p>
           {page.blocks.map((b, i) => <BlockView key={i} b={b} order={order} />)}
 
@@ -172,6 +239,22 @@ export function LearnPage() {
                 })}
               </ol>
             </section>
+          )}
+          {(prev || next) && (
+            <nav className="ln-pager" aria-label="Previous and next page">
+              {prev ? (
+                <button className="ln-page-link" onClick={() => setCurrent(prev.id)}>
+                  <span className="ln-page-dir"><ArrowLeft size={13} /> Previous</span>
+                  <span className="ln-page-title">{chapter(prev).title}</span>
+                </button>
+              ) : <span />}
+              {next && (
+                <button className="ln-page-link next" onClick={() => setCurrent(next.id)}>
+                  <span className="ln-page-dir">Next <ArrowRight size={13} /></span>
+                  <span className="ln-page-title">{chapter(next).title}</span>
+                </button>
+              )}
+            </nav>
           )}
         </div>
       </article>

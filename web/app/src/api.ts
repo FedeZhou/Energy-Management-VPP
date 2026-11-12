@@ -185,9 +185,10 @@ export const api = {
   presets: () => get<Preset[]>("/api/presets"),
   datasources: () => get<DataSources>("/api/datasources"),
   tariffs: () => get<TariffComponents[]>("/api/tariffs"),
-  async simulate(site: Site): Promise<SimResponse> {
+  async simulate(site: Site, signal?: AbortSignal): Promise<SimResponse> {
     const r = await fetch("/api/simulate", {
       method: "POST",
+      signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(site),
     });

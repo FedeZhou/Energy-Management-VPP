@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from "react";
 import { getSmoothStepPath, Position, useInternalNode, type EdgeProps, type InternalNode } from "@xyflow/react";
 import type { AssetType } from "../api";
 import { UTILITY_ID, useLive, useStore } from "../store";
@@ -65,13 +66,24 @@ function isoPath(s: InternalNode, t: InternalNode): string {
 export function FlowEdge({ id, source, target, data }: EdgeProps) {
   const s = useInternalNode(source);
   const t = useInternalNode(target);
+  const base = useRef<SVGPathElement>(null);
+  const [mid, setMid] = useState<{ x: number; y: number; deg: number } | null>(null);
   const live = useLive();
   const maxPower = useStore((st) => st.maxPower);
   const assetType = (data?.assetType as AssetType | "grid") ?? "grid";
   const scene = useView((v) => v.view) === "scene";
-  if (!s || !t) return null;
+  const d = s && t ? (scene ? isoPath(s, t) : getSmoothStepPath({ ...route(box(s), box(t)), borderRadius: 8, offset: 18 })[0]) : "";
 
-  const d = scene ? isoPath(s, t) : getSmoothStepPath({ ...route(box(s), box(t)), borderRadius: 10, offset: 18 })[0];
+  // Midpoint and direction of the wire, for a static arrow (readable without animation).
+  useLayoutEffect(() => {
+    const el = base.current;
+    if (!el || !d) return;
+    const L = el.getTotalLength();
+    if (L < 24) { setMid(null); return; }
+    const a = el.getPointAtLength(L * 0.5 - 1), b = el.getPointAtLength(L * 0.5 + 1);
+    setMid({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, deg: (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI });
+  }, [d]);
+  if (!s || !t) return null;
 
   // Power on this edge. Assets: + = takes from the bus (flow target -> source).
   // Utility edge: grid_kw + = import (flow source -> target).
@@ -87,12 +99,16 @@ export function FlowEdge({ id, source, target, data }: EdgeProps) {
 
   return (
     <g>
-      <path id={id} d={d} className={scene ? "edge-base cable" : "edge-base"} />
+      <path ref={base} id={id} d={d} className={scene ? "edge-base cable" : "edge-base"} />
       {on && (
         <>
           <path d={d} className="edge-tint" stroke={color} strokeWidth={2} />
           <path d={d} className="edge-flow" stroke={color} strokeWidth={width}
             style={{ animationDirection: p > 0 ? "normal" : "reverse" }} />
+          {mid && (
+            <path className="edge-arrow" d="M-4,-4.5 L4,0 L-4,4.5 Z" fill={color}
+              transform={`translate(${mid.x},${mid.y}) rotate(${mid.deg + (p > 0 ? 0 : 180)})`} />
+          )}
         </>
       )}
     </g>

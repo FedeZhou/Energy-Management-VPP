@@ -52,7 +52,8 @@ export function Canvas() {
   const assetKey = assets.map((a) => a.id).join("|");
   const flowSize = useFlowStore((s) => `${Math.round(s.width)}x${Math.round(s.height)}`);
   useEffect(() => {
-    const t = setTimeout(() => fitView({ padding: 0.14, maxZoom: 1.1 }), 60);
+    // Room at the top for the clock and view switch, on the right for the zoom buttons.
+    const t = setTimeout(() => fitView({ padding: { top: "56px", bottom: "24px", left: "32px", right: "56px" }, maxZoom: 1.1 }), 60);
     return () => clearTimeout(t);
   }, [assetKey, flowSize, fitView, view]);
 
@@ -110,16 +111,16 @@ export function Canvas() {
         maxZoom={1.8}
         proOptions={{ hideAttribution: true }}
       >
-        <Background gap={20} size={1.2} color="var(--grid-dot)" />
+        <Background gap={16} size={1} color="var(--grid-dot)" />
         <Controls showInteractive={false} position="bottom-right" />
       </ReactFlow>
       <Clock />
       <div className="canvas-tools">
         <div className="segmented" role="radiogroup" aria-label="Site view style" data-tour="view">
-          <button role="radio" aria-checked={view === "scene"} className={view === "scene" ? "on" : ""} onClick={() => setView("scene")}
-            title="Illustrated view">Scene</button>
           <button role="radio" aria-checked={view === "diagram"} className={view === "diagram" ? "on" : ""} onClick={() => setView("diagram")}
             title="One-line diagram">Diagram</button>
+          <button role="radio" aria-checked={view === "scene"} className={view === "scene" ? "on" : ""} onClick={() => setView("scene")}
+            title="Illustrated view">Scene</button>
         </div>
         <Help topic="siteView" />
       </div>

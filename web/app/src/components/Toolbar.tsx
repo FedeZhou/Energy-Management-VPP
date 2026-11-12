@@ -1,5 +1,5 @@
-import { useRef } from "react";
-import { BookOpen, CircleHelp, Database, Download, FilePlus2, Loader2, Play, RotateCw, Scale, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { BookOpen, CircleHelp, Database, Download, FilePlus2, Loader2, Play, RotateCw, Scale, Square, Upload } from "lucide-react";
 import type { Mode, Site } from "../api";
 import { useStore } from "../store";
 import { useGuide } from "./Guide";
@@ -13,25 +13,36 @@ const MODES: { id: Mode; label: string; hint: string }[] = [
 function Mark() {
   return (
     <svg className="brand-mark" viewBox="0 0 24 24" aria-hidden>
-      <rect width="24" height="24" rx="6" fill="currentColor" />
+      <rect width="24" height="24" rx="5" fill="currentColor" />
       <g fill="var(--surface)">
-        <rect x="6" y="12" width="3" height="6" rx="1" />
-        <rect x="10.5" y="6" width="3" height="12" rx="1" />
-        <rect x="15" y="9" width="3" height="9" rx="1" />
+        <rect x="6" y="12" width="3" height="6" rx="0.75" />
+        <rect x="10.5" y="6" width="3" height="12" rx="0.75" />
+        <rect x="15" y="9" width="3" height="9" rx="0.75" />
       </g>
     </svg>
   );
+}
+
+/** Time since the running simulation started, as m:ss, ticking every second. */
+function Elapsed({ since }: { since: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const s = Math.max(0, Math.floor((now - since) / 1000));
+  return <span className="num elapsed">{Math.floor(s / 60)}:{String(s % 60).padStart(2, "0")}</span>;
 }
 
 export function Toolbar() {
   const presets = useStore((s) => s.presets);
   const mode = useStore((s) => s.site.mode);
   const name = useStore((s) => s.site.name);
-  const running = useStore((s) => s.running);
+  const job = useStore((s) => s.job);
   const stale = useStore((s) => s.stale);
   const hasResult = useStore((s) => s.result !== null);
   const assets = useStore((s) => s.site.assets.length);
-  const { loadSite, run, compareForecasts, setMode } = useStore.getState();
+  const { loadSite, run, compareForecasts, setMode, cancel } = useStore.getState();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const exportJson = () => {
@@ -55,38 +66,28 @@ export function Toolbar() {
   };
 
   const again = hasResult && stale;
+  const running = job !== null;
   return (
     <header className="topbar">
-      <div className="brand">
+      <div className="brand" title={name}>
         <Mark />
         <span className="brand-name">Site Lab</span>
-        <span className="crumb-sep">/</span>
-        <span className="crumb" title={name}>{name}</span>
+        <span className="crumb-sep" aria-hidden>/</span>
+        <span className="crumb">{name}</span>
       </div>
-      <div className="segmented" role="radiogroup" aria-label="Mode" data-tour="mode">
-        {MODES.map(({ id, label, hint }) => (
-          <button key={id} role="radio" aria-checked={mode === id} className={mode === id ? "on" : ""}
-            onClick={() => mode !== id && setMode(id)} title={hint}>
-            {label}
-          </button>
-        ))}
+      <div className="tb-group">
+        <div className="segmented" role="radiogroup" aria-label="Mode" data-tour="mode">
+          {MODES.map(({ id, label, hint }) => (
+            <button key={id} role="radio" aria-checked={mode === id} className={mode === id ? "on" : ""}
+              onClick={() => mode !== id && setMode(id)} title={hint}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <Help topic="modes" />
       </div>
-      <Help topic="modes" />
-      <div className="topbar-spacer" />
-      <div className="topbar-group">
-        <button className="btn ghost" onClick={() => useGuide.getState().start()} data-tour="guide" title="A short tour of the interface">
-          <CircleHelp size={15} /> Guide
-        </button>
-        <button className="btn ghost" data-tour="learn" onClick={() => useStore.getState().setPage("learn")} title="How Site Lab works, how the systems behave, research digests">
-          <BookOpen size={15} /> Learn
-        </button>
-        <button className="icon-btn" title="Where the data comes from" aria-label="Data sources" data-tour="data"
-          onClick={() => useStore.getState().setDataPanel(true)}>
-          <Database size={16} />
-        </button>
-      </div>
-      <div className="vsep" />
-      <div className="topbar-files" data-tour="examples">
+      <div className="tb-sep" />
+      <div className="tb-group" data-tour="examples">
         <select className="examples" aria-label="Load an example" defaultValue="" onChange={(e) => {
           const p = presets.find((x) => x.id === e.target.value);
           if (p) loadSite(p.site);
@@ -111,15 +112,42 @@ export function Toolbar() {
           e.target.value = "";
         }} />
       </div>
-      <div className="vsep" />
-      <button className="btn" onClick={() => compareForecasts()} disabled={running || assets === 0}
-        title="Run twice: with perfect forecasts, and with what a real controller would know (yesterday's load, the day-ahead weather forecast, prices only once published, cars only once plugged in)">
-        <Scale size={14} /> Compare forecasts
-      </button>
-      <button className="btn primary" data-tour="run" onClick={() => run()} disabled={running || assets === 0} title="Run simulation (Ctrl+Enter)">
-        {running ? <Loader2 size={14} className="spin" /> : again ? <RotateCw size={14} /> : <Play size={14} />}
-        {running ? "Running" : again ? "Re-run" : "Run"}
-      </button>
+      <div className="tb-spacer" />
+      <div className="tb-group">
+        <button className="btn ghost" data-tour="learn" onClick={() => useStore.getState().setPage("learn")}
+          title="Learn: how Site Lab works, how the systems behave, research digests" aria-label="Learn">
+          <BookOpen size={15} /><span className="lbl">Learn</span>
+        </button>
+        <button className="btn ghost" onClick={() => useGuide.getState().start()} data-tour="guide"
+          title="Guide: a short tour of the interface" aria-label="Guide">
+          <CircleHelp size={15} /><span className="lbl">Guide</span>
+        </button>
+        <button className="btn ghost" title="Where the data comes from" aria-label="Data sources" data-tour="data"
+          onClick={() => useStore.getState().setDataPanel(true)}>
+          <Database size={15} /><span className="lbl">Data</span>
+        </button>
+      </div>
+      <div className="tb-sep" />
+      <div className="tb-group tb-actions">
+        <button className="btn" onClick={() => compareForecasts()} disabled={running || assets === 0}
+          aria-label="Compare forecasts"
+          title="Compare forecasts: run twice, with perfect forecasts and with what a real controller would know (yesterday's load, the day-ahead weather forecast, prices only once published, cars only once plugged in)">
+          {job?.kind === "compare" ? <Loader2 size={14} className="spin" /> : <Scale size={14} />}
+          <span className="lbl">{job?.kind === "compare" ? "Comparing" : "Compare forecasts"}</span>
+          {job?.kind === "compare" && <Elapsed since={job.started} />}
+        </button>
+        {running ? (
+          <button className="btn danger-outline" onClick={cancel} title="Stop the simulation (the previous result stays)" data-tour="run">
+            <Square size={12} fill="currentColor" /> Stop
+            {job.kind === "run" && <><Loader2 size={13} className="spin" /><Elapsed since={job.started} /></>}
+          </button>
+        ) : (
+          <button className="btn primary" data-tour="run" onClick={() => run()} disabled={assets === 0} title="Run simulation (Ctrl+Enter)">
+            {again ? <RotateCw size={14} /> : <Play size={14} />}
+            {again ? "Re-run" : "Run"}
+          </button>
+        )}
+      </div>
     </header>
   );
 }

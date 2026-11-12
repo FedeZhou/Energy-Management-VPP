@@ -4,15 +4,19 @@ import { BarChart, LineChart } from "echarts/charts";
 import { AxisPointerComponent, DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TitleComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import { useStore } from "../store";
-import { dayLabel, isMidnight, readVar, stepLabel, timeAt } from "../util";
+import { dayLabel, isMidnight, num, readVar, stepLabel, timeAt, UNIT_SPACE } from "../util";
 
 echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, DataZoomComponent, LegendComponent, AxisPointerComponent,
   TitleComponent, MarkLineComponent, CanvasRenderer]);
 
-// Stacked panels share one time axis. Each panel uses at most three colours (validated
-// palette); identity is also carried by legend, line style and labels.
+// Stacked panels share one time axis. Series colours are the energy tokens (styles.css), validated
+// as a categorical set in both themes; identity is also carried by the legend and by line style
+// (loads by dash pattern, EV and solar as filled areas, the baseline dashed).
 interface Panel { key: string; title: string; height: number }
-const GAP = 38;
+const GAP = 40; // between panels: room for the next panel's title
+const LEGEND_H = 30; // the legend has its own row, so it never collides with a panel title
+const LEFT = 56;
+const RIGHT = 20;
 
 function useDark(): boolean {
   const [dark, setDark] = useState(() => matchMedia("(prefers-color-scheme: dark)").matches);
@@ -24,6 +28,9 @@ function useDark(): boolean {
   }, []);
   return dark;
 }
+
+/** Axis numbers: thousands separators, no needless decimals. */
+const tidy = (n: number) => num(n, Number.isInteger(n) || Math.abs(n) >= 10 ? 0 : Math.abs(n) >= 1 ? 1 : 2);
 
 export function Charts() {
   const r = useStore((s) => s.result);
@@ -39,16 +46,17 @@ export function Charts() {
   const hasBattery = site.assets.some((a) => a.type === "battery");
   const hasEv = site.assets.some((a) => a.type === "ev_charger");
   const showPhases = site.grid.fuse_a != null || (site.mode === "operate" && hasEv);
+  const cur = r?.result.currency === "EUR" ? "€" : r?.result.currency === "USD" ? "$" : (r?.result.currency ?? "");
   const panels: Panel[] = [
-    { key: "power", title: "Site power by component · kW", height: 170 },
-    ...(hasBattery ? [{ key: "flex", title: "Battery · kW (+ charging, − discharging)", height: 72 }] : []),
-    ...(hasBattery ? [{ key: "soc", title: "Battery state of charge", height: 46 }] : []),
-    ...(showPhases ? [{ key: "phase", title: "Current per phase · A", height: 80 }] : []),
-    { key: "price", title: `Import price · ${r?.result.currency ?? ""}/kWh`, height: 40 },
+    { key: "power", title: "Site power by component (kW)", height: 180 },
+    ...(hasBattery ? [{ key: "flex", title: "Battery power (kW, + charging, − discharging)", height: 76 }] : []),
+    ...(hasBattery ? [{ key: "soc", title: "Battery state of charge (%)", height: 52 }] : []),
+    ...(showPhases ? [{ key: "phase", title: "Current per phase (A)", height: 84 }] : []),
+    { key: "price", title: `Import price (${cur}/kWh)`, height: 48 },
   ];
-  let y = 30;
+  let y = LEGEND_H + 22;
   const layout = panels.map((p) => { const top = y; y += p.height + GAP; return { ...p, top }; });
-  const HEIGHT = y + 10;
+  const HEIGHT = y + 6;
   const panelKey = layout.map((p) => p.key).join(",");
 
   useEffect(() => {
@@ -56,35 +64,37 @@ export function Charts() {
     const c = echarts.init(box.current, undefined, { renderer: "canvas" });
     chart.current = c;
     const v = (n: string) => readVar(n);
-    const ink = v("--ink"), ink2 = v("--ink-2"), muted = v("--muted"), hair = v("--border"), bad = v("--bad"), strong = v("--border-strong");
+    const ink = v("--ink"), ink2 = v("--ink-2"), muted = v("--muted"), hair = v("--chart-grid"), axis = v("--border-strong"),
+      bad = v("--bad"), strong = v("--border-strong");
     const s = r.result.site;
     const { start, step_minutes: step, steps: T } = r.time;
     const x = Array.from({ length: T }, (_, i) => i);
     const label = (i: number) => stepLabel(start, step, i);
     const totalDays = (T * step) / 1440;
     const view = site.mode === "operate" || totalDays <= 7 ? T : Math.round((7 * 1440) / step);
-    const cur = useStore.getState().cursor;
-    const first = Math.max(0, Math.min(T - view, cur - Math.round(view * 0.3)));
+    const curIdx = useStore.getState().cursor;
+    const first = Math.max(0, Math.min(T - view, curIdx - Math.round(view * 0.3)));
     win.current = [first, Math.min(T - 1, first + view - 1)];
     const idx = Object.fromEntries(layout.map((p, k) => [p.key, k]));
     const last = layout.length - 1;
+    const font = v("--font-ui");
 
     const axes = layout.map((_, k) => ({
       type: "category" as const, data: x, gridIndex: k, boundaryGap: true,
-      axisLine: { lineStyle: { color: hair } }, axisTick: { show: false },
+      axisLine: { lineStyle: { color: axis } }, axisTick: { show: false },
       axisLabel: k === last
-        ? { color: muted, fontSize: 11, formatter: (val: string) => dayLabel(timeAt(start, step, Number(val))), interval: (i: number) => isMidnight(start, step, i) }
+        ? { color: muted, fontSize: 11, hideOverlap: true, formatter: (val: string) => dayLabel(timeAt(start, step, Number(val))), interval: (i: number) => isMidnight(start, step, i) }
         : { show: false },
-      axisPointer: { show: true, label: { show: false }, lineStyle: { color: muted } },
+      axisPointer: { show: true, label: { show: false }, lineStyle: { color: muted, width: 1 } },
     }));
-    const tidy = (n: number) => (Number.isInteger(n) || Math.abs(n) >= 10 ? String(Math.round(n)) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, ""));
     const yAxis = (k: number, extra: object = {}) => ({
       type: "value" as const, gridIndex: k, splitNumber: 2,
-      axisLabel: { color: muted, fontSize: 10, formatter: tidy }, splitLine: { lineStyle: { color: hair, opacity: 0.7 } }, ...extra,
+      axisLabel: { color: muted, fontSize: 11, formatter: tidy, hideOverlap: true },
+      splitLine: { lineStyle: { color: hair } }, ...extra,
     });
     const lineS = (name: string, data: number[], color: string, k: number, extra: object = {}) => ({
       name, type: "line" as const, data, xAxisIndex: k, yAxisIndex: k, showSymbol: false, sampling: "lttb" as const,
-      lineStyle: { width: 1.75, color }, itemStyle: { color }, emphasis: { disabled: true }, ...extra,
+      lineStyle: { width: 1.5, color }, itemStyle: { color }, emphasis: { disabled: true }, ...extra,
     });
 
     // Power panel: one line per consuming component (each building by name, EV charging), plus solar
@@ -106,67 +116,88 @@ export function Charts() {
     const hasPv = site.assets.some((a) => a.type === "pv");
     const hasHp = site.assets.some((a) => a.type === "heat_pump");
     const consumers = [...loadLines.map((l) => l.name), ...(hasHp ? ["Heat pump"] : []), ...(hasEv ? ["EV charging"] : [])];
+    const grid = v("--c-grid"), solar = v("--c-solar"), ev = v("--c-ev"), heat = v("--c-heat"), batt = v("--c-batt");
     const series: object[] = [
       ...loadLines.map((l) => lineS(l.name, l.data, loadColor, idx.power, { lineStyle: { width: 1.5, color: loadColor, type: l.type } })),
-      ...(hasHp ? [lineS("Heat pump", s.hp_kw, v("--c-heat"), idx.power, { lineStyle: { width: 1.5, color: v("--c-heat") } })] : []),
-      ...(hasEv ? [lineS("EV charging", s.ev_kw, v("--c-ev"), idx.power, { step: "middle", areaStyle: { color: v("--c-ev"), opacity: 0.18 }, lineStyle: { width: 1.5, color: v("--c-ev") } })] : []),
-      ...(hasPv ? [lineS("Solar", s.pv_kw, v("--c-solar"), idx.power, { areaStyle: { color: v("--c-solar"), opacity: 0.18 }, lineStyle: { width: 1.5, color: v("--c-solar") } })] : []),
-      lineS("Grid, baseline", r.baseline.site.grid_kw, v("--c-grid"), idx.power, { lineStyle: { width: 1.5, type: "dashed", color: v("--c-grid"), opacity: 0.55 } }),
-      lineS("Grid", s.grid_kw, v("--c-grid"), idx.power),
-      lineS("Import price", s.price, ink, idx.price, { step: "middle", lineStyle: { width: 1.5, color: muted } }),
+      ...(hasHp ? [lineS("Heat pump", s.hp_kw, heat, idx.power)] : []),
+      ...(hasEv ? [lineS("EV charging", s.ev_kw, ev, idx.power, { step: "middle", areaStyle: { color: ev, opacity: 0.16 } })] : []),
+      ...(hasPv ? [lineS("Solar", s.pv_kw, solar, idx.power, { areaStyle: { color: solar, opacity: 0.16 } })] : []),
+      lineS("Grid, baseline", r.baseline.site.grid_kw, grid, idx.power, { lineStyle: { width: 1.25, type: [4, 3], color: grid, opacity: 0.6 } }),
+      lineS("Grid", s.grid_kw, grid, idx.power, { lineStyle: { width: 2, color: grid } }),
+      lineS("Import price", s.price, ink2, idx.price, { step: "middle", lineStyle: { width: 1.5, color: ink2 } }),
     ];
     const legend = [...consumers, ...(hasPv ? ["Solar"] : []), "Grid", "Grid, baseline"];
     if (idx.flex !== undefined) {
-      series.push({ name: "Battery", type: "bar", data: s.battery_kw, xAxisIndex: idx.flex, yAxisIndex: idx.flex, barCategoryGap: "15%", itemStyle: { color: v("--c-batt"), borderRadius: 2 }, large: true });
+      series.push({ name: "Battery", type: "bar", data: s.battery_kw, xAxisIndex: idx.flex, yAxisIndex: idx.flex, barCategoryGap: "15%", itemStyle: { color: batt, borderRadius: 1 }, large: true });
       legend.push("Battery");
     }
-    if (idx.soc !== undefined) series.push(lineS("Battery charge", s.soc.map((q) => q * 100), v("--c-batt"), idx.soc, { areaStyle: { color: v("--c-batt"), opacity: 0.15 } }));
+    if (idx.soc !== undefined) series.push(lineS("Battery charge", s.soc.map((q) => q * 100), batt, idx.soc, { areaStyle: { color: batt, opacity: 0.14 } }));
+    const phaseNames = ["L1", "L2", "L3"];
     if (idx.phase !== undefined) {
       const fuse = site.grid.fuse_a;
+      // Three phases of one quantity: one ink, told apart by dash pattern and their own legend.
       (["phase_l1_a", "phase_l2_a", "phase_l3_a"] as const).forEach((key, k) => {
-        series.push(lineS(`L${k + 1}`, s[key], ink2, idx.phase, {
-          endLabel: { show: true, formatter: `L${k + 1}`, color: muted, fontSize: 10, distance: 4 },
-          lineStyle: { width: 1.5, color: ink2, type: ["solid", "dashed", "dotted"][k] },
-          ...(k === 0 && fuse != null ? { markLine: { silent: true, symbol: "none", lineStyle: { color: bad, width: 1.5 },
-            label: { formatter: `Fuse ${fuse} A`, color: bad, position: "insideEndTop" }, data: [{ yAxis: fuse }] } } : {}),
+        series.push(lineS(phaseNames[k], s[key], ink2, idx.phase, {
+          lineStyle: { width: 1.5, color: ink2, type: ["solid", [6, 3], [1.5, 2.5]][k], opacity: [1, 0.85, 0.85][k] },
+          ...(k === 0 && fuse != null ? { markLine: { silent: true, symbol: "none", lineStyle: { color: bad, width: 1.25, type: [4, 3] },
+            label: { formatter: `Fuse ${fuse}${UNIT_SPACE}A`, color: bad, position: "insideEndBottom", fontSize: 11 }, data: [{ yAxis: fuse }] } } : {}),
         }));
       });
     }
 
+    // Phase currents: at most four round ticks, with the fuse line inside the panel.
+    function phaseScale() {
+      const all = [s.phase_l1_a ?? [], s.phase_l2_a ?? [], s.phase_l3_a ?? []].flat();
+      let lo = 0, hi = Math.max(1, (site.grid.fuse_a ?? 0) * 1.1);
+      for (const a of all) { if (a < lo) lo = a; if (a > hi) hi = a; }
+      const raw = (hi - lo) / 3;
+      const mag = 10 ** Math.floor(Math.log10(raw));
+      const interval = [1, 2, 2.5, 5, 10].map((f) => f * mag).find((v) => v >= raw) ?? 10 * mag;
+      return { min: Math.floor(lo / interval) * interval, max: Math.ceil(hi / interval) * interval, interval };
+    }
+    const legendText = { color: ink2, fontSize: 12, fontFamily: font };
     c.setOption({
       animation: false,
-      textStyle: { fontFamily: v("--font-ui") },
-      title: layout.map((p) => ({ text: p.title, top: p.top - 22, left: 52, textStyle: { fontSize: 11, fontWeight: 500, color: muted } })),
-      grid: layout.map((p) => ({ left: 52, right: 36, top: p.top, height: p.height })),
+      textStyle: { fontFamily: font },
+      title: layout.map((p) => ({ text: p.title, top: p.top - 20, left: LEFT - 4, textStyle: { fontSize: 12, fontWeight: 500, color: muted, fontFamily: font } })),
+      grid: layout.map((p) => ({ left: LEFT, right: RIGHT, top: p.top, height: p.height })),
       xAxis: axes,
       yAxis: layout.map((p, k) => p.key === "soc"
-        ? yAxis(k, { min: 0, max: 100, axisLabel: { color: muted, fontSize: 10, formatter: "{value}%" } })
-        : p.key === "phase" && site.grid.fuse_a != null ? yAxis(k, { max: (val: { max: number }) => Math.ceil(Math.max(val.max, site.grid.fuse_a! * 1.1) / 5) * 5 })
+        ? yAxis(k, { min: 0, max: 100, interval: 50, axisLabel: { color: muted, fontSize: 11, formatter: "{value}%" } })
+        : p.key === "phase" ? yAxis(k, phaseScale())
           : yAxis(k)),
       axisPointer: { link: [{ xAxisIndex: "all" }] },
       tooltip: {
-        trigger: "axis", backgroundColor: v("--surface"), borderColor: hair, borderWidth: 1, padding: [8, 10], textStyle: { color: ink, fontSize: 12 },
-        extraCssText: "border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:180px",
+        trigger: "axis", backgroundColor: v("--surface"), borderColor: v("--border"), borderWidth: 1, padding: [8, 10], textStyle: { color: ink, fontSize: 12, fontFamily: font },
+        extraCssText: "border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.14);min-width:200px",
         formatter: (ps: { dataIndex: number; seriesName: string; value: number; marker: string }[]) => {
           if (!ps.length) return "";
           const i = ps[0].dataIndex;
-          const unit = (n: string) => (n === "Import price" ? "" : /^L[123]$/.test(n) ? " A" : n === "Battery charge" ? " %" : " kW");
-          const row = (marker: string, name: string, text: string) => `<div style="display:flex;align-items:center;gap:8px;line-height:20px">${marker}<span style="flex:1;color:${ink2}">${name}</span><b style="font-weight:600;font-variant-numeric:tabular-nums">${text}</b></div>`;
-          const rows = ps.map((p) => row(p.marker, p.seriesName, `${Number(p.value).toFixed(p.seriesName === "Import price" ? 3 : 1)}${unit(p.seriesName)}`));
+          const fmt = (n: string, val: number) => n === "Import price" ? `${cur}${num(val, 3)}/kWh`
+            : phaseNames.includes(n) ? `${num(val, 1)}${UNIT_SPACE}A`
+              : n === "Battery charge" ? `${num(val, 0)}%` : `${num(val, Math.abs(val) >= 100 ? 0 : 1)}${UNIT_SPACE}kW`;
+          const row = (marker: string, name: string, text: string, strongRow = false) => `<div style="display:flex;align-items:center;gap:8px;line-height:20px">${marker}<span style="flex:1;color:${strongRow ? ink : ink2}">${name}</span><b style="font-weight:${strongRow ? 600 : 500};font-variant-numeric:tabular-nums">${text}</b></div>`;
+          const rows = ps.map((p) => row(p.marker, p.seriesName, fmt(p.seriesName, Number(p.value))));
           // Total consumption, so the sum of the component lines is readable without a separate line.
           const shownConsumers = ps.filter((p) => consumers.includes(p.seriesName));
           if (shownConsumers.length > 1) {
             const total = shownConsumers.reduce((a, p) => a + Number(p.value), 0);
-            rows.splice(shownConsumers.length, 0, row('<span style="display:inline-block;width:10px"></span>', "Total demand", `${total.toFixed(1)} kW`));
+            rows.splice(shownConsumers.length, 0, row('<span style="display:inline-block;width:10px"></span>', "Total demand", fmt("", total), true));
           }
           return `<div style="font-weight:600;margin-bottom:6px">${label(i)}</div>${rows.join("")}`;
         },
       },
-      legend: { top: 0, right: 24, icon: "circle", itemWidth: 8, itemHeight: 8, itemGap: 16, textStyle: { color: muted, fontSize: 11 }, data: legend },
+      legend: [
+        { type: "scroll", top: 0, left: LEFT - 4, right: RIGHT, icon: "roundRect", itemWidth: 12, itemHeight: 3, itemGap: 18,
+          textStyle: legendText, pageTextStyle: { color: muted }, pageIconColor: ink2, pageIconInactiveColor: strong, data: legend },
+        ...(idx.phase !== undefined ? [{ top: layout[idx.phase].top - 21, right: RIGHT, itemWidth: 16, itemHeight: 2, itemGap: 14,
+          textStyle: { ...legendText, fontSize: 11 }, data: phaseNames }] : []),
+      ],
       dataZoom: [
         { type: "inside", xAxisIndex: layout.map((_, k) => k), startValue: win.current[0], endValue: win.current[1], zoomOnMouseWheel: "ctrl", moveOnMouseWheel: false },
         { type: "slider", xAxisIndex: layout.map((_, k) => k), startValue: win.current[0], endValue: win.current[1], bottom: 2, height: 18,
-          borderColor: hair, backgroundColor: "transparent", fillerColor: "rgba(127,127,127,0.10)", textStyle: { color: muted, fontSize: 10 },
+          left: LEFT, right: RIGHT + 10,
+          borderColor: v("--border"), backgroundColor: "transparent", fillerColor: v("--accent-soft"), textStyle: { color: muted, fontSize: 11 },
           handleStyle: { color: v("--surface"), borderColor: strong }, moveHandleStyle: { color: strong },
           dataBackground: { lineStyle: { color: strong, opacity: 0.6 }, areaStyle: { opacity: 0 } },
           selectedDataBackground: { lineStyle: { color: muted }, areaStyle: { opacity: 0 } }, labelFormatter: (i: number) => dayLabel(timeAt(start, step, i)) },
@@ -219,7 +250,7 @@ export function Charts() {
   return (
     <div className="charts">
       <div ref={box} style={{ height: HEIGHT, width: "100%" }} />
-      <div ref={line} className="playhead" style={{ bottom: 30 }} />
+      <div ref={line} className="playhead" style={{ top: LEGEND_H, bottom: 30 }} />
     </div>
   );
 }
