@@ -580,3 +580,8 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border-radius
   .tb-sep { margin: 0 2px; }
   .transport .time { display: none; }
 }
+
+/* Public static demo (GitHub Pages): a quiet badge next to the site name, linking to the live app. */
+.demo-pill { margin-left: 6px; padding: 2px 9px; border-radius: 99px; font-size: 11.5px; font-weight: 500; white-space: nowrap;
+  color: var(--accent); background: var(--accent-soft); text-decoration: none; }
+.demo-pill:hover { text-decoration: underline; text-underline-offset: 2px; }

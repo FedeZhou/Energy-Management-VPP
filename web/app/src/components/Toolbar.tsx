@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { BookOpen, CircleHelp, Database, Download, FilePlus2, Loader2, Play, RotateCw, Scale, Square, Upload } from "lucide-react";
-import type { Mode, Site } from "../api";
+import { LIVE_APP_URL, STATIC_DEMO, type Mode, type Site } from "../api";
 import { useStore } from "../store";
 import { useGuide } from "./Guide";
 import { Help } from "./Help";
@@ -74,6 +74,12 @@ export function Toolbar() {
         <span className="brand-name">Site Lab</span>
         <span className="crumb-sep" aria-hidden>/</span>
         <span className="crumb">{name}</span>
+        {STATIC_DEMO && (
+          <a className="demo-pill" href={LIVE_APP_URL} target="_blank" rel="noreferrer"
+            title="This public demo runs the example sites with pre-computed results. Open the live app to change and simulate anything.">
+            Demo · open the live app
+          </a>
+        )}
       </div>
       <div className="tb-group">
         <div className="segmented" role="radiogroup" aria-label="Mode" data-tour="mode">

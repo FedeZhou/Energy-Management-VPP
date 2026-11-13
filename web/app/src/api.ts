@@ -179,7 +179,53 @@ async function get<T>(path: string): Promise<T> {
   return r.json() as Promise<T>;
 }
 
-export const api = {
+/** Static demo (the public GitHub Pages site): there is no Python server, so the app reads the files written by
+ *  scripts/export_static_demo.py. The example sites run with pre-computed results; anything else points to the
+ *  live app. Built with VITE_STATIC_DEMO=1. */
+export const STATIC_DEMO = import.meta.env.VITE_STATIC_DEMO === "1";
+export const LIVE_APP_URL = "https://codespaces.new/FedeZhou/Energy-Management-VPP?quickstart=1";
+const DEMO = `${import.meta.env.BASE_URL}demo/`;
+
+/** Canonical JSON for comparing sites: sorted keys, canvas positions ignored. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (key, v) => {
+    if (key === "ui") return undefined;
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      return Object.fromEntries(Object.keys(v).sort().map((k) => [k, (v as Record<string, unknown>)[k]]));
+    }
+    return v;
+  });
+}
+
+let demoIndex: Promise<{ presets: Preset[]; runs: string[] }> | null = null;
+
+async function staticSimulate(site: Site): Promise<SimResponse> {
+  demoIndex ??= Promise.all([get<Preset[]>(`${DEMO}presets.json`), get<string[]>(`${DEMO}runs.json`)])
+    .then(([presets, runs]) => ({ presets, runs }));
+  const { presets, runs } = await demoIndex;
+  const battery = site.controller.battery;
+  const forecast = site.controller.forecast ?? "perfect";
+  const mine = canonical({ ...site, controller: { ...site.controller, battery, forecast } });
+  for (const p of presets) {
+    const ref = canonical({ ...p.site, controller: { ...p.site.controller, battery, forecast } });
+    const key = `${p.id}__${battery}__${forecast}`;
+    if (ref === mine && runs.includes(key)) return get<SimResponse>(`${DEMO}runs/${key}.json`);
+  }
+  throw new Error(
+    "This public demo shows the example sites with pre-computed results (their own strategy or MPC, with perfect or " +
+    `realistic forecasts). To change a site or a setting and simulate it, open the live app in GitHub Codespaces (${LIVE_APP_URL}) ` +
+    "or run Site Lab on your computer (see the README).",
+  );
+}
+
+export const api = STATIC_DEMO ? {
+  catalog: () => get<Catalog>(`${DEMO}catalog.json`),
+  profiles: () => get<Profiles>(`${DEMO}profiles.json`),
+  presets: () => get<Preset[]>(`${DEMO}presets.json`),
+  datasources: () => get<DataSources>(`${DEMO}datasources.json`),
+  tariffs: () => get<TariffComponents[]>(`${DEMO}tariffs.json`),
+  simulate: (site: Site, _signal?: AbortSignal): Promise<SimResponse> => staticSimulate(site),
+} : {
   catalog: () => get<Catalog>("/api/catalog"),
   profiles: () => get<Profiles>("/api/profiles"),
   presets: () => get<Preset[]>("/api/presets"),

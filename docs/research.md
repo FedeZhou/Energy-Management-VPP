@@ -204,12 +204,15 @@ Audiences:
 1. **Phase 0, learn (2 to 3 weeks):** read papers 1, 2, 4, 5, 9. Run EMHASS and CityLearn locally.
 2. **Phase 1, core simulator:** generic asset model (battery, PV, flexible load, grid limit), real price and load data, rule-based and deterministic MPC controllers.
 3. **Phase 2, uncertainty:** add Chronos-2 forecasts, stochastic MPC, reserve logic, real-time safety layer. Sweep forecast error.
+   *Update (Nov 2026):* our first results contradict the premise that stochastic or robust MPC is what closes the
+   forecast gap. With realistic forecasts the plain MPC lost to the simple rule; a "cautious" MPC (a few habits of a
+   planner that distrusts its forecast) beat the rule in all four test homes, by about 4% of cost including wear,
+   while replaying past days as scenarios did not. See `results/study_home_de/README_cautious.md`.
 4. **Phase 3, wear and stacking:** degradation cost, multi-service priorities.
 5. **Phase 4, configurations:** home, C&I with EV fleet, data center.
 6. **Phase 5, website:** 2D dashboard first, then 3D scene and concept explainers with open problems flagged.
 7. **Phase 6, user scenarios:** let visitors upload or configure their own site.
 
-**Before going public:** get a short written okay from your manager or HR that the project is generic, uses open data, and is unrelated to ABB products.
 
 ---
 
