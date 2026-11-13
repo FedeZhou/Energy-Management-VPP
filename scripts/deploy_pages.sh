@@ -9,6 +9,7 @@
 # The gh-pages branch holds only the built site, as a single commit that is replaced on every deploy, so the
 # generated JSON (about 18 MB) never enters main's history.
 set -euo pipefail
+export MSYS_NO_PATHCONV=1  # Git Bash on Windows would rewrite "/Energy-Management-VPP/" into a Windows path
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_NAME="Energy-Management-VPP"
