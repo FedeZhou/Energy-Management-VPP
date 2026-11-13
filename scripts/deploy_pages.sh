@@ -9,12 +9,13 @@
 # The gh-pages branch holds only the built site, as a single commit that is replaced on every deploy, so the
 # generated JSON (about 18 MB) never enters main's history.
 set -euo pipefail
-export MSYS_NO_PATHCONV=1  # Git Bash on Windows would rewrite "/Energy-Management-VPP/" into a Windows path
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_NAME="Energy-Management-VPP"
 REMOTE="$(git -C "$ROOT" remote get-url origin)"
 OUT="$(mktemp -d)"
+# Node on Windows (Git Bash) needs a Windows path for the output folder; elsewhere this is a no-op.
+native() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi; }
 
 if [ ! -f "$ROOT/web/app/public/demo/runs.json" ]; then
   echo "No demo data: run 'python scripts/export_static_demo.py' first." >&2
@@ -22,7 +23,8 @@ if [ ! -f "$ROOT/web/app/public/demo/runs.json" ]; then
 fi
 
 echo "Building the static demo into $OUT"
-(cd "$ROOT/web/app" && VITE_STATIC_DEMO=1 VITE_BASE="/$REPO_NAME/" npx vite build --outDir "$OUT" --emptyOutDir)
+# MSYS_NO_PATHCONV: stop Git Bash on Windows from rewriting the base path "/<repo>/" into a Windows path.
+(cd "$ROOT/web/app" && MSYS_NO_PATHCONV=1 VITE_STATIC_DEMO=1 VITE_BASE="/$REPO_NAME/"   npx vite build --outDir "$(native "$OUT")" --emptyOutDir)
 touch "$OUT/.nojekyll"              # serve files as they are (no Jekyll processing)
 cp "$OUT/index.html" "$OUT/404.html" # unknown paths fall back to the app
 
