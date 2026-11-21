@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Download, FileSpreadsheet, Image as ImageIcon, ListChecks } from "lucide-react";
+import { importLimitSeries } from "../api";
 import { useStore } from "../store";
 import { readVar } from "../util";
 import { fileStem, kpiTable, timeSeriesTable, toCsv } from "../exportData";
@@ -81,12 +82,13 @@ export function ExportMenu() {
   if (!r) return null;
   const stem = fileStem(r, site);
   const minutes = r.time.step_minutes;
+  const limited = importLimitSeries(r) != null; // the run had an import limit (firm or contract windows)
   const items: Item[] = [
     { id: "series", label: "Time series (CSV)", icon: <FileSpreadsheet size={14} />,
-      detail: `${r.time.steps.toLocaleString("en-GB")} rows, one per ${minutes >= 60 ? `${minutes / 60} h` : `${minutes} min`}: grid, devices, price, baseline`,
+      detail: `${r.time.steps.toLocaleString("en-GB")} rows, one per ${minutes >= 60 ? `${minutes / 60} h` : `${minutes} min`}: grid, devices, price, baseline${limited ? ", import limit" : ""}`,
       run: () => save(`${stem}.csv`, new Blob([toCsv(timeSeriesTable(r, site))], { type: "text/csv;charset=utf-8" })) },
     { id: "kpis", label: "KPI summary (CSV)", icon: <ListChecks size={14} />,
-      detail: "The result cards as numbers, with the baseline",
+      detail: `The result cards as numbers, with the baseline${limited ? ", incl. days the limit held" : ""}`,
       run: () => save(`${stem}_kpis.csv`, new Blob([toCsv(kpiTable(r, site))], { type: "text/csv;charset=utf-8" })) },
     { id: "png", label: "Charts (PNG)", icon: <ImageIcon size={14} />,
       detail: "The charts as shown, at double resolution",

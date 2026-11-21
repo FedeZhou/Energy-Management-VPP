@@ -2,7 +2,7 @@ import type { NodeProps } from "@xyflow/react";
 import type { Asset } from "../../api";
 import { useLive, useStore } from "../../store";
 import { ASSET_COLOR, kw, pct, perKwh, qty, timeAt } from "../../util";
-import { Handles, reading, spec } from "../Nodes";
+import { Handles, importLimitAt, importLimitText, reading, spec } from "../Nodes";
 import { Apartments, Battery, Charger, Cooling, DataCenter, HeatPumpArt, House, Office, Pylon, Solar, Transformer } from "./Art";
 import { Tile, VIEW_H, VIEW_W } from "./iso";
 
@@ -100,8 +100,9 @@ export function SceneMeter({ selected }: NodeProps) {
   const grid = useStore((s) => s.site.grid);
   const live = useLive();
   const g = live ? live.r.result.site.grid_kw[live.i] : null;
-  const limits = [grid.import_limit_kw != null ? kw(grid.import_limit_kw) : "", grid.fuse_a != null ? `3 × ${qty(grid.fuse_a, "A", 0)}` : ""].filter(Boolean);
-  const over = g != null && grid.import_limit_kw != null && g > grid.import_limit_kw + 0.01;
+  const limits = [importLimitText(grid, (v) => kw(v, Number.isInteger(v) ? 0 : "auto")), grid.fuse_a != null ? `3 × ${qty(grid.fuse_a, "A", 0)}` : ""].filter(Boolean);
+  const limitNow = importLimitAt(grid, live); // this step's limit: lower inside a contract window
+  const over = g != null && limitNow != null && g > limitNow + 0.01;
   const phases = live && grid.fuse_a != null
     ? (["phase_l1_a", "phase_l2_a", "phase_l3_a"] as const).map((k) => live.r.result.site[k][live.i])
     : null;

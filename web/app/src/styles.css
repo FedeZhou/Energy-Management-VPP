@@ -383,6 +383,36 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .affix .unit { padding: 0 9px 0 4px; color: var(--muted); font: 400 11px var(--font-mono); white-space: nowrap; }
 .foot-note { font: 400 11px var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .foot-note.bad { color: var(--bad); }
+
+/* Contract windows (Grid connection): one compact row per window, from · to · limit · remove, then the days
+   as a hairline toggle strip. Column heads are the mono label style, aligned with the row grid. */
+.cw { gap: 6px; }
+.cw-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.cw-head .tip { display: inline-grid; vertical-align: -2px; margin-left: 4px; }
+.cw-line { display: grid; grid-template-columns: 58px 8px 58px minmax(0, 1fr) 26px; gap: 6px; align-items: center; }
+.cw-cols span {
+  font: 500 10.5px/16px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+.cw-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.cw-row { display: flex; flex-direction: column; gap: 5px; padding: 8px 0; border-top: 1px solid var(--border); }
+.cw-row:last-child { border-bottom: 1px solid var(--border); }
+.cw-time { padding: 0 6px !important; font-family: var(--font-mono); font-size: 12px !important; font-variant-numeric: tabular-nums; text-align: center; }
+.cw-time.invalid, .cw-time.invalid:hover, .cw-time.invalid:focus { border-color: var(--bad); }
+.cw-dash { color: var(--muted); text-align: center; font-family: var(--font-mono); }
+.cw-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--border-strong); border-radius: var(--r); overflow: hidden; }
+.cw-days button {
+  height: 24px; border: 0; padding: 0; background: transparent; color: var(--muted); cursor: pointer;
+  font: 500 10.5px var(--font-mono); letter-spacing: 0.04em;
+}
+.cw-days button + button { box-shadow: -1px 0 0 var(--border); }
+.cw-days button:hover:not(.on) { color: var(--ink); }
+/* On: filled, ink text and an ink underline, so the state does not rest on a faint fill alone. */
+.cw-days button.on { background: var(--surface-3); color: var(--ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--ink); }
+.cw-days button.on + button { box-shadow: -1px 0 0 var(--border); }
+.cw-days button.on + button.on { box-shadow: -1px 0 0 var(--border), inset 0 -2px 0 var(--ink); }
+.cw-days button:focus-visible { outline-offset: -2px; }
+.cw-add { align-self: flex-start; height: 26px; padding: 0 6px 0 2px; gap: 5px; font-size: 12.5px; }
+.cw-summary { margin: 0; font-size: 12px; line-height: 17px; color: var(--ink-2); }
 .check { display: inline-flex; align-items: center; gap: 8px; height: 30px; cursor: pointer; }
 .check input { width: 14px; height: 14px; accent-color: var(--primary); margin: 0; }
 
@@ -433,6 +463,12 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .kpi-arrow { display: inline-grid; place-items: center; flex: none; }
 .kpi-arrow.good { color: var(--good); }
 .kpi-arrow.bad { color: var(--bad); }
+/* A pass/fail state (reliability target): icon and words in the status colour. */
+.kpi-status { display: flex; align-items: center; gap: 4px; font: 500 11px/16px var(--font-mono); min-width: 0; white-space: nowrap; }
+.kpi-status svg { flex: none; stroke-width: 1.75; }
+.kpi-status span { overflow: hidden; text-overflow: ellipsis; }
+.kpi-status.good { color: var(--good); }
+.kpi-status.bad { color: var(--bad); }
 
 .transport { display: flex; align-items: center; gap: 12px; flex: none; min-width: 0; }
 .transport-buttons { display: flex; align-items: center; gap: 2px; flex: none; }

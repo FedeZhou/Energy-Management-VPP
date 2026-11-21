@@ -3,6 +3,7 @@ import * as echarts from "echarts/core";
 import { BarChart, LineChart } from "echarts/charts";
 import { AxisPointerComponent, DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TitleComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
+import { importLimitSeries } from "../api";
 import { useStore } from "../store";
 import { useTheme } from "../theme";
 import { dayLabel, isMidnight, num, readVar, stepLabel, timeAt, UNIT_SPACE } from "../util";
@@ -120,6 +121,17 @@ export function Charts() {
     // The baseline's legend key is dashed, like its line (a solid key would read as a second grid line).
     const dashedKey = "path://M0,0h3v1h-3zM4.5,0h3v1h-3zM9,0h3v1h-3z";
     const legend: (string | { name: string; icon: string })[] = [...consumers, ...(hasPv ? ["Solar"] : []), "Grid", { name: "Grid, baseline", icon: dashedKey }];
+    // The import limit per step (firm, lower inside contract windows; gaps where unlimited). A boundary, not a
+    // series to compare: neutral ink-2, so it does not read as another energy flow (blue is grid power) or as a
+    // permanent alarm (--bad is kept for states such as an overshoot). Longer dashes than the baseline, stepped
+    // like the contract it draws, and drawn under the grid line so the grid power stays on top where they meet.
+    const limitSeries = importLimitSeries(r);
+    if (limitSeries) {
+      series.splice(series.length - 2, 0, lineS("Import limit", limitSeries as number[], ink2, idx.power, {
+        step: "middle", sampling: undefined, connectNulls: false,
+        lineStyle: { width: 1.25, type: [6, 3], color: ink2 } }));
+      legend.push({ name: "Import limit", icon: "path://M0,0h5v1h-5zM7,0h5v1h-5z" });
+    }
     if (idx.flex !== undefined) {
       series.push({ name: "Battery", type: "bar", data: s.battery_kw, xAxisIndex: idx.flex, yAxisIndex: idx.flex, barCategoryGap: "15%", itemStyle: { color: batt, borderRadius: 1 }, large: true });
       legend.push("Battery");
@@ -170,7 +182,8 @@ export function Charts() {
             : phaseNames.includes(n) ? `${num(val, 1)}${UNIT_SPACE}A`
               : n === "Battery charge" ? `${num(val, 0)}%` : `${num(val, Math.abs(val) >= 100 ? 0 : 1)}${UNIT_SPACE}kW`;
           const row = (marker: string, name: string, text: string, strongRow = false) => `<div style="display:flex;align-items:center;gap:8px;line-height:20px">${marker}<span style="flex:1;color:${strongRow ? ink : ink2}">${name}</span><b style="font-weight:${strongRow ? 600 : 500};font-family:${mono};font-size:11.5px;font-variant-numeric:tabular-nums">${text}</b></div>`;
-          const rows = ps.map((p) => row(p.marker, p.seriesName, fmt(p.seriesName, Number(p.value))));
+          // A null is "no value at this step" (the import limit where the contract sets none): no row.
+          const rows = ps.filter((p) => p.value != null).map((p) => row(p.marker, p.seriesName, fmt(p.seriesName, Number(p.value))));
           // Total consumption, so the sum of the component lines is readable without a separate line.
           const shownConsumers = ps.filter((p) => consumers.includes(p.seriesName));
           if (shownConsumers.length > 1) {

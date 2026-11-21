@@ -1,10 +1,11 @@
-import { AlertTriangle, ChevronRight, ChevronsDownUp, ChevronsUpDown, Info, PanelRightClose, PanelRightOpen, Settings2, Trash2 } from "lucide-react";
-import type { Field, ProfileInfo, Site } from "../api";
+import { Fragment } from "react";
+import { AlertTriangle, ChevronRight, ChevronsDownUp, ChevronsUpDown, Info, PanelRightClose, PanelRightOpen, Plus, Settings2, Trash2 } from "lucide-react";
+import { WEEKDAYS, type ContractWindow, type Field, type ProfileInfo, type Site, type Weekday } from "../api";
 import { ASSET_ICON } from "../icons";
 import { METER_ID, useStore } from "../store";
-import { ASSET_COLOR, money, num, perKwh, qty } from "../util";
+import { ASSET_COLOR, kw, money, num, perKwh, qty } from "../util";
 import { TariffSuggestion } from "./TariffSuggestion";
-import { fieldError } from "../validate";
+import { contractSummary, DAY_LONG, fieldError, normalizeTime, windowErrors } from "../validate";
 import { Help } from "./Help";
 import type { HelpTopic } from "../help";
 import { useLayout } from "../layout";
@@ -225,19 +226,133 @@ function Collapsible({ id, title, help, summary, forceOpen, children }: {
   );
 }
 
-function Section({ id, title, help, summary, forceOpen, fields, values, onChange, disabled, children }: {
+/** `after` puts extra controls right after a named field (e.g. the contract windows under the import limit). */
+function Section({ id, title, help, summary, forceOpen, fields, values, onChange, disabled, after, children }: {
   id: string; title: string; help?: HelpTopic; summary?: string; forceOpen?: boolean;
   fields: Field[]; values: Record<string, unknown>; onChange: (name: string, v: unknown) => void;
-  disabled?: Record<string, string>; children?: React.ReactNode;
+  disabled?: Record<string, string>; after?: Record<string, React.ReactNode>; children?: React.ReactNode;
 }) {
   return (
     <Collapsible id={id} title={title} help={help} summary={summary} forceOpen={forceOpen}>
       {children}
       <div className="fields">
-        {fields.map((f) => <FieldInput key={f.name} f={f} value={values[f.name]} disabled={disabled?.[f.name]}
-          onChange={(v) => onChange(f.name, v)} />)}
+        {fields.map((f) => (
+          <Fragment key={f.name}>
+            <FieldInput f={f} value={values[f.name]} disabled={disabled?.[f.name]} onChange={(v) => onChange(f.name, v)} />
+            {after?.[f.name]}
+          </Fragment>
+        ))}
       </div>
     </Collapsible>
+  );
+}
+
+const DAY_ABBR: Record<Weekday, string> = { mon: "Mo", tue: "Tu", wed: "We", thu: "Th", fri: "Fr", sat: "Sa", sun: "Su" };
+
+/** One window of a flexible contract: from, to, limit, remove; then the days it starts on. */
+function WindowRow({ w, i, firm, fields, onChange, onRemove }: {
+  w: ContractWindow; i: number; firm: number | null; fields: Field[];
+  onChange: (patch: Partial<ContractWindow>) => void; onRemove: () => void;
+}) {
+  const err = windowErrors(w, fields);
+  const id = `cw-${i}`;
+  const n = i + 1;
+  const time = (key: "start" | "end", label: string) => (
+    <input type="text" className={`cw-time ${err[key] ? "invalid" : ""}`} id={`${id}-${key}`} value={w[key]}
+      aria-label={`Window ${n} ${label} (HH:MM)`} aria-invalid={err[key] ? true : undefined}
+      aria-describedby={err[key] ? `${id}-${key}-err` : undefined}
+      placeholder="HH:MM" maxLength={5} spellCheck={false} autoComplete="off"
+      onChange={(e) => onChange({ [key]: e.target.value })}
+      onBlur={(e) => { const v = normalizeTime(e.target.value); if (v !== w[key]) onChange({ [key]: v }); }} />
+  );
+  const toggleDay = (d: Weekday) => onChange({ days: WEEKDAYS.filter((x) => (x === d ? !w.days.includes(d) : w.days.includes(x))) });
+  const cappedByFirm = firm != null && w.import_limit_kw != null && w.import_limit_kw > firm;
+  return (
+    <li className="cw-row">
+      <div className="cw-line">
+        {time("start", "from")}
+        <span className="cw-dash" aria-hidden>–</span>
+        {time("end", "to")}
+        <div className={`affix ${err.import_limit_kw ? "invalid" : ""}`}>
+          <input type="number" id={`${id}-limit`} aria-label={`Window ${n} limit inside the window (kW)`} step="any" min={0}
+            aria-invalid={err.import_limit_kw ? true : undefined} aria-describedby={err.import_limit_kw ? `${id}-limit-err` : undefined}
+            value={w.import_limit_kw == null ? "" : String(w.import_limit_kw)}
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (raw === "") return onChange({ import_limit_kw: null });
+              const v = Number(raw);
+              if (Number.isFinite(v)) onChange({ import_limit_kw: v });
+            }} />
+          <span className="unit">kW</span>
+        </div>
+        <button type="button" className="icon-btn sm danger" onClick={onRemove} title={`Remove window ${n}`} aria-label={`Remove window ${n}`}>
+          <Trash2 size={14} />
+        </button>
+      </div>
+      <div className="cw-days" role="group" aria-label={`Window ${n} days`}>
+        {WEEKDAYS.map((d) => {
+          const on = w.days.includes(d);
+          return (
+            <button key={d} type="button" className={on ? "on" : ""} aria-pressed={on} aria-label={DAY_LONG[d]}
+              title={`${DAY_LONG[d]}: ${on ? "on" : "off"}`} onClick={() => toggleDay(d)}>{DAY_ABBR[d]}</button>
+          );
+        })}
+      </div>
+      {err.start && <span className="field-error" id={`${id}-start-err`} role="alert">From: {err.start}</span>}
+      {err.end && <span className="field-error" id={`${id}-end-err`} role="alert">To: {err.end}</span>}
+      {err.import_limit_kw && <span className="field-error" id={`${id}-limit-err`} role="alert">Limit: {err.import_limit_kw}</span>}
+      {!err.start && !err.end && w.start === w.end && <span className="field-meta">Same start and end: the whole day.</span>}
+      {cappedByFirm && <span className="field-meta">The firm limit ({kw(firm)}) is lower, so it applies.</span>}
+      {w.days.length === 0 && <span className="field-note"><AlertTriangle size={12} />No days chosen: this window never applies.</span>}
+    </li>
+  );
+}
+
+/** The windows of a flexible grid contract, under the import limit. Mirrors sim/model.py ContractWindow. */
+function ContractWindows({ grid, fields, onChange }: {
+  grid: Site["grid"]; fields: Field[]; onChange: (windows: ContractWindow[]) => void;
+}) {
+  const windows = grid.contract_windows ?? [];
+  const firm = grid.import_limit_kw;
+  const daysField = fields.find((f) => f.name === "days");
+  const limitField = fields.find((f) => f.name === "import_limit_kw");
+  const defaultDays = Array.isArray(daysField?.default) ? (daysField.default as Weekday[]) : WEEKDAYS;
+  // A new window starts at 16:00-20:00, the evening window of the guide's worked example (section 8.2), with the
+  // firm limit (so it changes nothing until edited) or empty (to be filled in) when there is none.
+  const add = () => onChange([...windows, { start: "16:00", end: "20:00", days: [...defaultDays], import_limit_kw: firm }]);
+  const tip = [
+    "Recurring times in which a flexible contract lowers the import limit, e.g. a Dutch time-block contract: firm "
+    + "access except in agreed windows. One all-day window is a capacity-limited contract. Where windows overlap, the "
+    + "lowest limit applies; a time step that touches a window for any part gets its limit. An end at or before the start "
+    + "runs past midnight.",
+    daysField?.help ?? "", limitField?.help ?? "",
+    daysField?.source ? `Default days: ${daysField.source}` : "",
+  ].filter(Boolean).join("\n\n");
+  return (
+    <div className="field wide cw" role="group" aria-labelledby="cw-title">
+      <div className="cw-head">
+        <span className="field-label" id="cw-title">Contract windows<Tip text={tip} /></span>
+        <Help topic="contract" />
+      </div>
+      {windows.length > 0 ? (
+        <>
+          <div className="cw-line cw-cols" aria-hidden>
+            <span>From</span><span /><span>To</span><span>Limit</span><span />
+          </div>
+          <ol className="cw-list">
+            {windows.map((w, i) => (
+              <WindowRow key={i} w={w} i={i} firm={firm} fields={fields}
+                onChange={(patch) => onChange(windows.map((x, k) => (k === i ? { ...x, ...patch } : x)))}
+                onRemove={() => onChange(windows.filter((_, k) => k !== i))} />
+            ))}
+          </ol>
+        </>
+      ) : (
+        <span className="field-meta">None: the import limit applies at all times.</span>
+      )}
+      <button type="button" className="btn ghost cw-add" onClick={add}><Plus size={14} />Add window</button>
+      {windows.length > 0 && <p className="cw-summary" aria-live="polite">{contractSummary(grid)}</p>}
+    </div>
   );
 }
 
@@ -361,17 +476,24 @@ export function Inspector() {
   const tariffFields = catalog.site.tariff.filter((f) =>
     // Unpaid exports at negative prices only exist with day-ahead spot prices.
     f.name !== "export_unpaid_at_negative_prices" || site.tariff.price_profile.startsWith("ec/"));
+  const windows = site.grid.contract_windows ?? [];
+  const hasLimit = site.grid.import_limit_kw != null || windows.length > 0;
   const gridFields = catalog.site.grid.filter((f) =>
-    !f.name.startsWith("dimming_") || (site.grid.dimming ?? "off") !== "off");
+    (!f.name.startsWith("dimming_") || (site.grid.dimming ?? "off") !== "off")
+    && (f.name !== "reliability_target" || hasLimit)); // only scored when some limit applies
   const limits = [
-    site.grid.import_limit_kw != null ? `import ${site.grid.import_limit_kw} kW` : "",
+    windows.length ? `import ${site.grid.import_limit_kw != null ? `${site.grid.import_limit_kw} kW` : "unlimited"}, `
+      + `${windows.length} window${windows.length > 1 ? "s" : ""}`
+      : site.grid.import_limit_kw != null ? `import ${site.grid.import_limit_kw} kW` : "",
     site.grid.export_limit_kw != null ? `export ${site.grid.export_limit_kw} kW` : "",
     site.grid.fuse_a != null ? `fuse 3 × ${site.grid.fuse_a} A` : "",
   ].filter(Boolean).join(" · ");
   const price = profiles?.price.find((p) => p.id === site.tariff.price_profile)?.label.split(" (")[0] ?? site.tariff.price_profile;
   const grid = <Section key="grid" id="grid" title="Grid connection" help="grid" fields={gridFields} values={site.grid}
     summary={limits ? limits.charAt(0).toUpperCase() + limits.slice(1) : "No limits"} forceOpen={selectedId === METER_ID}
-    onChange={(n, v) => updateSection("grid", { [n]: v })} />;
+    onChange={(n, v) => updateSection("grid", { [n]: v })}
+    after={{ import_limit_kw: <ContractWindows grid={site.grid} fields={catalog.site.contract_window ?? []}
+      onChange={(ws) => updateSection("grid", { contract_windows: ws })} /> }} />;
   return (
     <aside className="inspector" data-tour="inspector" aria-label="Site settings">
       <div className="insp-head">

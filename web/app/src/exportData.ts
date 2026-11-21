@@ -1,7 +1,7 @@
 /* Export of a run as files: the time series and the KPI summary as CSV (RFC 4180, dot decimals, no
    thousands separators, UTF-8 with a BOM so Excel detects the encoding), plus safe file names.
    Pure functions, no DOM: the download itself lives in components/Export.tsx. */
-import type { AssetType, SimResponse, Site } from "./api";
+import { importLimitSeries, reliabilityOf, type AssetType, type LimitReliability, type SimResponse, type Site } from "./api";
 import { timeAt } from "./util";
 
 export interface Table { header: string[]; rows: (string | number | null | undefined)[][] }
@@ -52,6 +52,7 @@ const SITE_SERIES: { key: string; label: (cur: string) => string; scale?: number
   { key: "ev_kw", label: () => "EV chargers total (kW, + charging, - discharging)", device: "ev_charger" },
   { key: "hp_kw", label: () => "Heat pumps total (kW)", device: "heat_pump" },
   { key: "dimmed_kw", label: () => "Held back by grid-operator dimming (kW)" },
+  { key: "import_limit_kw", label: () => "Import limit (kW, firm or contract window; empty = unlimited)" },
   { key: "price", label: (cur) => `Import price (${cur || "currency"}/kWh)` },
   { key: "phase_l1_a", label: () => "Phase L1 current (A)" },
   { key: "phase_l2_a", label: () => "Phase L2 current (A)" },
@@ -84,6 +85,7 @@ export function timeSeriesTable(r: SimResponse, site: Site): Table {
     const keep = c.device ? simulatedTypes.has(c.device) || nonZero(data)
       : PHASES.has(c.key) ? site.grid.fuse_a != null || nonZero(data)
       : c.key === "dimmed_kw" ? (site.grid.dimming ?? "off") !== "off" || nonZero(data)
+      : c.key === "import_limit_kw" ? importLimitSeries(r) != null // null where unlimited: kept only if some limit
       : true;
     if (keep) cols.push({ header: c.label(cur), data, scale: c.scale ?? 1 });
     if (c.key === "grid_kw" && Array.isArray(r.baseline.site.grid_kw)) {
@@ -165,6 +167,24 @@ export function kpiTable(r: SimResponse, site: Site): Table {
   }
   if (site.assets.some((a) => a.type === "ev_charger" && a.bidirectional)) add("Car to home", "ev_discharged_kwh", "kWh");
   if (site.grid.dimming && site.grid.dimming !== "off") add("Dimmed (Section 14a)", "dimmed_kwh", "kWh");
-  if (site.grid.import_limit_kw != null) add("Energy over the import limit", "grid_overload_kwh", "kWh");
+  // Contract reliability (benchmark/reliability.py): read through the typed accessor, since these can be null,
+  // a boolean or a date. Same condition as the "Limit kept" card; its energy figure replaces the older one.
+  const rel = reliabilityOf(k);
+  const relB = reliabilityOf(b);
+  if (rel) {
+    const pair = (metric: string, f: (x: LimitReliability) => string | number | null, unit: string) =>
+      rows.push([metric, f(rel), relB ? f(relB) : null, unit]);
+    const p = `P${Math.round(rel.limit_reliability_target * 100)}`;
+    pair("Days with an import limit (evaluated)", (x) => x.limit_days_evaluated, "days");
+    pair("Days the import limit held at every step", (x) => x.limit_days_kept, "days");
+    pair("Limit kept (share of days)", (x) => x.limit_days_kept_share * 100, "%");
+    pair("Reliability target (share of days)", (x) => x.limit_reliability_target * 100, "%");
+    pair("Reliability target met", (x) => (x.limit_target_met ? "yes" : "no"), "");
+    pair("Energy above the import limit", (x) => x.limit_excess_kwh, "kWh");
+    pair("Worst step above the import limit", (x) => x.limit_worst_excess_kw, "kW");
+    pair("Date of the worst step", (x) => x.limit_worst_excess_date ?? "", "");
+    pair(`Daily peak at the target share (${p}), as a multiple of the limit (<= 1 = target met)`,
+      (x) => x.limit_daily_peak_ratio_at_target, "x limit");
+  } else if (site.grid.import_limit_kw != null) add("Energy over the import limit", "grid_overload_kwh", "kWh");
   return { header: ["Metric", "Value", "Baseline", "Unit"], rows };
 }

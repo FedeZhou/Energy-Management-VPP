@@ -81,7 +81,7 @@ export const HELP = {
           <dt>Idle</dt><dd>Never used.</dd>
           <dt>Self-consumption</dt><dd>Stores spare solar and covers demand from storage when solar is short.</dd>
           <dt>Price arbitrage</dt><dd>Stores spare solar, fills up from the grid at the cheapest step of the next 24 hours, and covers the site at the most expensive one.</dd>
-          <dt>Peak shaving</dt><dd>Discharges when demand is above the threshold and recharges below it.</dd>
+          <dt>Peak shaving</dt><dd>Aims for the lower of its threshold and this step's import limit (lower inside a contract window): discharges when demand is above that target and recharges below it. It does not look ahead; of the strategies, only MPC plans for a window before it starts.</dd>
           <dt>MPC</dt><dd>Model predictive control: every re-plan (hourly by default, and when a car plugs in) it solves an optimisation over the planning horizon (24 hours by default) for the battery and all cars together, minimising energy cost, any demand charges and, when the battery has a replacement cost, battery wear (a price per kWh cycled from the same ageing model). How the plan is carried out is the <b>MPC execution</b> setting: <i>plan</i> follows it and lets the battery absorb forecast errors; <i>hybrid</i> stores all spare solar like the self-consumption rule and lets the plan only add to it; <i>cautious</i> plans from this step's measured load and solar, never trades extra with the grid to keep to a wrong plan, and values leftover energy net of wear (the best choice with realistic forecasts in our tests). <b>MPC scenarios</b> above 1 plan for several futures replayed from recent days. The EV strategy below is then ignored. Heat pumps run on demand and cars are not discharged under MPC yet.</dd>
         </dl>
         <h5>EV charging</h5>
@@ -109,12 +109,35 @@ export const HELP = {
       <>
         <p>The single point where the site meets the utility grid. Positive power is import, negative is export.</p>
         <dl>
-          <dt>Import limit</dt><dd>The most the site may draw. When exceeded, the simulator stops battery charging, then discharges harder, then slows EV charging.</dd>
+          <dt>Import limit</dt><dd>The most the site may draw (the firm limit). When exceeded, the simulator stops battery charging, then discharges harder, then slows EV charging. Heat pumps and buildings are never cut, so a limit can still be exceeded.</dd>
+          <dt>Contract windows</dt><dd>Times in which a flexible contract lowers the import limit, for example 110 kW on weekdays 08:00–12:00 and the firm limit otherwise. Each step uses the limit that applies then. See the "?" next to the windows for how they work and how reliability is scored.</dd>
+          <dt>Reliability target</dt><dd>The share of days on which the limit must hold for the contract to count as kept (0.9 = 90% of days). Shown when there is a limit.</dd>
           <dt>Export limit</dt><dd>The most the site may feed in. Spare solar first goes into the battery, then is curtailed (thrown away).</dd>
           <dt>Fuse per phase</dt><dd>The current limit on each of the three phases (L1, L2, L3) at 230 V. When a phase is overloaded, battery charging is reduced first, then EV chargers on that phase slow down or pause.</dd>
           <dt>Grid-operator dimming (§14a)</dt><dd>In Germany the grid operator may limit controllable devices above 4.2 kW (private EV chargers, heat pumps, air conditioning, batteries while charging). <b>Direct</b>: each device keeps at least 4.2 kW (heat pumps above 11 kW keep 40% of their power). <b>EMS</b>: all of them together keep 4.2 kW + (n − 1) × simultaneity factor × 4.2 kW (0.8 for two devices down to 0.45 for nine or more), and the energy management system shares it: heat first, then cars, then battery charging. Real dimming is rare; the daily window is a stress test. Source: BNetzA decision BK6-22-300, Anlage 1.</dd>
         </dl>
         <p>Buildings, solar and batteries load the three phases equally. Single-phase chargers load only their phase, which is why phases can be uneven.</p>
+      </>
+    ),
+  },
+  contract: {
+    title: "Flexible contracts and reliability",
+    body: (
+      <>
+        <p>A <b>firm</b> connection has one import limit at all times. A <b>flexible</b> contract lowers it at agreed times. In a <b>time-block</b> contract (like the Dutch one) the site has full access except in set windows; a <b>capacity-limited</b> contract is a lower limit all day (one all-day window, or just the import limit).</p>
+        <h5>Windows</h5>
+        <ul>
+          <li>Each window has a start, an end, the days it starts on and the limit inside it. Times are the site's clock (fixed CET for European data, no summer time).</li>
+          <li>An end at or before the start runs past midnight (22:00–06:00); the same start and end means the whole day.</li>
+          <li>Where windows overlap, the lowest limit applies, and the firm import limit caps every window.</li>
+          <li>A time step that touches a window for any part gets the window's limit (with hourly steps, 08:30–12:00 limits the 08:00 hour).</li>
+          <li>The simulator compiles the contract into one limit per step. The safety layer enforces it, peak shaving aims under it and MPC plans for it (the contract is known in advance, also with realistic forecasts).</li>
+        </ul>
+        <h5>Reliability: days kept</h5>
+        <p>A flexible contract is only useful if the site can say how reliably it keeps the limit. A day is <b>kept</b> if import never went over the limit in any of its steps. Days without any limit (weekends of a weekday-only contract) are not counted. <b>Limit kept</b> is the share of counted days that were kept; the contract counts as kept when that share reaches the <b>reliability target</b> (90% by default: a "P90" promise that the limit holds on at least 90% of days).</p>
+        <h5>P90 daily peak</h5>
+        <p>The share alone does not say how close a run came. For each counted day the simulator takes its highest import as a share of the limit at that time, then the value that 90% of days stay at or below (the target share). Below 1 is a margin: 0.85 means even the 90th-percentile day stayed 15% under the limit. Above 1 is an overshoot: 1.10 means that day went 10% over. Exactly 1 means the 90th-percentile day just touched the limit.</p>
+        <p>Also reported: the energy imported above the limit over the whole run, and the worst overshoot in one step with its date.</p>
       </>
     ),
   },
@@ -229,7 +252,7 @@ export const HELP = {
         <dt>Cost incl. wear</dt><dd>Total cost plus battery wear: the share of the battery's value this period used up.</dd>
         <dt>Battery wear</dt><dd>NREL's BLAST-Lite ageing model (LFP or NMC; calendar and cycle ageing, depth of discharge, state of charge, temperature) estimates how many years the battery would last if it were always run like this, until it holds its end-of-life share of its capacity (80% by default). Wear = replacement cost × the share of that life this period used. An idle battery ages too, so the baseline has wear. Default replacement costs are 2022 German averages excluding VAT (1,200 €/kWh for home systems), higher than today's prices; set your own in the battery. Without a price (non-EUR sites) only the life is shown.</dd>
         <dt>EV energy</dt><dd>Energy delivered to cars, and how much was missing at departure.</dd>
-        <dt>Import limit</dt><dd>Energy above the limit that the safety layer could not avoid.</dd>
+        <dt>Limit kept</dt><dd>Shown when there is an import limit (firm or contract windows): the share of days on which import stayed under the limit at every step, against the reliability target (90% by default). Its tooltip adds the energy above the limit, the worst overshoot and the P90 daily peak. Details: the "?" next to Contract windows.</dd>
         <dt>Heat pump</dt><dd>Electricity used, the average COP over the period, and any heat demand left unmet.</dd>
         <dt>Car to home</dt><dd>Energy cars gave back through bidirectional chargers.</dd>
         <dt>Dimmed (§14a)</dt><dd>Energy the grid operator's limit held back from controllable devices.</dd>
@@ -240,7 +263,7 @@ export const HELP = {
     title: "Charts",
     body: (
       <ul>
-        <li>All panels share one time axis. The top panel shows each component: every building or load by name (grey, told apart by line style), EV charging, solar and the grid. The dashed blue line is grid power in the baseline.</li>
+        <li>All panels share one time axis. The top panel shows each component: every building or load by name (grey, told apart by line style), EV charging, solar and the grid. The dashed blue line is grid power in the baseline. With an import limit, a dark dashed stepped line shows the limit at each step (it drops inside contract windows); grid import above it is an overshoot.</li>
         <li>Hover to see each component's power and the total demand at that moment.</li>
         <li>Positive battery power is charging, negative is discharging.</li>
         <li>Click a chart to move the playhead there. Drag the slider at the bottom to change the visible window, or use Ctrl+scroll.</li>

@@ -1,11 +1,29 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { Gauge, UtilityPole } from "lucide-react";
-import type { Asset } from "../api";
+import { importLimitSeries, type Asset, type Site } from "../api";
 import { ASSET_ICON } from "../icons";
 import { METER_ID, useLive, useStore } from "../store";
 import { ASSET_COLOR, kw, pct, perKwh, qty } from "../util";
+import { windowLimit } from "../validate";
 
 const tone = (c: string) => ({ "--tone": c }) as React.CSSProperties;
+
+/** The import limit at the playhead: the engine's per-step series (the firm limit, or lower inside a contract
+ *  window; null where unlimited), else the firm limit (before a run, or a result without the series). */
+export function importLimitAt(grid: Site["grid"], live: ReturnType<typeof useLive>): number | null {
+  const series = live ? importLimitSeries(live.r) : null;
+  return series ? series[live!.i] ?? null : grid.import_limit_kw;
+}
+
+/** The import side of the contract in a few characters: "250 kW", "110–250 kW" (windows), "110 kW in windows". */
+export function importLimitText(grid: Site["grid"], fmt: (v: number) => string): string {
+  const firm = grid.import_limit_kw;
+  const lows = (grid.contract_windows ?? []).map((w) => windowLimit(w, firm)).filter((v): v is number => v != null);
+  if (!lows.length) return firm != null ? fmt(firm) : "";
+  const low = Math.min(...lows);
+  if (firm == null) return `${fmt(low)} in windows`;
+  return low < firm ? `${fmt(low).replace(/\s*kW$/, "")}–${fmt(firm)}` : fmt(firm);
+}
 
 export function Handles() {
   // Edges are routed by FlowEdge from node geometry; handles only satisfy React Flow.
@@ -103,12 +121,14 @@ export function MeterNode({ selected }: NodeProps) {
   const grid = useStore((s) => s.site.grid);
   const live = useLive();
   const g = live ? live.r.result.site.grid_kw[live.i] : null;
-  const limits = [grid.import_limit_kw != null ? rating(grid.import_limit_kw, "kW") : "", grid.fuse_a != null ? `3 × ${qty(grid.fuse_a, "A", 0)}` : ""].filter(Boolean);
-  const over = g != null && grid.import_limit_kw != null && g > grid.import_limit_kw + 0.01;
+  const limits = [importLimitText(grid, (v) => rating(v, "kW")), grid.fuse_a != null ? `3 × ${qty(grid.fuse_a, "A", 0)}` : ""].filter(Boolean);
+  const limitNow = importLimitAt(grid, live); // this step's limit: lower inside a contract window
+  const varies = (grid.contract_windows ?? []).length > 0;
+  const over = g != null && limitNow != null && g > limitNow + 0.01;
   const phases = live && grid.fuse_a != null
     ? (["phase_l1_a", "phase_l2_a", "phase_l3_a"] as const).map((k) => live.r.result.site[k][live.i])
     : null;
-  const load = g != null && grid.import_limit_kw ? Math.min(1, Math.max(g, 0) / grid.import_limit_kw) : null;
+  const load = g != null && limitNow ? Math.min(1, Math.max(g, 0) / limitNow) : null;
   return (
     <div className={`node hub ${selected ? "selected" : ""}`} style={tone(ASSET_COLOR.grid)}>
       <Handles />
@@ -128,9 +148,9 @@ export function MeterNode({ selected }: NodeProps) {
       {(load != null || phases) && (
         <div className="node-foot">
           {load != null && !phases && (
-            <div className="bar-row" title={`Import vs ${grid.import_limit_kw} kW limit`}>
+            <div className="bar-row" title={`Import vs the ${rating(limitNow, "kW")} limit at this step${varies ? " (it changes with the contract windows)" : ""}`}>
               <div className="track"><div className={over ? "hot" : ""} style={{ width: `${load * 100}%` }} /></div>
-              <span>{pct(load)} of limit</span>
+              <span>{pct(load)} of {varies ? rating(limitNow, "kW") : "limit"}</span>
             </div>
           )}
           {phases?.map((amps, k) => (

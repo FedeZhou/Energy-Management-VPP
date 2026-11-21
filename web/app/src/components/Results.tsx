@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, ChevronDown, ChevronUp, Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { reliabilityOf, type LimitReliability } from "../api";
 import { useScenarios } from "../scenarios";
 import { useStore } from "../store";
 import { dayLabel, kw, money, num, pct, pts, qty, signed, stepLabel, timeAt } from "../util";
@@ -11,7 +12,36 @@ import { Sessions } from "./Sessions";
 // ECharts is large: it loads with the first result, not with the lab.
 const Charts = lazy(() => import("./Charts").then((m) => ({ default: m.Charts })));
 
-interface Card { label: string; value: string; delta?: string; good?: boolean | null; dir?: 1 | -1; detail?: string }
+interface Card {
+  label: string; value: string; delta?: string; good?: boolean | null; dir?: 1 | -1; detail?: string;
+  /** A pass/fail state (e.g. a reliability target), shown with an icon and words, never colour alone. */
+  status?: { ok: boolean; text: string };
+}
+
+/** The tooltip of the "Limit kept" card, in plain words: days, energy over the limit, worst step, and the
+ *  daily peak at the target share (P90 for a 90% target), which says how close the run came. */
+function reliabilityDetail(rel: LimitReliability, base: LimitReliability | null): string {
+  const t = rel.limit_reliability_target;
+  const lines = [`Import stayed under the limit at every step on ${num(rel.limit_days_kept)} of ${num(rel.limit_days_evaluated)} days `
+    + `(target ${pct(t)} of days). Days without any limit are not counted.`];
+  if (rel.limit_excess_kwh > 0.05) {
+    const when = rel.limit_worst_excess_date ? ` on ${dayLabel(new Date(`${rel.limit_worst_excess_date}T00:00:00Z`))} ${rel.limit_worst_excess_date.slice(0, 4)}` : "";
+    lines.push(`${qty(rel.limit_excess_kwh, "kWh", "auto")} imported above the limit in all; the worst step went ${kw(rel.limit_worst_excess_kw)} over${when}.`);
+  } else {
+    lines.push("Never above the limit.");
+  }
+  const r = rel.limit_daily_peak_ratio_at_target;
+  const p = `P${Math.round(t * 100)}`;
+  if (r == null) lines.push(`${p} daily peak: not defined (a 0 kW limit).`);
+  else {
+    const over = (r - 1) * 100;
+    const how = !rel.limit_target_met ? `${num(over, over < 10 ? 1 : 0)}% too high to meet the target`
+      : r < 0.995 ? `a ${pct(1 - r)} margin` : "with no margin left";
+    lines.push(`${p} daily peak: ${num(r, 2)} × the limit. ${pct(t)} of days peaked at or below ${pct(r)} of the limit at that time, ${how}.`);
+  }
+  if (base) lines.push(`Baseline: kept on ${pct(base.limit_days_kept_share)} of days, ${qty(base.limit_excess_kwh, "kWh", "auto")} above the limit.`);
+  return lines.join("\n");
+}
 
 /** Change against the baseline as a signed value, e.g. "−€20.25 (−60%)". Shares in percentage points
  *  (relative = false) show only the point change, since a percentage of a percentage confuses. */
@@ -91,7 +121,21 @@ function Kpis() {
       delta: `${site.grid.dimming === "ems" ? "EMS" : "direct"} · ${site.grid.dimming_hours ?? 0} h/day`,
       detail: "Energy the grid operator's limit held back from controllable devices" });
   }
-  if (site.grid.import_limit_kw != null) {
+  // Import limit (firm, or lowered in contract windows): one card, scored per day against the reliability target.
+  // The engine compiles the contract into a per-step limit, so this covers both; the energy over the limit is in its
+  // detail. Results without the day counts (an older static demo) fall back to the energy over the limit.
+  const rel = reliabilityOf(k);
+  if (rel) {
+    const relBase = reliabilityOf(b);
+    const target = rel.limit_reliability_target;
+    const met = rel.limit_target_met;
+    cards.push({
+      label: "Limit kept", value: `${pct(rel.limit_days_kept_share)} of days`,
+      ...(relBase ? delta(rel.limit_days_kept_share, relBase.limit_days_kept_share, pts, false, false) : {}),
+      status: { ok: met, text: met ? `Target ${pct(target)} met` : `Below ${pct(target)} target` },
+      detail: reliabilityDetail(rel, relBase),
+    });
+  } else if (site.grid.import_limit_kw != null) {
     const over = k.grid_overload_kwh > 0.01;
     cards.push({ label: "Import limit", value: over ? `${qty(k.grid_overload_kwh, "kWh", 0)} over` : "Respected",
       delta: !over && b.grid_overload_kwh > 0.01 ? `Baseline ${qty(b.grid_overload_kwh, "kWh", 0)} over` : `Limit ${kw(site.grid.import_limit_kw)}`,
@@ -103,6 +147,12 @@ function Kpis() {
         <div className="kpi" key={c.label} title={c.detail}>
           <span className="kpi-label">{c.label}</span>
           <span className="kpi-value">{c.value}</span>
+          {c.status && (
+            <span className={`kpi-status ${c.status.ok ? "good" : "bad"}`}>
+              {c.status.ok ? <CheckCircle2 size={12} aria-hidden /> : <AlertTriangle size={12} aria-hidden />}
+              <span>{c.status.text}</span>
+            </span>
+          )}
           {c.delta && (
             <span className="kpi-delta">
               {c.good != null && (c.dir === 1 || c.dir === -1)

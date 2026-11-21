@@ -21,7 +21,12 @@ export interface Field {
 
 export interface Catalog {
   assets: Record<AssetType, { label: string; group: string; description: string; fields: Field[] }>;
-  site: { grid: Field[]; tariff: Field[]; controller: Field[]; period: Field[]; max_steps: number };
+  site: {
+    grid: Field[]; tariff: Field[]; controller: Field[]; period: Field[]; max_steps: number;
+    /** The fields of one flexible-contract window (site.grid.contract_windows is a list of these). Optional:
+     *  an older static-demo catalog may not have it. */
+    contract_window?: Field[];
+  };
 }
 
 export interface ProfileInfo {
@@ -59,6 +64,14 @@ export interface Asset {
   [param: string]: unknown;
 }
 
+export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+export const WEEKDAYS: Weekday[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+/** A recurring window in which a flexible grid contract lowers the import limit (sim/model.py ContractWindow).
+ *  Times are "HH:MM" on the site's clock; an end at or before the start wraps past midnight, start == end is
+ *  the whole day; `days` are the days the window starts. Kept as typed while editing, so they can be invalid. */
+export interface ContractWindow { start: string; end: string; days: Weekday[]; import_limit_kw: number | null }
+
 export interface Site {
   name: string;
   mode: Mode;
@@ -66,6 +79,7 @@ export interface Site {
   days: number;
   step_minutes: number;
   grid: { import_limit_kw: number | null; export_limit_kw: number | null; fuse_a: number | null;
+    contract_windows?: ContractWindow[]; reliability_target?: number;
     dimming?: "off" | "direct" | "ems"; dimming_start_hour?: number; dimming_hours?: number };
   tariff: { price_profile: string; price_adder: number; export_price: number; demand_charge_per_kw_month: number;
     network_fee_profile?: string };
@@ -115,6 +129,35 @@ export interface SimResponse {
   };
   baseline: { kpis: Record<string, number>; site: { grid_kw: number[] } };
   runtime_s: number;
+}
+
+/** Contract reliability (benchmark/reliability.py): how often the run kept its import limit. */
+export interface LimitReliability {
+  limit_days_evaluated: number;
+  limit_days_kept: number;
+  limit_days_kept_share: number;
+  limit_reliability_target: number;
+  limit_target_met: boolean;
+  limit_excess_kwh: number;
+  limit_worst_excess_kw: number;
+  limit_worst_excess_date: string | null; // ISO date, null if the limit was never exceeded
+  limit_daily_peak_ratio_at_target: number | null; // null if a 0 kW limit makes the ratio undefined
+}
+
+/** The reliability KPIs of a run, or null when it had no import limit. `kpis` is typed as numbers for the many
+ *  numeric fields; these few can be null, boolean or a date, so they are read through this accessor. */
+export function reliabilityOf(kpis: Record<string, number>): LimitReliability | null {
+  const k = kpis as unknown as Partial<Record<keyof LimitReliability, unknown>>;
+  if (typeof k.limit_days_kept_share !== "number" || typeof k.limit_days_evaluated !== "number") return null;
+  return kpis as unknown as LimitReliability;
+}
+
+/** The import limit per step (null = unlimited at that step), or null when the result has no such series
+ *  (no limit at all, or an older result). The engine compiles the firm limit and contract windows into it. */
+export function importLimitSeries(r: SimResponse): (number | null)[] | null {
+  const s = (r.result.site as Record<string, unknown>).import_limit_kw;
+  if (!Array.isArray(s) || !s.some((v) => typeof v === "number")) return null;
+  return s as (number | null)[];
 }
 
 export interface DataSource {
