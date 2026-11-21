@@ -1,12 +1,45 @@
 # Energy-Management-VPP (`emsbench`)
 
-An open source, generic site energy management simulator and an **honest benchmark of control
-strategies under increasing forecast error**, with battery wear priced as a cost.
+An open source site simulator built around one question: **how reliably can a business site keep a
+flexible grid contract, and what battery, contract and controller does that take?**
 
-A site (home, apartment garage, office, commercial site, data center) is a configuration of sources,
-storage and loads: buildings, solar, batteries, EV chargers (including bidirectional), heat pumps and
-data centers. Controllers compared so far: rule-based strategies and a rolling-horizon MPC, each with
-perfect or realistic forecasts.
+## Why
+
+Where the grid is congested, a business that wants a bigger connection is often offered a *flexible*
+one instead: full power most of the time, a lower limit in agreed windows (the Dutch time-block
+contract), a lower limit all day, or limits sent day by day (dynamic operating envelopes). Signing
+such a contract is a bet. The site has to know, before it signs, how often it would break the limit
+and what it would take not to. That is hard for sites full of electric cars, vans or trucks, whose
+arrivals and energy needs are uncertain.
+
+The project's compass is the guide in Learn part 1, *Grid congestion and site flexibility*
+([web/app/src/learn/general/](web/app/src/learn/general/)). Its chapter 13, *Where to focus*, recommends
+**reliable flexibility for EV-heavy business sites** (logistics depots, charging hubs, retail and
+office car parks with batteries), in three parts:
+
+1. **Planning**: battery size and contract choice, with a stated probability of breaching the grid
+   limit (for example "the limit holds on at least 90% of days", a P90 promise).
+2. **Operation**: a controller that plans for uncertainty and keeps that promise.
+3. **One site model** (a digital twin) used for both.
+
+It also says what to avoid: another generic controller or energy management system. Comparing
+controllers honestly (rules, MPC, under realistic forecasts, with battery wear priced as a cost) stays
+part of the method, because a reliability number is only as good as the controller behind it, but it
+is no longer the goal in itself. Decided on 2026-11-21; earlier directions (a residential fleet
+benchmark, a generic controller scoreboard) are kept in the docs as background.
+
+**Where it stands (November 2026).** Built: flexible grid contracts (time windows compiled into a
+limit for every time step), reliability measures (days the limit was kept against a target, P90 daily
+peak against the limit), rule controllers and an MPC on perfect or realistic forecasts, battery wear
+from an ageing model, a business car park example on a time-block contract, and a Compare tab that
+benchmarks every strategy. Not yet: a sweep over battery size and contract choice that shows cost
+against breach risk, probabilistic forecasts with chance constraints, uncertainty in the devices
+themselves (state of charge, charging curves), a logistics depot example, and validation on a real
+site. The full list is in Learn, *Limits and roadmap*.
+
+A site (home, apartment garage, office, car park, commercial site, data center) is a configuration of
+sources, storage and loads: buildings, solar, batteries, EV chargers (including bidirectional), heat
+pumps and data centers. The engine stays generic; the EV focus is a matter of examples and measures.
 
 ## Try it
 
@@ -19,8 +52,10 @@ perfect or realistic forecasts.
 ## What is in it
 
 - **Site Lab**, a web app where you build a site, run it and watch the energy flows, in two modes:
-  **Plan** (hourly, up to a year: costs, savings, battery wear) and **Operate** (1-15 minute steps
-  over days: EV visits, phase currents, fuses), on measured open data.
+  **Plan** (hourly, up to a year: costs, savings, battery wear, on how many days the grid limit
+  held) and **Operate** (1-15 minute steps over days: EV visits, phase currents, fuses), on measured
+  open data. A **Compare** tab pins runs side by side and benchmarks every battery strategy with
+  perfect and realistic forecasts.
 - **Learn**, in two parts: general knowledge (a guide to grid congestion and site flexibility: the
   grid, flexible connection contracts, the state of the art in modelling, control and planning, the
   market, batteries and BESS) and how Site Lab works (how it models each system, how it is built,
@@ -59,7 +94,11 @@ bash scripts/deploy_pages.sh           # static build, published to the gh-pages
 
 Only public, openly licensed data and open source tools: see
 [docs/data-sources.md](docs/data-sources.md) for sources, licences and attribution. One source
-(Utrecht workplace EV sessions) is licensed for non-commercial use only; the example that uses it
-is left out of the public demo. Personal project, not affiliated with any company.
+(Utrecht workplace EV sessions) is licensed for non-commercial use only (CC BY-NC-SA 4.0), so the
+two examples that use it, the office car park and the time-block contract example
+(`configs/sites/plan_ev_timeblock_nl.yaml`), are left out of the public demo and run only in the
+live app. The
+non-commercial licence also means a commercial product could not be built on that data without
+the rights holders' permission or another dataset. Personal project, not affiliated with any company.
 
 License: MIT.

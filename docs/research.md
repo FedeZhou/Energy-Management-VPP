@@ -6,6 +6,48 @@ Living research file for Fede's open, employer-neutral energy management simulat
 
 ---
 
+## Direction (2026-11-21)
+
+**The project now faces one focus**, taken from the General knowledge guide in Learn part 1
+([chapter 13, section 13.3](../web/app/src/learn/general/13-where-to-focus.md)): **reliable flexibility for EV-heavy
+business sites** (logistics depots, charging hubs, retail and office car parks with batteries):
+
+1. **Planning:** battery size and contract choice with a stated probability of breaching the grid limit (gap G4).
+2. **Operation:** an uncertainty-aware controller that keeps the promise, including battery state-of-charge and
+   charging-curve uncertainty (gap G3).
+3. **Digital twin:** one site model, calibrated on real data, used for both (gap G1).
+
+The guide's section 13.5 advises against "another generic controller or EMS". So the controller benchmark of
+section 9 below stays as a *method* (a reliability number is only as good as the controller behind it) but is no
+longer the product. Section 2's ranking (C&I sites with EV fleets/depots first) already pointed this way. The
+residential-fleet direction in [market-landscape.md](market-landscape.md) (option A) is superseded.
+
+**Which of the guide's open questions the contract and reliability work (Nov 2026) addresses** (gaps G1-G5 are in
+the guide's section 12.2, the limitations in section 4.4):
+
+| Open question | Status in emsbench |
+| --- | --- |
+| G4: planning models contracts as tariffs and ignores the operational controller | **Partly.** Contracts are now limits, not tariffs: `site.grid.contract_windows` (time-block style) compile into a per-step import limit (`sim/contracts.py`) that the safety layer, peak shaving and the MPC obey. Every run reports days kept against a target, excess energy and the P90 daily peak ratio (`benchmark/reliability.py`). Missing: the sweep over battery size x contract that turns this into a planning answer. |
+| G2: flexibility quantified with a probability at site level | **First step.** Days kept is an empirical share over one simulated year, not a probability with a stated confidence (the scenario approach of the guide's section 4.2 is not implemented). |
+| Section 4.4, point 1: a single site deciding, before signing, what limit it can live with | **Addressed in form:** the measures are per site and per contract. Example: `configs/sites/plan_ev_timeblock_nl.yaml` (illustrative contract). |
+| Section 4.3: dynamic operating envelopes | **Prepared, not built:** the limit reaches the MPC as a forecast series (`import_limit`), so a day-ahead limit can replace the compiled one. |
+| G3 (device uncertainty), G1 (composable models with uncertainty), G5 (real-site validation) | **Not addressed yet.** Exact state of charge, no SoC-dependent power, no EV CC-CV taper; no real business site data. |
+
+**Tension to keep in view.** The guide prefers stochastic, scenario-based or chance-constrained MPC for keeping a
+promise under uncertainty (its sections 7.2 and 12.2, gap G3). Our own results so far point the other way: on four
+German homes with realistic forecasts, an MPC that replayed three recent days as scenarios did **not** beat the
+simple rule, while a "cautious" deterministic MPC (four habits of a planner that distrusts its forecast) did
+(`results/study_home_de/README_cautious.md`; section 10 below; LEARNING.md section 16). On the time-block example
+(one year, our runs of 2026-11-21) the limit held on 96% of days with the peak-shaving rule, 93% with the cautious
+MPC on realistic forecasts and 100% with the same MPC on perfect forecasts, so again a simple rule kept the limit
+more often than the realistic optimiser (the MPC was cheaper and the rows differ in EV energy delivered, so this is
+not a clean comparison). Neither result tests what the guide recommends: replayed days are not a probabilistic
+forecast, and the home study minimised cost, not breaches. The next controller work must therefore compare a
+chance-constrained MPC against the cautious MPC and the peak-shaving rule **on the limit-keeping objective**,
+before assuming it wins.
+
+---
+
 ## 1. The problem in one paragraph
 
 A site (home, building, EV charging hub, data center, microgrid) has **sources** (grid, solar, wind, generator), **storage** (stationary battery, EV batteries, thermal mass) and **loads** (fixed and flexible). An energy management system (EMS) decides, every few minutes, how much each asset charges, discharges or consumes. The goals are to minimise cost, respect limits (grid connection, transformer, battery state of charge, comfort, departure deadlines), and optionally earn money from markets. It must do this with **forecasts that are wrong**. A virtual power plant (VPP) is the same problem one level up: many sites aggregated and bid into markets as one plant.
@@ -191,6 +233,8 @@ The combination that looks under-served:
 
 Why it is novel: each piece exists, but the **closed loop from modern probabilistic forecast to control to money and wear**, evaluated honestly across configurations, is thin \[S/K\]. It is also employer-neutral and maps cleanly to EV charging by configuration.
 
+*(2026-11-21: this framing is now the method, not the goal; see "Direction (2026-11-21)" at the top.)*
+
 Audiences:
 
 - **Research groups:** reproducible benchmark plus a paper on value of probabilistic forecasts for control
@@ -212,6 +256,11 @@ Audiences:
 5. **Phase 4, configurations:** home, C&I with EV fleet, data center.
 6. **Phase 5, website:** 2D dashboard first, then 3D scene and concept explainers with open problems flagged.
 7. **Phase 6, user scenarios:** let visitors upload or configure their own site.
+
+*Update (2026-11-21):* the phases above are superseded by the guide's section 13.3 focus (see "Direction
+(2026-11-21)" at the top). Next: a battery size x contract sweep reported as cost against breach risk, device
+uncertainty, probabilistic forecasts with chance constraints, a depot or charging-hub example on open Dutch data,
+and validation on a real site.
 
 
 ---

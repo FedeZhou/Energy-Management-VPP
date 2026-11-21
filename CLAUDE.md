@@ -11,6 +11,14 @@ battery/PV/EV chargers, data center) is a config of sources, storage and loads.
 Background and conclusions: [docs/research.md](docs/research.md). Plain-language notes:
 [LEARNING.md](LEARNING.md).
 
+**Direction (since 2026-11-21): the Learn "General knowledge" guide is the compass**
+(`web/app/src/learn/general/`, especially ch. 13 §13.3). Focus: *reliable flexibility for EV-heavy business
+sites*: battery size and grid-contract choice with a stated probability of breaching the limit, a controller that
+keeps that promise under uncertainty, one site model for both. Prefer work that serves this (flexible contracts
+in `sim/contracts.py`, reliability KPIs in `benchmark/reliability.py`, sizing x contract studies, device
+uncertainty, probabilistic forecasts, depot/hub examples on open Dutch data). The guide's §13.5 warns against
+"another generic controller or EMS": the generic engine stays, but features are judged by this focus.
+
 The owner is a product manager learning the field: explain what you build and why in plain
 language, and flag uncertainty.
 

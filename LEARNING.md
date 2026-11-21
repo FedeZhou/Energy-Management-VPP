@@ -341,3 +341,39 @@ This is why real "solar charging" products switch to one phase.
   these homes, simple robustness habits closed about half the gap to perfect foresight.
 - **Tune and test on different data.** The habits were chosen on four other drivers and fixed before the test; only
   the drivers differed, though (same home loads, weather and prices), so the result is weaker than a true holdout.
+
+## 17. Flexible grid contracts and promises you can keep (2026-11-21)
+
+The project's focus is now the guide's section 13.3: reliable flexibility for EV-heavy business sites
+(docs/research.md, "Direction (2026-11-21)").
+
+- **A flexible contract is a limit that changes over the day.** Where the grid is full, a site can get a bigger
+  connection if it accepts less in some hours. The guide (section 3.2, after Monterde, Alvarez and Valarezo 2025)
+  names four types: *capacity-limited* (a lower limit until the grid is reinforced), *time-limited* (full power
+  except in agreed windows, like the Dutch time-block right), *dynamic operating envelopes* (limits sent before each
+  interval, as in Australia) and *fully flexible* (curtailed in real time). Site Lab models the first two:
+  `site.grid.contract_windows` lists the windows, and the engine compiles them into one limit per time step
+  (`sim/contracts.py`). A step that touches a window for any part gets the window's limit.
+- **A DOE is the same idea, decided the day before.** Instead of fixed windows, the grid operator sends tomorrow's
+  limits. Our limit series reaches the MPC like a forecast, so a day-ahead limit could later replace it the way
+  day-ahead prices are handled. Not built yet.
+- **"Days kept" is the honest way to state a promise.** A site cannot promise "never": one cold, dark Monday with
+  every car arriving at once can break any plan. The guide's section 4.2 states promises as "the limit holds on at
+  least 90% of days" (a P90 promise; Energinet already requires 90% reliability for reserve bids from uncertain
+  resources). Site Lab counts a day as kept if import stayed under the limit in every step, and reports the share
+  of days kept against the target (`site.grid.reliability_target`, default 0.9).
+- **Two sites can keep the same share with very different margins.** So we also report the P90 peak ratio: each
+  day's highest import divided by the limit, then the value nine days in ten stay under. 0.85 means a 15% margin;
+  1.00 means the promise is met with nothing to spare.
+- **The engine hides breaches inside the cars.** When import would go over the limit, the safety layer first uses
+  the battery and then slows the cars. So a tight contract mostly shows up as car energy not delivered by
+  departure, not as broken days. Always read days kept next to undelivered EV energy.
+- **Perfect foresight flatters reliability too.** In the time-block car park example (one year, our runs of
+  2026-11-21) the same MPC kept the limit on 365 of 365 days with perfect forecasts and 341 with realistic ones; the
+  simple peak-shaving rule kept 350. A sizing study run with perfect foresight would have promised every day (the
+  guide's section 8.3 makes the same point about value).
+- **Check the licence before building on a dataset.** The Utrecht workplace charging sessions (University of
+  Twente / ElaadNL, 4TU) are CC BY-NC-SA 4.0: free to use with credit and under the same licence, but only for *non-commercial* purposes. They are fine
+  for this personal project and are kept out of the public demo, but a product or startup built on them would need
+  the rights holders' permission or another dataset. This matters because the guide's suggested first project
+  (section 13.6) is probabilistic battery sizing for a charging site on open Dutch data.

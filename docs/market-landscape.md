@@ -2,6 +2,16 @@
 
 Checked 2026-11-08. Companion to [research.md](research.md) (section 6 is the short version of this).
 
+> **Direction update (2026-11-21).** The project now follows the recommended focus of the General knowledge guide
+> (Learn part 1, [chapter 13, section 13.3](../web/app/src/learn/general/13-where-to-focus.md)): **reliable
+> flexibility for EV-heavy business sites**, meaning (1) battery size and contract choice with a stated probability
+> of breaching the grid limit, (2) an uncertainty-aware controller that keeps that promise, and (3) one site model
+> for both. Section 13.5 of the guide advises against building "another generic controller or EMS". This file's
+> residential-fleet direction (**option A** in section 3, step 5 in section 4) and the "trust report" of every
+> controller at every scale are therefore **superseded**: kept below as market research, not as the plan. The
+> company landscape and the capability gaps remain valid background. The current roadmap is in Learn, *Limits and
+> roadmap* (`web/app/src/learn/roadmap.ts`) and in [research.md](research.md), "Direction (2026-11-21)".
+
 **How to read this:** **\[S\]** = the linked page was read in this pass (2026-11-08) and says this. **\[K\]** = only a
 search summary or a single weak source: verify before use. Company numbers (GW, devices, savings) are **the companies'
 own claims**, reported by them or by trade press, not independent facts. Funding figures often differ between outlets.
@@ -98,7 +108,11 @@ choice, so here are the options (CLAUDE.md: options before big choices):
 | **B. Network model** (e.g. pandapower power flow on a real low-voltage feeder) | Homes as loads on a feeder model; power flow each step | Voltage and line limits, the real DSO concern | Much heavier; needs feeder data; overkill before A exists |
 | **C. One "super-site"** (scale one home's profile by N) | Multiply a single site | Trivial | Wrong: loses diversity, so it overstates peaks and flexibility. Useful only as a counter-example |
 
-**Recommendation: A first, with a simple transformer limit for scale 3; B later and optional.** A keeps the
+> **Superseded (2026-11-21):** option A was never approved and is no longer the direction; see the note at the
+> top. The analysis of scales and options stays as background, for example if a fleet of business sites under one
+> shared limit becomes relevant later.
+
+**Recommendation (2026-11-08, superseded): A first, with a simple transformer limit for scale 3; B later and optional.** A keeps the
 "generic core" rule (homes are still configs), and a fleet benchmark is exactly what no startup publishes: *"how much
 of the claimed fleet flexibility survives forecast error, opt-outs and a transformer limit?"*
 
@@ -120,10 +134,16 @@ than the simple rule at €21.74; our runs, 11 Nov 2026).
 | **2. MPC** | **Started (Nov 2026):** rolling-horizon LP with grid limit, fuses, demand charges and EV deadlines (`sim/mpc.py`, EMHASS-style). Runs on perfect or realistic forecasts (Nov 2026); next: stochastic/robust variants and wear in the objective | Rules vs MPC vs perfect foresight, with honest forecasts | 1KOMMA5° Heartbeat, Lunar Gridshare, C&I optimisers like Furo | Small (remaining) |
 | **3. A complete home, in the MPC** | The rule-based parts are done (row 0b); remaining: heat-pump tank and car discharge as MPC decision variables, and optionally a building thermal model with a comfort band | The same questions with an optimiser instead of rules | 1KOMMA5°, Tibber, Octopus | Small-medium |
 | **4. Building scale** | Several meters behind one connection: per-flat billing, tenant electricity / energy-sharing split, shared EV chargers with a fairness rule | Who gains in a shared building, and whether a shared battery pays | neugemacht and other energy-sharing platforms, Rabot (renters) | Small-medium |
-| **5. Fleet layer (option A)** | Population generator (homes sampled from open data distributions), aggregator controller that sends price or setpoint signals, an opt-out and override model, fleet KPIs (fleet peak, coincidence factor, delivered vs promised flexibility) | How much promised fleet flexibility is real after diversity, forecast error and opt-outs | Kraken, Voltus, Renew Home, Base Power, Axle | Large |
+| **5. Fleet layer (option A)** *(superseded 2026-11-21)* | Population generator (homes sampled from open data distributions), aggregator controller that sends price or setpoint signals, an opt-out and override model, fleet KPIs (fleet peak, coincidence factor, delivered vs promised flexibility) | How much promised fleet flexibility is real after diversity, forecast error and opt-outs | Kraken, Voltus, Renew Home, Base Power, Axle | Large |
 | **6. Neighbourhood** | Shared transformer limit across homes; grid-operator flexibility requests as events; later, optionally, a feeder power-flow model (pandapower) | Whether smart charging and heat pumps overload a street, and what a flexibility market request is worth | Piclo / GOPACS-style local flexibility markets, grid-edge devices such as SPAN Edge | Medium (large with power flow) |
 | **7. Markets and value stacking** | Reserve products (FCR / aFRR capacity with availability rules), intraday prices, battery wear priced as a cost, revenue split between operator and households | Stacking energy trading with reserves, and who should get the money | Entrix, enspired, Capalo, 1KOMMA5° (FCR-D) | Large |
 | **8. The trust report** | A public, reproducible scoreboard: every controller on every scale, under the same forecast error, with wear priced in | "Is a claimed saving real?", the question no company answers publicly | Our niche (research.md section 9) | Ongoing |
+
+**Status (2026-11-21).** This step list is superseded by the guide's section 13.3 focus. Done since: flexible grid
+contracts (time windows compiled into a per-step import limit, `sim/contracts.py`) and contract-reliability KPIs
+(days kept against a target, P90 daily peak ratio, `benchmark/reliability.py`). The next steps are now a sizing x
+contract sweep (cost against breach risk), device uncertainty, probabilistic forecasts with chance constraints, a
+depot or charging-hub example and validation on a real site.
 
 **Dependencies.** 1 before the MPC results count. 2 before 3-7 (a heat pump or a fleet with rule control proves little). 5 before 6.
 4 and 3 are independent of each other. Steps 3 and 4 can start with rule controllers if MPC slips, but their
@@ -139,7 +159,9 @@ customer apps (Tibber, Octopus), a trading desk (Entrix). These are businesses, 
 - research.md section 2 ranks home energy "High for learning and demo, low for startup". That is still true for
   *selling* a home EMS (the field is crowded and hardware-led), but the 2026 money shows residential flexibility is
   where the market is moving. Our **benchmark of residential fleets** is not crowded. This is a shift in emphasis, not
-  a contradiction of facts.
+  a contradiction of facts. *(2026-11-21: superseded as a direction. The guide's section 13.2 rates "planning,
+  sizing and contract choice" and "EV charging sites, depots and battery-buffered charging" as the best fit, and
+  notes that contract-aware reliability is uncrowded.)*
 - research.md section 6 lists AutoGrid separately: it has been part of Uplight since early 2024 \[K\].
 - research.md roadmap Phase 1 lists deterministic MPC as future work: a first version now exists (`sim/mpc.py`).
 - research.md section 6 says Capalo has "1 GW+ contracted"; Modo Energy reports 1.6 GW managed, 500 MW live \[S\].
@@ -181,6 +203,8 @@ is becoming a business of its own: Kraken was spun out, and Enpal now sells its 
 2. **Time-window tariffs synchronise fleets.** With hundreds of thousands of customers on the same cheap window, the
    rebound peak we measured in the shared-garage example (56 A to 63 A when every car started at the cheapest moment)
    becomes a fleet-scale effect. This argues for the fleet layer (step 5, option A, not yet approved).
+   *(2026-11-21: the fleet layer is superseded; the same rebound effect matters inside one EV-heavy site with a
+   flexible contract, which is the new focus.)*
 3. **Nobody publishes controller results against a fair baseline.** These companies publish customers, gigawatts and
    valuations. How much each control strategy is worth, and how much survives real forecasts, remains unmeasured in
    public.
@@ -220,7 +244,8 @@ fleet layer, reserve markets.
   in fleets, and under realistic forecasts, not in a perfect-foresight single home.
 - **Without real fleet or market data, results stay simulated** and must be labelled as such.
 
-**Proposed focus (in order):** (1) realistic EV plans, where controllers get the user-entered departure and target,
+**Proposed focus (2026-11-09, superseded on 2026-11-21 by the guide's section 13.3; see the note at the top):**
+(1) realistic EV plans, where controllers get the user-entered departure and target,
 with errors, instead of the truth; (2) the forecast-error harness, so every controller runs on imperfect forecasts (realistic persistence-style
 forecasts and "Compare forecasts" exist since 10 Nov 2026; better forecast models and an error sweep are still to do);
 (3) a supplier view: margin = tariff revenue minus wholesale cost, to show who keeps the savings; (4) the fleet layer
