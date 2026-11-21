@@ -11,7 +11,8 @@ import { useLayout } from "../layout";
 import { spec as assetSpec } from "./Nodes";
 
 // Short option labels; the field's help text (in the tooltip) explains each one.
-const PRETTY: Record<string, string> = {
+/** Option ids → the labels people see (dropdowns, tooltips, scenario names). */
+export const PRETTY: Record<string, string> = {
   idle: "Idle",
   self_consumption: "Self-consumption",
   price_arbitrage: "Price arbitrage",

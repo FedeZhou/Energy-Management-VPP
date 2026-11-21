@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { useScenarios } from "../scenarios";
 import { useStore } from "../store";
 import { dayLabel, kw, money, num, pct, pts, qty, signed, stepLabel, timeAt } from "../util";
+import { Compare } from "./Compare";
 import { ExportMenu } from "./Export";
 import { Help } from "./Help";
 import { Sessions } from "./Sessions";
@@ -249,7 +251,7 @@ function ForecastCompare() {
   );
 }
 
-type Tab = "charts" | "sessions" | "sources";
+type Tab = "charts" | "compare" | "sessions" | "sources";
 
 export function Results() {
   const r = useStore((s) => s.result);
@@ -259,6 +261,7 @@ export function Results() {
   const setCollapsed = useStore((s) => s.setCollapsed);
   const site = useStore((s) => s.site);
   const compare = useStore((s) => s.compare);
+  const scenarioCount = useScenarios((s) => s.list.length);
   const [tab, setTab] = useState<Tab>("charts");
   const [height, setHeight] = useState(() => Math.round(window.innerHeight * 0.48));
   const [dragging, setDragging] = useState(false);
@@ -268,6 +271,7 @@ export function Results() {
     && (site.mode === "operate" || r.time.steps * r.time.step_minutes <= 14 * 1440);
   const tabs: { id: Tab; label: string }[] = [
     { id: "charts", label: "Charts" },
+    { id: "compare", label: scenarioCount ? `Compare · ${scenarioCount}` : "Compare" },
     ...(showSessions ? [{ id: "sessions" as Tab, label: "EV sessions" }] : []),
     { id: "sources", label: "Data sources" },
   ];
@@ -333,6 +337,7 @@ export function Results() {
               <Suspense fallback={<div className="pane-loading">Loading charts…</div>}><Charts /></Suspense>
             </div>
           )}
+          {active === "compare" && <Compare />}
           {active === "sessions" && <Sessions />}
           {active === "sources" && <div className="tab-pane"><p className="pane-intro">The data behind each component in this run. <Help topic="sources" /></p><Sources /></div>}
         </div>

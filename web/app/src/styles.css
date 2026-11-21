@@ -500,6 +500,38 @@ input[type="range"]::-moz-range-thumb { width: 9px; height: 9px; border-radius: 
 .fc-table td.worse { color: var(--warn); font-weight: 500; }
 .fc-table td.better { color: var(--good); font-weight: 500; }
 
+/* Compare: scenarios side by side, the cost-gap bars and the grid-power overlay. */
+.cmp { gap: 16px; }
+.cmp-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cmp-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.cmp-table th:not(:first-child), .cmp-table td:not(:first-child) { text-align: right; white-space: nowrap; }
+.cmp-table td:not(:first-child) { font: 400 11.5px/20px var(--font-mono); font-variant-numeric: tabular-nums; }
+.cmp-table td.best { color: var(--ink); font-weight: 500; }
+.cmp-table td.best::after { content: ""; display: inline-block; width: 4px; height: 4px; margin-left: 6px; border-radius: 50%; background: var(--good); vertical-align: 2px; }
+.cmp-table tr.current td:first-child { box-shadow: inset 2px 0 0 var(--ink); }
+.cmp-table td { vertical-align: middle; }
+.cmp-table td:first-child { min-width: 200px; }
+.cmp-table th { white-space: normal !important; vertical-align: bottom; line-height: 14px; }
+.cmp-table th, .cmp-table td { padding-left: 8px; padding-right: 8px; }
+.cmp-name { height: 26px !important; border-color: transparent !important; background: transparent !important; padding: 0 6px !important; margin-left: -6px; font-weight: 500; text-overflow: ellipsis; }
+.cmp-name::placeholder { color: var(--ink); opacity: 1; }
+.cmp-name:hover { border-color: var(--border-strong) !important; }
+.cmp-name:focus { border-color: var(--ink) !important; background: var(--surface) !important; }
+.cmp-row-actions { display: flex; justify-content: flex-end; gap: 2px; }
+.cmp-gap, .cmp-overlay { margin: 0; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border-strong); padding-top: 12px; }
+.cmp-gap figcaption { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cmp-key { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+.cmp-key i { display: inline-block; }
+.cmp-key i.bar { width: 14px; height: 8px; background: var(--ink-2); }
+.cmp-key i.tick { width: 2px; height: 12px; background: var(--ink); margin-left: 10px; }
+.cmp-gap-row { display: grid; grid-template-columns: minmax(120px, 200px) 1fr minmax(170px, auto); align-items: center; gap: 12px; }
+.cmp-gap-name { font-size: 12.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmp-gap-track { position: relative; height: 14px; background: var(--surface-2); }
+.cmp-gap-bar { position: absolute; left: 0; top: 3px; bottom: 3px; background: var(--ink-2); }
+.cmp-gap-tick { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--ink); box-shadow: 0 0 0 1px var(--surface); }
+.cmp-gap-val { font: 400 11.5px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
+.cmp-gap-val em { font-style: normal; color: var(--muted); margin-left: 6px; }
+
 /* ---------- Help ("?") ---------- */
 .help-btn {
   display: inline-grid; place-items: center; width: 15px; height: 15px; flex: none; padding: 0;
