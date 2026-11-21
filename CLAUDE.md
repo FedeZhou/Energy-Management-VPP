@@ -35,13 +35,13 @@ language, and flag uncertainty.
 ## Environment
 
 - Python **3.11** (CityLearn 3.2.0 pins scikit-learn<=1.2.2, which has no 3.12 wheels).
-- The repo lives in OneDrive, so the virtualenv lives **outside** it:
-  `%USERPROFILE%\.venvs\energy-vpp`. `uv` is in `%USERPROFILE%\.venvs\tools`.
+- The repo lives in `C:\dev\Energy-Management-VPP` (moved out of OneDrive in Nov 2026; GitHub is the backup, so
+  push often). The virtualenv is shared with the worktrees and lives at `%USERPROFILE%\.venvs\energy-vpp`.
+  `uv` is in `%USERPROFILE%\.venvs\tools`.
 - This machine's antivirus (Avast) inspects HTTPS. pip >= 24.2 handles it; for uv set
   `UV_SYSTEM_CERTS=1`; in Python code call `emsbench.net.use_system_certificates()` before any
   download (CityLearn downloads datasets from GitHub on first use, cached in
   `%LOCALAPPDATA%\citylearn-project`).
-- pytest's cache is disabled because OneDrive locks files mid-sync.
 
 ## Commands
 
@@ -49,6 +49,7 @@ language, and flag uncertainty.
 PY="$USERPROFILE/.venvs/energy-vpp/Scripts/python.exe"
 $PY -m pytest                          # all tests (integration ones run real CityLearn, ~15 s)
 $PY -m pytest -m "not integration"     # fast unit tests only
+$PY -m pytest --lf                     # rerun only the tests that failed last time
 $PY -m ruff check src tests && $PY -m mypy src
 $PY -m emsbench.baseline               # full-year baseline scoreboard -> results/ (~5 min)
 $PY -m emsbench.baseline --end-step 167 --out /tmp/smoke   # one-week smoke run
@@ -67,6 +68,17 @@ UV_SYSTEM_CERTS=1 VIRTUAL_ENV="$USERPROFILE/.venvs/energy-vpp" \
 - `src/emsbench/baseline.py` runs the CityLearn baseline scoreboard.
 - `configs/sites/` example sites (YAML); device parameters cite sources in `sim/model.py`. `results/` curated scoreboards.
 - `docs/` research and notes. `tests/` tests. `reference/` third-party clones (gitignored).
+
+## Finding code (token-efficient)
+
+`scripts/graph.sh` wraps graphify (code-only call graph, local, no LLM; graph kept in `%LOCALAPPDATA%\emsbench\graphify`).
+Start from a name you know; read only the lines it points to. Use `git grep` for fields/settings and Markdown (not in the graph).
+```bash
+bash scripts/graph.sh update                      # rebuild after big changes (~20 s); stale graph = wrong lines
+bash scripts/graph.sh path "run_simulation" "wear_price_per_kwh"   # how A reaches B
+bash scripts/graph.sh affected "simulate" --depth 1                # what breaks if X changes
+bash scripts/graph.sh callers "MPCController"                      # who calls X (depth 1, small budget)
+```
 
 ## CityLearn gotchas (3.2.0)
 
@@ -102,10 +114,8 @@ cd web/app && npm run build      # after frontend changes, or: npm run dev (API 
 - Profiles carry calendars: a run uses the same season and weekday from another year when needed
   (`sim/profiles.py`). European data uses fixed CET (UTC+1).
 - Free APIs (Energy-Charts, Open-Meteo): keep requests polite (`data/cache.py` pauses and backs off on 429).
-- `web/app/node_modules` was meant to be a junction to `%USERPROFILE%\.cache\emsbench
-ode_modules` (keeps
-  OneDrive from syncing it), but as of Nov 2026 it is a real folder in the main checkout and the cache target is
-  empty. In a git worktree, run `npm ci` in `web/app` or `mklink /J` to an existing `node_modules`.
+- `web/app/node_modules` is a normal folder (gitignored). In a git worktree, run `npm ci` in `web/app` or
+  `mklink /J` to an existing `node_modules`.
 - Example sites: `configs/sites/{plan,operate}_*.yaml`. Sizes there are example choices; device parameters
   cite sources in `sim/model.py`.
 - Add an asset type: model class in `sim/model.py` (+ `ASSET_TYPES`), physics in `sim/engine.py`, tests, then

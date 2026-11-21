@@ -40,8 +40,6 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# The repo lives in OneDrive, which locks files mid-sync and breaks pytest's cache.
-addopts = "-p no:cacheprovider"
 markers = ["integration: runs real CityLearn episodes (needs cached or downloadable data)"]
 
 [tool.ruff]

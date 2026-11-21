@@ -22,7 +22,7 @@ SimulationData/
 Thumbs.db
 .DS_Store
 
-# Web app build output and dependencies (node_modules is a junction outside OneDrive)
+# Web app build output and dependencies
 web/app/dist/
 web/app/node_modules
 
