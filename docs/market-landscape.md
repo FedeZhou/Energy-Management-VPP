@@ -34,8 +34,7 @@ for (research.md section 9), and the 2026 landscape makes it more relevant, not 
 ### 1b. Side by side: what they do and what our simulator does
 
 "Site Lab today" means this repository in November 2026 (single site, rules plus an MPC on perfect or realistic forecasts, open data;
-heat pump, bidirectional charging, §14a dimming and time-variable network fees added on 2026-11-09). The in-app
-Learn page has the same table with a link to each company's website.
+heat pump, bidirectional charging, §14a dimming and time-variable network fees added on 2026-11-09).
 
 | Company | What they do (their claims) | What Site Lab can simulate of it today | Biggest missing piece |
 | --- | --- | --- | --- |

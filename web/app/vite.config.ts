@@ -10,8 +10,8 @@ export default defineConfig({
   // (scripts/deploy_pages.sh). The local app is served from the root.
   base: process.env.VITE_BASE ?? "/",
   // The lab's first load is ~525 kB; ECharts (first result) and the Learn articles with KaTeX load
-  // on demand as their own chunks, which are large by nature.
-  build: { chunkSizeWarningLimit: 800 },
+  // on demand as their own chunks, which are large by nature (Learn holds both parts' text, ~900 kB).
+  build: { chunkSizeWarningLimit: 1000 },
   server: {
     port: 5173,
     proxy: { "/api": "http://127.0.0.1:8000" },

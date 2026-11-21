@@ -21,9 +21,10 @@ perfect or realistic forecasts.
 - **Site Lab**, a web app where you build a site, run it and watch the energy flows, in two modes:
   **Plan** (hourly, up to a year: costs, savings, battery wear) and **Operate** (1-15 minute steps
   over days: EV visits, phase currents, fuses), on measured open data.
-- **Learn**, short review-style pages on control (rules, MPC, planning under uncertainty,
-  reinforcement learning), the systems (batteries, solar, EVs, heat pumps, tariffs, data centers),
-  research digests and a market overview, each statement cited.
+- **Learn**, in two parts: general knowledge (a guide to grid congestion and site flexibility: the
+  grid, flexible connection contracts, the state of the art in modelling, control and planning, the
+  market, batteries and BESS) and how Site Lab works (how it models each system, how it is built,
+  how its controllers decide, worked examples and its limits), each statement cited.
 - **Results**: a CityLearn baseline scoreboard ([results/](results/baseline_scoreboard.md)) and
   studies such as [the home study with realistic forecasts](results/study_home_de/summary.md).
 

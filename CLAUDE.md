@@ -118,6 +118,11 @@ cd web/app && npm run build      # after frontend changes, or: npm run dev (API 
   `mklink /J` to an existing `node_modules`.
 - Example sites: `configs/sites/{plan,operate}_*.yaml`. Sizes there are example choices; device parameters
   cite sources in `sim/model.py`.
+- Learn has two parts. **General knowledge**: the grid-flexibility guide as Markdown chapters in
+  `web/app/src/learn/general/` (editing rules at the top of `learn/general.ts`: never change facts, links or figure
+  numbers). **How Site Lab works**: block pages in `web/app/src/learn/` (guide chapters 1-18, examples, limits and
+  roadmap). Part 2 explains only Site Lab; for background, link to part 1 with `[text](#learn-<chapter-id>/<anchor>)`
+  (anchors: `s5-1` for Section 5.1, `sa-3` for A.3, `fig-12`) instead of re-explaining it.
 - Add an asset type: model class in `sim/model.py` (+ `ASSET_TYPES`), physics in `sim/engine.py`, tests, then
   `ASSET_INFO` in the API and an icon/colour in `web/app/src` plus an illustration in
   `web/app/src/components/scene/Art.tsx`.

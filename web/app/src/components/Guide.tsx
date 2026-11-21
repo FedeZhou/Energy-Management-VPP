@@ -65,7 +65,7 @@ const STEPS: Step[] = [
   },
   {
     target: '[data-tour="learn"]', side: "bottom", title: "Learn",
-    body: <p>Background reading: how Site Lab and its control strategies work, how the devices behave, and short digests of the research behind them, with sources.</p>,
+    body: <p>Background reading in two parts: general knowledge about the grid, congestion and site flexibility, then how Site Lab works, from its models to its controllers, with sources.</p>,
   },
   {
     target: '[data-tour="data"]', side: "bottom", title: "Where the data comes from",
