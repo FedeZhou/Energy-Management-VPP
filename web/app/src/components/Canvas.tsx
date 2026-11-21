@@ -20,8 +20,19 @@ import { sceneNodeTypes } from "./scene/SceneNodes";
 import { sceneLayout, useView } from "../view";
 
 export const DRAG_MIME = "application/x-emsbench-asset";
-/** How the site is framed: room at the top for the clock and view switch, on the right for the zoom buttons. */
-export const FIT_VIEW = { padding: { top: "56px", bottom: "24px", left: "32px", right: "56px" }, maxZoom: 1.1 } as const;
+/** Furthest the viewer can zoom out by hand. */
+const MIN_ZOOM = 0.3;
+/** How the site is framed: room at the top for the clock and view switch, on the right for the zoom buttons.
+ *  minZoom keeps the diagram readable: a card's name is 12.5 px, so fitting never goes below 0.8
+ *  (about 10 px on screen). A site too big for the canvas at that zoom opens centred and cropped;
+ *  drag the canvas to pan, or zoom out with the buttons or the mouse wheel. The scene is an
+ *  illustrated overview, so it still fits the whole site (its labels are small for big sites).
+ *  minZoom is a getter so callers that spread FIT_VIEW (the logo's "home") get the current view's value. */
+export const FIT_VIEW = {
+  padding: { top: "56px", bottom: "24px", left: "32px", right: "56px" },
+  maxZoom: 1.1,
+  get minZoom(): number { return useView.getState().view === "scene" ? MIN_ZOOM : 0.8; },
+} as const;
 
 export function Canvas() {
   const assets = useStore((s) => s.site.assets);
@@ -109,7 +120,7 @@ export function Canvas() {
         nodesConnectable={false}
         deleteKeyCode={["Delete", "Backspace"]}
         edgesFocusable={false}
-        minZoom={0.3}
+        minZoom={MIN_ZOOM}
         maxZoom={1.8}
         proOptions={{ hideAttribution: true }}
       >

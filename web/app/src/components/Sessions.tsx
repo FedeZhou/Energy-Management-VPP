@@ -22,6 +22,7 @@ export function Sessions() {
         <span><i className="sw" /> Plugged in</span>
         <span><i className="sw fill" /> Energy delivered</span>
         <span><i className="sw short" /> Left short</span>
+        <span>Bar label: delivered/requested kWh</span>
         <Help topic="sessions" />
       </div>
       <div className="gantt-grid">
@@ -47,7 +48,10 @@ export function Sessions() {
                       style={{ left: at(s.arrival), width: at(Math.max(s.departure - s.arrival, 1)) }}
                       title={title} aria-label={title} onClick={() => { useStore.getState().setPlaying(false); setCursor(s.arrival); }}>
                       <span className="visit-fill" style={{ width: `${share * 100}%` }} />
-                      <span className="visit-text">{num(s.delivered_kwh)}/{num(s.requested_kwh)} kWh</span>
+                      {/* Delivered/requested in kWh (unit in the legend), one decimal so a car that left
+                          slightly short does not read "9/9". The empty <i> lets the number wrap onto a
+                          hidden second line when the bar is too narrow: shown whole or not at all. */}
+                      <span className="visit-label" aria-hidden><i /><span>{num(s.delivered_kwh, 1)}/{num(s.requested_kwh, 1)}</span></span>
                     </button>
                   );
                 })}

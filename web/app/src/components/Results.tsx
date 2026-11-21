@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, ChevronDown, ChevronUp, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { useStore } from "../store";
 import { dayLabel, kw, money, num, pct, pts, qty, signed, stepLabel, timeAt } from "../util";
+import { ExportMenu } from "./Export";
 import { Help } from "./Help";
 import { Sessions } from "./Sessions";
 
@@ -309,6 +310,7 @@ export function Results() {
             </span>
           )}
         </div>
+        <ExportMenu />
         {r && (
           <button className="icon-btn sm" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? "Expand results" : "Collapse results"} title={collapsed ? "Expand" : "Collapse"}>
             {collapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}

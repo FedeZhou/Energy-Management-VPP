@@ -19,10 +19,17 @@ export const useView = create<{ view: View; setView: (v: View) => void }>((set) 
 }));
 
 /** The scene arranges itself on an isometric grid (saved positions belong to the diagram):
- *  grid connection in the middle, utility behind it on the left, buildings and solar on the
- *  row behind, batteries and chargers on the rows in front. Cables then share short runs
- *  along the grid lines, like a busbar. Returns node top-left corners in flow coordinates. */
-const CELL = 150; // world units between grid points
+ *  grid connection in the middle, utility straight behind it (up and to the right on screen),
+ *  buildings and solar on the row behind, batteries and chargers on the rows in front. Cables
+ *  then share short runs along the grid lines, like a busbar. sceneLayout returns node
+ *  top-left corners in flow coordinates. */
+/* Grid spacing, chosen so that no two components' boxes overlap (illustration + label hanging
+ * below it). A node is 168 px wide (scene/iso.tsx) and its label may be up to 184 px wide
+ * (8 px past each side, styles.css .scene-label), so neighbours along a grid axis, which sit
+ * CELL * cos 30 deg apart horizontally, need CELL * 0.866 >= 168 + 8 = 176, i.e. CELL >= 204.
+ * Neighbours on the same column of the screen (one step on both axes) sit CELL apart
+ * vertically, more than a node's height (~140 px illustration + a two- or three-line label). */
+const CELL = 205; // world units between grid points
 const NODE = { w: 168, groundY: 100 }; // matches scene/iso.tsx
 
 function cell(i: number, j: number) {
@@ -35,7 +42,7 @@ function cell(i: number, j: number) {
  *  cable can run along j to the hub's row (j = 0) and then along that row into the hub without
  *  passing under another component. Row j = 0 holds only the hub; the back row (j = -1) holds
  *  loads, solar and overflow chargers from i = 1; the front row (j = 1) holds up to five chargers
- *  at i >= 0 and the batteries at i < 0. The utility sits straight behind the hub at (0, -3) and
+ *  at i >= 0 and the batteries at i < 0. The utility sits straight behind the hub at (0, -2) and
  *  has its own cable: it is on the grid side of the meter, so it must not share the site busbar.
  *  FlowEdge's isoPath draws exactly this route (j first, then i). */
 export function sceneLayout(assets: { id: string; type: string }[]) {
@@ -48,6 +55,7 @@ export function sceneLayout(assets: { id: string; type: string }[]) {
   [...loads, ...overflow].forEach((a, k) => { pos[a.id] = cell(1 + k, -1); });
   front.forEach((a, k) => { pos[a.id] = cell(k, 1); });
   batteries.forEach((a, k) => { pos[a.id] = cell(-1 - k, 1); });
-  // Three rows back (not two): its label then clears the illustration on the back row's first cell.
-  return { assets: pos, meter: cell(0, 0), utility: cell(0, -3) };
+  // Two rows back: straight above the back row's first cell (1, -1), one CELL higher, which
+  // clears that cell's illustration; three rows back would only make the scene taller.
+  return { assets: pos, meter: cell(0, 0), utility: cell(0, -2) };
 }

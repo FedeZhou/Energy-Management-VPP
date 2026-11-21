@@ -469,10 +469,12 @@ input[type="range"]::-moz-range-thumb { width: 9px; height: 9px; border-radius: 
 .visit.short { border: 1.5px solid var(--bad); }
 .visit.open { border-style: dashed; }
 .visit-fill { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--c-ev) 45%, transparent); }
-/* A session label shows only when the bar is wide enough for all of it (never cut mid-number). */
-.visit { container-type: inline-size; }
-@container (max-width: 64px) { .visit-text { display: none; } }
-.visit-text { position: relative; font: 500 10.5px/16px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); padding: 0 4px; white-space: nowrap; }
+/* Session label: the number shows whole or not at all. A zero-width first item, then the number: if the
+   number is wider than the bar it wraps onto a second line, which the one-line height hides. */
+.visit-label { position: relative; display: flex; flex-wrap: wrap; height: 16px; overflow: hidden; padding: 0 4px;
+  font: 500 10.5px/16px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.visit-label > i { width: 0; height: 16px; }
+.visit-label > span { white-space: nowrap; }
 
 /* Tables (data sources, forecast comparison) */
 .table-wrap { overflow-x: auto; }
