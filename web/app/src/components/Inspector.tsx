@@ -36,6 +36,17 @@ const PRETTY: Record<string, string> = {
   ems: "Via energy management (shared)",
   "1": "1 minute", "5": "5 minutes", "15": "15 minutes", "60": "1 hour",
 };
+
+/** Field help comes from the engine and names options by id ("self_consumption: …", "Only used by mpc").
+ *  Show the labels people see in the dropdowns instead. Plain words that are also ids ("perfect", "off")
+ *  are only replaced where they are clearly an option: before a colon, or after "used by". */
+function readableHelp(help: string): string {
+  const label = (k: string) => (PRETTY[k] ? `“${PRETTY[k]}”` : k);
+  return help
+    .replace(/\b[a-z]+(?:_[a-z]+)+\b/g, (m) => label(m))
+    .replace(/\b([a-z]+):(?=\s)/g, (m, k: string) => (PRETTY[k] ? `${label(k)}:` : m))
+    .replace(/\bused by ([a-z]+)\b/g, (m, k: string) => (PRETTY[k] ? `used by ${label(k)}` : m));
+}
 const PHASES: Record<string, string> = { "1": "Single-phase", "3": "Three-phase" };
 
 const resolution = (p: ProfileInfo) => (p.resolution_minutes >= 60 ? "hourly" : `${p.resolution_minutes}-min`);
@@ -168,7 +179,7 @@ function FieldInput({ f, value, onChange, disabled }: {
   const head = cut > 0 ? f.label.slice(0, cut) : "";
   const tail = cut > 0 ? f.label.slice(cut + 1) : f.label;
   const source = chosen?.source || f.source;
-  const tip = [f.help, chosen ? coverage(chosen) : "", source ? `Source: ${source}` : ""].filter(Boolean).join("\n\n");
+  const tip = [f.help ? readableHelp(f.help) : "", chosen ? coverage(chosen) : "", source ? `Source: ${source}` : ""].filter(Boolean).join("\n\n");
   return (
     <div className={`field ${wide ? "wide" : ""} ${disabled ? "is-disabled" : ""}`}>
       <div className="field-label">

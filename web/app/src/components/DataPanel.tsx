@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, ExternalLink, X } from "lucide-react";
 import { api, type DataSource, type DataSources } from "../api";
 import { useStore } from "../store";
@@ -45,11 +45,29 @@ export function DataPanel() {
   const [data, setData] = useState<DataSources | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // A link ending in #data (or "-data") opens the panel directly. Not "contains": preset ids such as
-  // operate_data_center also contain "data".
+  // A link with "data" as its own hash part (#data, #run-data, #run-data-dark) opens the panel directly.
+  // Not "contains": preset ids such as operate_data_center also contain "data".
   useEffect(() => {
-    if (/(^#|-)data$/.test(location.hash)) setOpen(true);
+    if (/(^#|-)data($|-)/.test(location.hash)) setOpen(true);
   }, [setOpen]);
+
+  // A real modal: focus moves into the dialog, Tab stays inside it, and focus returns to where it was.
+  const dialog = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const back = document.activeElement as HTMLElement | null;
+    dialog.current?.querySelector<HTMLElement>("button")?.focus();
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || !dialog.current) return;
+      const items = [...dialog.current.querySelectorAll<HTMLElement>("button, a[href], input, select, textarea, [tabindex]:not([tabindex='-1'])")];
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", trap);
+    return () => { document.removeEventListener("keydown", trap); back?.focus?.(); };
+  }, [open]);
 
   useEffect(() => {
     if (!open || data) return;
@@ -66,7 +84,7 @@ export function DataPanel() {
   if (!open) return null;
   return (
     <div className="dp-overlay" onClick={() => setOpen(false)}>
-      <div className="dp-dialog" role="dialog" aria-modal="true" aria-labelledby="dp-title" onClick={(e) => e.stopPropagation()}>
+      <div ref={dialog} className="dp-dialog" role="dialog" aria-modal="true" aria-labelledby="dp-title" onClick={(e) => e.stopPropagation()}>
         <header className="dp-head">
           <div>
             <h2 id="dp-title">Where the data comes from</h2>

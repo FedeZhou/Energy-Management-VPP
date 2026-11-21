@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, CircleHelp, Database, Download, FilePlus2, Loader2, Play, RotateCw, Scale, Square, Upload } from "lucide-react";
+import { useReactFlow } from "@xyflow/react";
+import { BookOpen, CircleHelp, Database, Download, FilePlus2, Loader2, Moon, Play, RotateCw, Scale, Square, Sun, Upload } from "lucide-react";
 import { LIVE_APP_URL, STATIC_DEMO, type Mode, type Site } from "../api";
 import { useStore } from "../store";
+import { useTheme } from "../theme";
+import { FIT_VIEW } from "./Canvas";
 import { useGuide } from "./Guide";
-import { Help } from "./Help";
+import { Help, useHelp } from "./Help";
 
 const MODES: { id: Mode; label: string; hint: string }[] = [
   { id: "plan", label: "Plan", hint: "Months to a year, hourly: costs, savings, battery wear" },
@@ -11,15 +14,27 @@ const MODES: { id: Mode; label: string; hint: string }[] = [
 ];
 
 function Mark() {
+  // Three bars on a baseline: load, storage, supply. Drawn in ink, no container.
   return (
-    <svg className="brand-mark" viewBox="0 0 24 24" aria-hidden>
-      <rect width="24" height="24" rx="5" fill="currentColor" />
-      <g fill="var(--surface)">
-        <rect x="6" y="12" width="3" height="6" rx="0.75" />
-        <rect x="10.5" y="6" width="3" height="12" rx="0.75" />
-        <rect x="15" y="9" width="3" height="9" rx="0.75" />
+    <svg className="brand-mark" viewBox="0 0 16 16" aria-hidden>
+      <g fill="currentColor">
+        <rect x="1.5" y="8" width="3" height="7" />
+        <rect x="6.5" y="2" width="3" height="13" />
+        <rect x="11.5" y="5" width="3" height="10" />
       </g>
     </svg>
+  );
+}
+
+/** Light/dark switch. The icon shows the theme a click switches to; the choice is remembered. */
+function ThemeSwitch() {
+  const theme = useTheme((s) => s.theme);
+  const toggle = useTheme((s) => s.toggle);
+  const next = theme === "dark" ? "light" : "dark";
+  return (
+    <button className="icon-btn" onClick={toggle} aria-label={`Switch to ${next} view`} title={`Switch to ${next} view`}>
+      {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+    </button>
   );
 }
 
@@ -42,6 +57,8 @@ export function Toolbar() {
   const stale = useStore((s) => s.stale);
   const hasResult = useStore((s) => s.result !== null);
   const assets = useStore((s) => s.site.assets.length);
+  // On Learn, the lab-only controls (mode, examples, files, run) step aside and Learn shows as the current page.
+  const onLearn = useStore((s) => s.page === "learn");
   const { loadSite, run, compareForecasts, setMode, cancel } = useStore.getState();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -65,15 +82,30 @@ export function Toolbar() {
     }
   };
 
+  // The logo goes home: the lab view with the site settings, nothing open on top, the site framed.
+  // The site itself (and any result) is kept: home is a place, not a reset.
+  const { fitView } = useReactFlow();
+  const goHome = () => {
+    const wasLab = useStore.getState().page === "lab";
+    history.replaceState(null, "", location.pathname + location.search);
+    useStore.setState({ page: "lab", dataPanelOpen: false, selectedId: null });
+    useHelp.getState().close();
+    useGuide.getState().go(null);
+    if (wasLab) void fitView({ ...FIT_VIEW, duration: 250 }); // coming back from Learn, the canvas fits as it mounts
+  };
+
   const again = hasResult && stale;
   const running = job !== null;
   return (
-    <header className="topbar">
+    <header className={`topbar ${onLearn ? "on-learn" : ""}`}>
       <div className="brand" title={name}>
-        <Mark />
-        <span className="brand-name">Site Lab</span>
+        <a className="brand-home" href="./" title="Back to the lab" aria-label="Site Lab: back to the lab"
+          onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); goHome(); }}>
+          <Mark />
+          <span className="brand-name">Site Lab</span>
+        </a>
         <span className="crumb-sep" aria-hidden>/</span>
-        <span className="crumb">{name}</span>
+        <span className="crumb">{onLearn ? "Learn" : name}</span>
         {STATIC_DEMO && (
           <a className="demo-pill" href={LIVE_APP_URL} target="_blank" rel="noreferrer"
             title="This public demo runs the example sites with pre-computed results. Open the live app to change and simulate anything.">
@@ -81,7 +113,7 @@ export function Toolbar() {
           </a>
         )}
       </div>
-      <div className="tb-group">
+      <div className="tb-group lab-only">
         <div className="segmented" role="radiogroup" aria-label="Mode" data-tour="mode">
           {MODES.map(({ id, label, hint }) => (
             <button key={id} role="radio" aria-checked={mode === id} className={mode === id ? "on" : ""}
@@ -92,8 +124,8 @@ export function Toolbar() {
         </div>
         <Help topic="modes" />
       </div>
-      <div className="tb-sep" />
-      <div className="tb-group" data-tour="examples">
+      <div className="tb-sep lab-only" />
+      <div className="tb-group lab-only" data-tour="examples">
         <select className="examples" aria-label="Load an example" defaultValue="" onChange={(e) => {
           const p = presets.find((x) => x.id === e.target.value);
           if (p) loadSite(p.site);
@@ -119,9 +151,9 @@ export function Toolbar() {
         }} />
       </div>
       <div className="tb-spacer" />
-      <div className="tb-group">
-        <button className="btn ghost" data-tour="learn" onClick={() => useStore.getState().setPage("learn")}
-          title="Learn: how Site Lab works, how the systems behave, research digests" aria-label="Learn">
+      <div className="tb-group tb-links">
+        <button className={`btn ghost ${onLearn ? "on" : ""}`} aria-current={onLearn ? "page" : undefined} data-tour="learn" onClick={() => useStore.getState().setPage("learn")}
+          title="Learn: general knowledge about grid flexibility, and how Site Lab works" aria-label="Learn">
           <BookOpen size={15} /><span className="lbl">Learn</span>
         </button>
         <button className="btn ghost" onClick={() => useGuide.getState().start()} data-tour="guide"
@@ -133,8 +165,9 @@ export function Toolbar() {
           <Database size={15} /><span className="lbl">Data</span>
         </button>
       </div>
-      <div className="tb-sep" />
-      <div className="tb-group tb-actions">
+      <ThemeSwitch />
+      <div className="tb-sep lab-only" />
+      <div className="tb-group tb-actions lab-only">
         <button className="btn" onClick={() => compareForecasts()} disabled={running || assets === 0}
           aria-label="Compare forecasts"
           title="Compare forecasts: run twice, with perfect forecasts and with what a real controller would know (yesterday's load, the day-ahead weather forecast, prices only once published, cars only once plugged in)">

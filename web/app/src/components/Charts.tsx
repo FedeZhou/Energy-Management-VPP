@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import * as echarts from "echarts/core";
 import { BarChart, LineChart } from "echarts/charts";
 import { AxisPointerComponent, DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TitleComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import { useStore } from "../store";
+import { useTheme } from "../theme";
 import { dayLabel, isMidnight, num, readVar, stepLabel, timeAt, UNIT_SPACE } from "../util";
 
 echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, DataZoomComponent, LegendComponent, AxisPointerComponent,
@@ -18,17 +19,6 @@ const LEGEND_H = 30; // the legend has its own row, so it never collides with a 
 const LEFT = 56;
 const RIGHT = 20;
 
-function useDark(): boolean {
-  const [dark, setDark] = useState(() => matchMedia("(prefers-color-scheme: dark)").matches);
-  useEffect(() => {
-    const m = matchMedia("(prefers-color-scheme: dark)");
-    const on = () => setDark(m.matches);
-    m.addEventListener("change", on);
-    return () => m.removeEventListener("change", on);
-  }, []);
-  return dark;
-}
-
 /** Axis numbers: thousands separators, no needless decimals. */
 const tidy = (n: number) => num(n, Number.isInteger(n) || Math.abs(n) >= 10 ? 0 : Math.abs(n) >= 1 ? 1 : 2);
 
@@ -41,7 +31,8 @@ export function Charts() {
   const chart = useRef<echarts.ECharts | null>(null);
   const line = useRef<HTMLDivElement>(null);
   const win = useRef<[number, number]>([0, 0]);
-  const dark = useDark();
+  // The chart reads colours from CSS tokens once per draw, so it redraws when the theme changes.
+  const dark = useTheme((s) => s.theme) === "dark";
 
   const hasBattery = site.assets.some((a) => a.type === "battery");
   const hasEv = site.assets.some((a) => a.type === "ev_charger");
@@ -77,19 +68,19 @@ export function Charts() {
     win.current = [first, Math.min(T - 1, first + view - 1)];
     const idx = Object.fromEntries(layout.map((p, k) => [p.key, k]));
     const last = layout.length - 1;
-    const font = v("--font-ui");
+    const font = v("--font-ui"), mono = v("--font-mono");
 
     const axes = layout.map((_, k) => ({
       type: "category" as const, data: x, gridIndex: k, boundaryGap: true,
       axisLine: { lineStyle: { color: axis } }, axisTick: { show: false },
       axisLabel: k === last
-        ? { color: muted, fontSize: 11, hideOverlap: true, formatter: (val: string) => dayLabel(timeAt(start, step, Number(val))), interval: (i: number) => isMidnight(start, step, i) }
+        ? { color: muted, fontSize: 10.5, fontFamily: mono, hideOverlap: true, formatter: (val: string) => dayLabel(timeAt(start, step, Number(val))), interval: (i: number) => isMidnight(start, step, i) }
         : { show: false },
       axisPointer: { show: true, label: { show: false }, lineStyle: { color: muted, width: 1 } },
     }));
     const yAxis = (k: number, extra: object = {}) => ({
       type: "value" as const, gridIndex: k, splitNumber: 2,
-      axisLabel: { color: muted, fontSize: 11, formatter: tidy, hideOverlap: true },
+      axisLabel: { color: muted, fontSize: 10.5, fontFamily: mono, formatter: tidy, hideOverlap: true },
       splitLine: { lineStyle: { color: hair } }, ...extra,
     });
     const lineS = (name: string, data: number[], color: string, k: number, extra: object = {}) => ({
@@ -126,7 +117,9 @@ export function Charts() {
       lineS("Grid", s.grid_kw, grid, idx.power, { lineStyle: { width: 2, color: grid } }),
       lineS("Import price", s.price, ink2, idx.price, { step: "middle", lineStyle: { width: 1.5, color: ink2 } }),
     ];
-    const legend = [...consumers, ...(hasPv ? ["Solar"] : []), "Grid", "Grid, baseline"];
+    // The baseline's legend key is dashed, like its line (a solid key would read as a second grid line).
+    const dashedKey = "path://M0,0h3v1h-3zM4.5,0h3v1h-3zM9,0h3v1h-3z";
+    const legend: (string | { name: string; icon: string })[] = [...consumers, ...(hasPv ? ["Solar"] : []), "Grid", { name: "Grid, baseline", icon: dashedKey }];
     if (idx.flex !== undefined) {
       series.push({ name: "Battery", type: "bar", data: s.battery_kw, xAxisIndex: idx.flex, yAxisIndex: idx.flex, barCategoryGap: "15%", itemStyle: { color: batt, borderRadius: 1 }, large: true });
       legend.push("Battery");
@@ -140,7 +133,7 @@ export function Charts() {
         series.push(lineS(phaseNames[k], s[key], ink2, idx.phase, {
           lineStyle: { width: 1.5, color: ink2, type: ["solid", [6, 3], [1.5, 2.5]][k], opacity: [1, 0.85, 0.85][k] },
           ...(k === 0 && fuse != null ? { markLine: { silent: true, symbol: "none", lineStyle: { color: bad, width: 1.25, type: [4, 3] },
-            label: { formatter: `Fuse ${fuse}${UNIT_SPACE}A`, color: bad, position: "insideEndBottom", fontSize: 11 }, data: [{ yAxis: fuse }] } } : {}),
+            label: { formatter: `Fuse ${fuse}${UNIT_SPACE}A`, color: bad, position: "insideEndBottom", fontSize: 10.5, fontFamily: mono }, data: [{ yAxis: fuse }] } } : {}),
         }));
       });
     }
@@ -163,20 +156,20 @@ export function Charts() {
       grid: layout.map((p) => ({ left: LEFT, right: RIGHT, top: p.top, height: p.height })),
       xAxis: axes,
       yAxis: layout.map((p, k) => p.key === "soc"
-        ? yAxis(k, { min: 0, max: 100, interval: 50, axisLabel: { color: muted, fontSize: 11, formatter: "{value}%" } })
+        ? yAxis(k, { min: 0, max: 100, interval: 50, axisLabel: { color: muted, fontSize: 10.5, fontFamily: mono, formatter: "{value}%" } })
         : p.key === "phase" ? yAxis(k, phaseScale())
           : yAxis(k)),
       axisPointer: { link: [{ xAxisIndex: "all" }] },
       tooltip: {
         trigger: "axis", backgroundColor: v("--surface"), borderColor: v("--border"), borderWidth: 1, padding: [8, 10], textStyle: { color: ink, fontSize: 12, fontFamily: font },
-        extraCssText: "border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.14);min-width:200px",
+        extraCssText: `border-radius:4px;box-shadow:${v("--shadow-pop")};min-width:200px`,
         formatter: (ps: { dataIndex: number; seriesName: string; value: number; marker: string }[]) => {
           if (!ps.length) return "";
           const i = ps[0].dataIndex;
           const fmt = (n: string, val: number) => n === "Import price" ? `${cur}${num(val, 3)}/kWh`
             : phaseNames.includes(n) ? `${num(val, 1)}${UNIT_SPACE}A`
               : n === "Battery charge" ? `${num(val, 0)}%` : `${num(val, Math.abs(val) >= 100 ? 0 : 1)}${UNIT_SPACE}kW`;
-          const row = (marker: string, name: string, text: string, strongRow = false) => `<div style="display:flex;align-items:center;gap:8px;line-height:20px">${marker}<span style="flex:1;color:${strongRow ? ink : ink2}">${name}</span><b style="font-weight:${strongRow ? 600 : 500};font-variant-numeric:tabular-nums">${text}</b></div>`;
+          const row = (marker: string, name: string, text: string, strongRow = false) => `<div style="display:flex;align-items:center;gap:8px;line-height:20px">${marker}<span style="flex:1;color:${strongRow ? ink : ink2}">${name}</span><b style="font-weight:${strongRow ? 600 : 500};font-family:${mono};font-size:11.5px;font-variant-numeric:tabular-nums">${text}</b></div>`;
           const rows = ps.map((p) => row(p.marker, p.seriesName, fmt(p.seriesName, Number(p.value))));
           // Total consumption, so the sum of the component lines is readable without a separate line.
           const shownConsumers = ps.filter((p) => consumers.includes(p.seriesName));
@@ -188,7 +181,7 @@ export function Charts() {
         },
       },
       legend: [
-        { type: "scroll", top: 0, left: LEFT - 4, right: RIGHT, icon: "roundRect", itemWidth: 12, itemHeight: 3, itemGap: 18,
+        { type: "scroll", top: 0, left: LEFT - 4, right: RIGHT, icon: "rect", itemWidth: 12, itemHeight: 2, itemGap: 18,
           textStyle: legendText, pageTextStyle: { color: muted }, pageIconColor: ink2, pageIconInactiveColor: strong, data: legend },
         ...(idx.phase !== undefined ? [{ top: layout[idx.phase].top - 21, right: RIGHT, itemWidth: 16, itemHeight: 2, itemGap: 14,
           textStyle: { ...legendText, fontSize: 11 }, data: phaseNames }] : []),
@@ -197,7 +190,7 @@ export function Charts() {
         { type: "inside", xAxisIndex: layout.map((_, k) => k), startValue: win.current[0], endValue: win.current[1], zoomOnMouseWheel: "ctrl", moveOnMouseWheel: false },
         { type: "slider", xAxisIndex: layout.map((_, k) => k), startValue: win.current[0], endValue: win.current[1], bottom: 2, height: 18,
           left: LEFT, right: RIGHT + 10,
-          borderColor: v("--border"), backgroundColor: "transparent", fillerColor: v("--accent-soft"), textStyle: { color: muted, fontSize: 11 },
+          borderColor: v("--border"), backgroundColor: "transparent", fillerColor: v("--surface-3"), textStyle: { color: muted, fontSize: 10.5, fontFamily: mono },
           handleStyle: { color: v("--surface"), borderColor: strong }, moveHandleStyle: { color: strong },
           dataBackground: { lineStyle: { color: strong, opacity: 0.6 }, areaStyle: { opacity: 0 } },
           selectedDataBackground: { lineStyle: { color: muted }, areaStyle: { opacity: 0 } }, labelFormatter: (i: number) => dayLabel(timeAt(start, step, i)) },

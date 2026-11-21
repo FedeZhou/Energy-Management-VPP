@@ -38,7 +38,7 @@ export function Palette() {
             key={type}
             className="palette-item"
             draggable
-            title={`${closed ? `${spec?.label ?? type}\n` : ""}${spec?.description ?? ""}\nDrag onto the site, or click to add.`.trim()}
+            title={`${closed ? `${spec?.label ?? type}\n` : ""}${(spec?.description ?? "").replace(/\s+/g, " ").trim()}\nDrag onto the site, or click to add.`.trim()}
             onDragStart={(e) => {
               e.dataTransfer.setData(DRAG_MIME, type);
               e.dataTransfer.effectAllowed = "copy";

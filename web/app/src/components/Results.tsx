@@ -303,7 +303,9 @@ export function Results() {
           {comparing && <span className="chip" title="Compare forecasts ran the site twice; the numbers and charts show the run with realistic forecasts. Your Forecasts setting is unchanged.">Showing: realistic forecasts</span>}
           {r && (
             <span className="meta-text">
-              <span className="hide-narrow">vs baseline</span> <Help topic="baseline" /> <span className="num">{num(r.runtime_s, 1)}{" "}s</span>
+              <span className="hide-narrow">vs baseline</span> <Help topic="baseline" />
+              <span className="meta-sep" aria-hidden>·</span>
+              <span className="num" title="How long the simulation took to run">ran in {num(r.runtime_s, 1)}{" "}s</span>
             </span>
           )}
         </div>

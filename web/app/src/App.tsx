@@ -8,7 +8,7 @@ import { Inspector } from "./components/Inspector";
 import { Results } from "./components/Results";
 import { DataPanel } from "./components/DataPanel";
 import { Guide, guideSeen, useGuide } from "./components/Guide";
-import { HelpPopover } from "./components/Help";
+import { HelpPopover, useHelp } from "./components/Help";
 import { useView } from "./view";
 
 // The Learn page (with KaTeX and every article) loads only when opened, so the lab starts light.
@@ -44,16 +44,36 @@ export function App() {
         if (g[1]) useGuide.getState().go(Math.max(0, Number(g[1]) - 1));
       } else if (!h && !guideSeen() && !useStore.getState().error) useGuide.getState().start();
     });
-    // Ctrl/Cmd+Enter runs the simulation from anywhere.
+    // Ctrl/Cmd+Enter runs the simulation from anywhere. Escape leaves a text field; with nothing open on
+    // top (dialog, tour, help), a second Escape clears the selection and shows the site settings.
     const onKey = (e: KeyboardEvent) => {
+      const st = useStore.getState();
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-        const st = useStore.getState();
         if (!st.running && st.site.assets.length) { e.preventDefault(); st.run(); }
+        return;
       }
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const a = document.activeElement;
+      if (a instanceof HTMLElement && a.matches("input, textarea, select")) { a.blur(); return; }
+      const overlay = st.dataPanelOpen || useGuide.getState().step !== null || useHelp.getState().topic !== null;
+      if (!overlay && st.page === "lab" && st.selectedId !== null) st.select(null);
+    };
+    // A scroll wheel over a focused number field would change its value while the user meant to scroll
+    // the panel: let the field go first, so the wheel scrolls.
+    const onWheel = (e: WheelEvent) => {
+      const a = document.activeElement;
+      if (a instanceof HTMLInputElement && a.type === "number" && e.target === a) a.blur();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("wheel", onWheel, { passive: true });
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("wheel", onWheel); };
   }, []);
+
+  // The browser tab names what is open: the site in the lab, or Learn.
+  const siteName = useStore((s) => s.site.name);
+  useEffect(() => {
+    document.title = page === "learn" ? "Learn · Site Lab" : `${siteName || "Untitled site"} · Site Lab`;
+  }, [page, siteName]);
 
   return (
     <ReactFlowProvider>

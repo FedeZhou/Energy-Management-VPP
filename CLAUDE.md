@@ -124,6 +124,7 @@ cd web/app && npm run build      # after frontend changes, or: npm run dev (API 
 - Site view has two styles: **Scene** (isometric illustrations, auto-laid-out on an iso grid by `sceneLayout` in
   `web/app/src/view.ts`, not draggable) and **Diagram** (one-line diagram at the saved `ui` positions, draggable).
 - Demo URLs: `#run` runs the first Plan example; `#operate-run`; `#<preset_id>-run` (e.g. `#operate_shared_garage-run`).
-  `mpc` in the hash switches the battery to MPC; `compare` runs Compare forecasts (e.g. `#operate_home_ev-mpc-compare`).
+  `dark` / `light` in the hash picks the theme for that visit (e.g. `#run-dark`; the toolbar switch remembers a choice,
+  otherwise the system setting applies; `src/theme.ts`). `mpc` in the hash switches the battery to MPC; `compare` runs Compare forecasts (e.g. `#operate_home_ev-mpc-compare`).
   `#guide` (or `#guide-5`) opens the guided tour (at step 5); `#help-<topic>` opens one "?" explanation
   (topics in `web/app/src/help.tsx`, which must stay in sync with the engine's behaviour).

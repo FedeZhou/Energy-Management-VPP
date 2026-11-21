@@ -20,6 +20,8 @@ import { sceneNodeTypes } from "./scene/SceneNodes";
 import { sceneLayout, useView } from "../view";
 
 export const DRAG_MIME = "application/x-emsbench-asset";
+/** How the site is framed: room at the top for the clock and view switch, on the right for the zoom buttons. */
+export const FIT_VIEW = { padding: { top: "56px", bottom: "24px", left: "32px", right: "56px" }, maxZoom: 1.1 } as const;
 
 export function Canvas() {
   const assets = useStore((s) => s.site.assets);
@@ -52,8 +54,7 @@ export function Canvas() {
   const assetKey = assets.map((a) => a.id).join("|");
   const flowSize = useFlowStore((s) => `${Math.round(s.width)}x${Math.round(s.height)}`);
   useEffect(() => {
-    // Room at the top for the clock and view switch, on the right for the zoom buttons.
-    const t = setTimeout(() => fitView({ padding: { top: "56px", bottom: "24px", left: "32px", right: "56px" }, maxZoom: 1.1 }), 60);
+    const t = setTimeout(() => fitView(FIT_VIEW), 60);
     return () => clearTimeout(t);
   }, [assetKey, flowSize, fitView, view]);
 
@@ -107,6 +108,7 @@ export function Canvas() {
         onPaneClick={() => select(null)}
         nodesConnectable={false}
         deleteKeyCode={["Delete", "Backspace"]}
+        edgesFocusable={false}
         minZoom={0.3}
         maxZoom={1.8}
         proOptions={{ hideAttribution: true }}

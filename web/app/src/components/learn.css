@@ -1,49 +1,52 @@
-/* Learn: book-quality reading on the app's tokens (styles.css).
+/* Learn: book-quality reading on the app's tokens (styles.css). Headings are set in Computer Modern
+   (KaTeX_Main, already loaded for the formulas), so prose headings and mathematics share one serif.
    A ~68-character measure, 16 px text with generous leading, a clear heading hierarchy,
    quiet superscript citations, formulas that always fit. */
 .ln-root { display: grid; grid-template-columns: 288px minmax(0, 1fr); min-height: 0; height: 100%; background: var(--surface); }
 
 /* ---- Navigation ---- */
-.ln-nav { display: flex; flex-direction: column; gap: 20px; padding: 14px 12px 20px; border-right: 1px solid var(--border); background: var(--bg); overflow: auto; }
-.ln-back { align-self: flex-start; margin-left: -2px; }
+.ln-nav { display: flex; flex-direction: column; gap: 24px; padding: 16px 12px 24px; border-right: 1px solid var(--border); background: var(--bg); overflow: auto; }
+.ln-nav-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ln-back { margin-left: -2px; }
 .ln-search { display: flex; align-items: center; gap: 8px; padding: 0 8px; height: 30px; border: 1px solid var(--border-strong); border-radius: var(--r); background: var(--surface); color: var(--faint); flex: none; }
-.ln-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ln-search:focus-within { border-color: var(--ink); box-shadow: none; }
 .ln-search input { flex: 1; border: 0 !important; outline: 0; background: transparent; min-width: 0; color: var(--ink); height: 28px; padding: 0; box-shadow: none !important; }
 .ln-group { display: flex; flex-direction: column; gap: 1px; }
-.ln-group h2 { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px 8px; }
+.ln-group h3 { font: 500 10.5px/16px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px 8px; }
 .ln-link {
   position: relative; display: flex; align-items: baseline; gap: 8px; text-align: left; width: 100%;
   border: 0; background: transparent; padding: 5px 8px; border-radius: var(--r-sm); cursor: pointer;
   color: var(--ink-2); font-size: 13px; line-height: 18px;
 }
-.ln-link:hover { background: var(--surface-3); color: var(--ink); }
-.ln-link.on { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 0 0 1px var(--border); }
-.ln-link.on::before { content: ""; position: absolute; left: -1px; top: 6px; bottom: 6px; width: 2px; border-radius: 1px; background: var(--accent); }
+.ln-link:hover { background: transparent; color: var(--ink); }
+.ln-link.on { background: transparent; color: var(--ink); font-weight: 500; box-shadow: none; }
+.ln-link.on::before { content: ""; position: absolute; left: -2px; top: 5px; bottom: 5px; width: 1px; background: var(--ink); }
 .ln-link-title { flex: 1; min-width: 0; }
-.ln-num { flex: none; width: 18px; text-align: right; font-size: 12px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
-.ln-link.on .ln-num { color: var(--accent); }
+.ln-num { flex: none; width: 20px; text-align: right; font: 400 10.5px/18px var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.ln-link.on .ln-num { color: var(--ink); }
 .ln-rule { margin-top: auto; font-size: 12px; line-height: 1.5; color: var(--muted); padding: 0 8px; }
 
 /* ---- Article ---- */
 .ln-article { overflow: auto; min-width: 0; }
 .ln-inner {
-  max-width: calc(68ch + 64px); margin: 0 auto; padding: 48px 32px 96px; display: flex; flex-direction: column; gap: 16px;
+  max-width: calc(68ch + 64px); margin: 0 auto; padding: 64px 32px 112px; display: flex; flex-direction: column; gap: 16px;
   color: var(--ink-2); font-size: 16px; line-height: 1.7;
 }
-.ln-section { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
-.ln-inner h1 { font-size: 24px; line-height: 1.3; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); margin: -8px 0 0; text-wrap: balance; }
+.ln-section { font: 500 10.5px/16px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.ln-inner h1 { font-family: KaTeX_Main, "Times New Roman", Georgia, serif; font-size: 36px; line-height: 1.15; font-weight: 400; letter-spacing: -0.01em; color: var(--ink); margin: -4px 0 0; text-wrap: balance; }
 .ln-status { margin-top: -6px; }
-.ln-summary { font-size: 16px; line-height: 1.6; color: var(--muted); margin: 0 0 8px; padding-bottom: 20px; border-bottom: 1px solid var(--border); text-wrap: pretty; }
-.ln-inner h3 { font-size: 20px; line-height: 1.35; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); margin: 24px 0 -4px; text-wrap: balance; }
+.ln-summary { font-size: 17px; line-height: 1.6; color: var(--muted); margin: 0 0 12px; padding-bottom: 28px; border-bottom: 1px solid var(--border-strong); text-wrap: pretty; }
+.ln-inner h3 { font-family: KaTeX_Main, "Times New Roman", Georgia, serif; font-size: 23px; line-height: 1.3; font-weight: 400; color: var(--ink); margin: 28px 0 -4px; text-wrap: balance; }
 .ln-inner p { text-wrap: pretty; }
 .ln-inner ul, .ln-inner ol { margin: 0; padding-left: 24px; display: flex; flex-direction: column; gap: 6px; }
 .ln-inner li::marker { color: var(--muted); }
 .ln-inner b, .ln-inner strong { color: var(--ink); font-weight: 600; }
-.ln-inner a { color: var(--accent); }
+.ln-inner a { color: var(--ink); text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
+.ln-inner a:hover { text-decoration-color: var(--ink); }
 
-.ln-pill { display: inline-block; font-size: 12px; font-weight: 500; line-height: 20px; padding: 0 8px; border-radius: var(--r-sm); white-space: nowrap; background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
-.ln-pill.built { color: var(--good); border-color: color-mix(in srgb, var(--good) 30%, transparent); background: color-mix(in srgb, var(--good) 7%, transparent); }
-.ln-link .ln-pill { font-size: 11px; line-height: 16px; padding: 0 6px; align-self: center; }
+.ln-pill { display: inline-block; font: 500 10.5px/20px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; padding: 0 7px; border-radius: var(--r-sm); white-space: nowrap; background: transparent; color: var(--muted); border: 1px solid var(--border-strong); }
+.ln-pill.built { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); background: transparent; }
+.ln-link .ln-pill { font-size: 9.5px; line-height: 15px; padding: 0 5px; align-self: center; }
 
 /* Citations: small superscript numbers (inline, so they never wrap away from their word).
    Right after a formula they are bracketed, so they cannot be mistaken for an exponent. */
@@ -59,14 +62,14 @@
   margin: 4px 0; padding: 12px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); overflow-x: auto;
   font: 13px/1.6 var(--font-mono); color: var(--ink);
 }
-.ln-note { padding: 12px 16px; border-left: 2px solid var(--border-strong); background: var(--bg); border-radius: 0 var(--r) var(--r) 0; font-size: 14px; line-height: 1.65; }
+.ln-note { padding: 12px 18px; border-left: 1px solid var(--ink); background: var(--bg); border-radius: 0; font-size: 14px; line-height: 1.65; }
 .ln-note.warn { border-left-color: var(--warn); }
 .ln-note.info { border-left-color: var(--accent); }
 
-.ln-facts { margin: 4px 0; display: grid; grid-template-columns: minmax(120px, 34%) 1fr; border-top: 1px solid var(--border-strong); font-size: 14px; line-height: 1.6; }
+.ln-facts { margin: 4px 0; display: grid; grid-template-columns: minmax(120px, 34%) 1fr; border-top: 1px solid var(--ink); font-size: 14px; line-height: 1.6; }
 .ln-facts div { display: contents; }
 .ln-facts dt, .ln-facts dd { margin: 0; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--border); }
-.ln-facts dt { color: var(--ink); font-weight: 600; }
+.ln-facts dt { color: var(--ink); font-weight: 500; }
 .ln-facts dd { color: var(--ink-2); font-variant-numeric: tabular-nums; }
 
 /* ---- Formulas (KaTeX) ----
@@ -81,16 +84,16 @@
 .ln-inner p .katex, .ln-inner li .katex, .ln-inner dd .katex { font-size: 1.04em; }
 
 /* ---- Sources ---- */
-.ln-sources { margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border-strong); }
-.ln-sources h3 { margin-top: 0; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.ln-sources { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--ink); }
+.ln-sources h3 { margin-top: 0; font: 500 10.5px/16px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .ln-sources ol { gap: 12px; font-size: 13px; line-height: 1.55; list-style: decimal; margin-top: 12px; padding-left: 28px; }
 .ln-sources li { display: list-item; scroll-margin: 80px; padding-left: 4px; }
-.ln-sources li::marker { color: var(--muted); font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ln-sources li::marker { color: var(--muted); font-family: var(--font-mono); font-size: 11px; font-variant-numeric: tabular-nums; }
 .ln-sources li > span { display: block; margin-top: 2px; }
 .ln-sources li > .ln-read { display: inline-flex; }
 .ln-sources li:target { background: var(--accent-soft); border-radius: var(--r-sm); }
 .ln-src-title a { color: var(--ink); text-decoration: none; font-weight: 500; }
-.ln-src-title a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.ln-src-title a:hover { text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
 .ln-src-title svg { vertical-align: -1px; color: var(--muted); }
 .ln-src-meta { color: var(--muted); font-size: 12px; }
 .ln-read { align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--muted); }
@@ -105,10 +108,10 @@
   display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 10px 14px; cursor: pointer;
   border: 1px solid var(--border-strong); border-radius: var(--r); background: var(--surface); color: var(--ink);
 }
-.ln-page-link:hover { border-color: var(--accent); }
+.ln-page-link:hover { border-color: var(--ink); }
 .ln-page-link.next { text-align: right; align-items: flex-end; grid-column: 2; }
-.ln-page-dir { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
-.ln-page-title { font-size: 14px; font-weight: 600; line-height: 1.35; }
+.ln-page-dir { display: inline-flex; align-items: center; gap: 4px; font: 500 10.5px/16px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.ln-page-title { font-family: KaTeX_Main, "Times New Roman", Georgia, serif; font-size: 17px; font-weight: 400; line-height: 1.35; }
 
 @media (max-width: 1020px) {
   .ln-root { grid-template-columns: 240px minmax(0, 1fr); }
@@ -122,3 +125,45 @@
 .ln-math-body.wide { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
 .ln-math-body.wide:hover, .ln-math-body.wide:focus-visible { -webkit-mask-image: none; mask-image: none; }
 .ln-math-hint { margin: 0; padding: 0 20px 10px; font-size: 12px; line-height: 16px; color: var(--muted); text-align: right; }
+
+/* ---- Two parts: general knowledge, then how Site Lab works ---- */
+.ln-part { display: flex; flex-direction: column; gap: 18px; }
+.ln-part + .ln-part { padding-top: 20px; border-top: 1px solid var(--border-strong); }
+.ln-part-title { display: flex; align-items: baseline; gap: 8px; margin: 0 0 -4px 8px; font-family: KaTeX_Main, "Times New Roman", Georgia, serif; font-size: 19px; font-weight: 400; line-height: 1.25; color: var(--ink); }
+.ln-part-num { font: 500 10.5px/16px var(--font-mono); color: var(--muted); border: 1px solid var(--border-strong); border-radius: var(--r-sm); padding: 0 5px; }
+
+/* ---- Markdown chapters (general knowledge) ---- */
+.ln-inner h2.ln-h2 { font-family: KaTeX_Main, "Times New Roman", Georgia, serif; font-size: 23px; line-height: 1.3; font-weight: 400; color: var(--ink); margin: 28px 0 -4px; text-wrap: balance; }
+.ln-inner h3.ln-h3 { font-size: 19px; margin: 18px 0 -6px; }
+.ln-inner [id] { scroll-margin-top: 24px; }
+.ln-ext { margin-left: 2px; vertical-align: 0; color: var(--faint); }
+.ln-toc { margin: 0 0 8px; padding: 12px 0 20px; border-bottom: 1px solid var(--border-strong); font-size: 14px; line-height: 1.5; }
+.ln-toc > p { margin: 0 0 6px; font: 500 10.5px/16px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.ln-inner .ln-toc ol { list-style: none; padding: 0; gap: 3px; }
+.ln-inner .ln-toc a { text-decoration: none; color: var(--ink-2); }
+.ln-inner .ln-toc a:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--border-strong); }
+.ln-toc-num { display: inline-block; min-width: 38px; font: 400 12px/1.5 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.ln-simple { padding: 14px 18px; background: var(--bg); border-left: 2px solid var(--accent); font-size: 15.5px; line-height: 1.65; }
+.ln-worked { padding: 12px 18px; border: 1px solid var(--border-strong); border-left: 2px solid var(--good); border-radius: 0 var(--r) var(--r) 0; font-size: 15px; line-height: 1.65; }
+.ln-figure { margin: 8px 0; display: flex; flex-direction: column; gap: 8px; }
+/* The SVGs have a white background, so they stay readable in dark mode: never invert them. */
+.ln-figure img { display: block; max-width: min(100%, 800px); height: auto; margin: 0 auto; background: #fff; border: 1px solid var(--border); border-radius: var(--r); }
+.ln-figure figcaption { font-size: 13.5px; line-height: 1.55; color: var(--muted); text-wrap: pretty; }
+.ln-table { overflow-x: auto; margin: 4px 0; border-top: 1px solid var(--ink); scrollbar-width: thin; }
+.ln-table table { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.5; }
+.ln-table th { text-align: left; font-weight: 600; color: var(--ink); padding: 8px 12px 8px 0; border-bottom: 1px solid var(--border-strong); vertical-align: bottom; }
+.ln-table td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--ink-2); }
+.ln-table tr:target td { background: var(--accent-soft); }
+.ln-provenance { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border-strong); font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+.ln-nowrap { white-space: nowrap; }
+
+/* ---- Collapsible sidebar ---- */
+.ln-root { position: relative; }
+.ln-root.collapsed { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.ln-nav[hidden] { display: none; }
+.ln-nav-toggle { flex: none; color: var(--muted); }
+.ln-nav-toggle:hover { color: var(--ink); }
+.ln-nav-open { position: absolute; top: 14px; left: 14px; z-index: 2; gap: 6px; background: var(--surface); }
+@media (max-width: 760px) {
+  .ln-root.collapsed .ln-inner { padding-top: 60px; }
+}
