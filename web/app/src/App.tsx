@@ -10,6 +10,7 @@ import { DataPanel } from "./components/DataPanel";
 import { Guide, guideSeen, useGuide } from "./components/Guide";
 import { HelpPopover, useHelp } from "./components/Help";
 import { useView } from "./view";
+import { siteProblems } from "./validate";
 
 // The Learn page (with KaTeX and every article) loads only when opened, so the lab starts light.
 const LearnPage = lazy(() => import("./components/LearnPage").then((m) => ({ default: m.LearnPage })));
@@ -49,7 +50,7 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       const st = useStore.getState();
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-        if (!st.running && st.site.assets.length) { e.preventDefault(); st.run(); }
+        if (!st.running && st.site.assets.length && !(st.catalog && siteProblems(st.site, st.catalog).length)) { e.preventDefault(); st.run(); }
         return;
       }
       if (e.key !== "Escape" || e.defaultPrevented) return;

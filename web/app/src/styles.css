@@ -376,6 +376,9 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .affix:hover { border-color: color-mix(in srgb, var(--border-strong) 55%, var(--ink)); }
 .affix:focus-within { border-color: var(--ink); box-shadow: none; }
 .affix.disabled { opacity: 0.55; background: var(--surface-2); }
+/* A value the engine would reject: red hairline and a one-line reason under the field; Run is disabled. */
+.affix.invalid, .affix.invalid:hover, .affix.invalid:focus-within { border-color: var(--bad); }
+.field-error { font-size: 12px; line-height: 16px; color: var(--bad); }
 .affix input { border: 0 !important; box-shadow: none !important; height: 28px; background: transparent; }
 .affix .unit { padding: 0 9px 0 4px; color: var(--muted); font: 400 11px var(--font-mono); white-space: nowrap; }
 .foot-note { font: 400 11px var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }

@@ -4,6 +4,7 @@ import { ASSET_ICON } from "../icons";
 import { METER_ID, useStore } from "../store";
 import { ASSET_COLOR, money, num, perKwh, qty } from "../util";
 import { TariffSuggestion } from "./TariffSuggestion";
+import { fieldError } from "../validate";
 import { Help } from "./Help";
 import type { HelpTopic } from "../help";
 import { useLayout } from "../layout";
@@ -100,6 +101,7 @@ function FieldInput({ f, value, onChange, disabled }: {
   let input: React.ReactNode;
   let chosen: ProfileInfo | undefined;
   let wide = true;
+  let error: string | null = null;
 
   if (f.name === "demand_charge_profile" && profiles) {
     // Typed by id in the model; offered here as a list of the demand-charge profiles we have.
@@ -148,14 +150,17 @@ function FieldInput({ f, value, onChange, disabled }: {
     input = <input id={id} type="date" value={String(value ?? "")} onChange={(e) => e.target.value && onChange(e.target.value)} />;
   } else if (f.type === "number" || f.type === "integer") {
     const unit = unitText(f.unit, currency);
+    error = disabled ? null : fieldError(f, value);
     // Long units or labels get the full row, so the unit never squeezes the value.
     wide = unit.length > 6 || f.label.length > 26;
     input = (
-      <div className={`affix ${disabled ? "disabled" : ""}`}>
+      <div className={`affix ${disabled ? "disabled" : ""} ${error ? "invalid" : ""}`}>
         <input
           id={id}
           disabled={!!disabled}
           type="number"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${id}-err` : undefined}
           step={f.type === "integer" ? 1 : "any"}
           min={f.min ?? undefined}
           max={f.max ?? undefined}
@@ -187,6 +192,7 @@ function FieldInput({ f, value, onChange, disabled }: {
         <label htmlFor={id}>{head}{head && " "}<span className="nobr">{tail}<Tip text={tip} /></span></label>
       </div>
       {input}
+      {error && <span className="field-error" id={`${id}-err`} role="alert">{error}</span>}
       {disabled && <span className="field-meta">{disabled}</span>}
       {chosen && <span className="field-meta">{profileStat(chosen)} · {resolution(chosen)}</span>}
       {chosen?.note && <span className="field-note"><AlertTriangle size={12} />{chosen.note}</span>}
@@ -280,9 +286,9 @@ function Period({ site }: { site: Site }) {
             onChange={(v) => updateSite({ [f.name]: v } as Partial<Site>)} />
         ))}
       </div>
-      <span className={`foot-note ${tooMany ? "bad" : ""}`}>
+      {site.days >= 1 && site.step_minutes > 0 && <span className={`foot-note ${tooMany ? "bad" : ""}`}>
         {num(steps)} steps{tooMany ? ` · limit is ${num(catalog.site.max_steps)}. Use a longer step or fewer days.` : ""}
-      </span>
+      </span>}
     </Collapsible>
   );
 }

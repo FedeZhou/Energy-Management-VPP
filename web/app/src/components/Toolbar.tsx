@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useReactFlow } from "@xyflow/react";
 import { BookOpen, CircleHelp, Database, Download, FilePlus2, Loader2, Moon, Play, RotateCw, Scale, Square, Sun, Upload } from "lucide-react";
 import { LIVE_APP_URL, STATIC_DEMO, type Mode, type Site } from "../api";
 import { useStore } from "../store";
 import { useTheme } from "../theme";
+import { siteProblems } from "../validate";
 import { FIT_VIEW } from "./Canvas";
 import { useGuide } from "./Guide";
 import { Help, useHelp } from "./Help";
@@ -61,6 +62,11 @@ export function Toolbar() {
   const onLearn = useStore((s) => s.page === "learn");
   const { loadSite, run, compareForecasts, setMode, cancel } = useStore.getState();
   const fileRef = useRef<HTMLInputElement>(null);
+  // Values the engine would reject (e.g. -5 days) block Run, with the reason on the button.
+  const site = useStore((s) => s.site);
+  const catalog = useStore((s) => s.catalog);
+  const problems = useMemo(() => (catalog ? siteProblems(site, catalog) : []), [site, catalog]);
+  const blocked = problems.length > 0 ? `Fix first: ${problems[0]}${problems.length > 1 ? ` (+${problems.length - 1} more)` : ""}` : "";
 
   const exportJson = () => {
     const site = useStore.getState().site;
@@ -168,7 +174,7 @@ export function Toolbar() {
       <ThemeSwitch />
       <div className="tb-sep lab-only" />
       <div className="tb-group tb-actions lab-only">
-        <button className="btn" onClick={() => compareForecasts()} disabled={running || assets === 0}
+        <button className="btn" onClick={() => compareForecasts()} disabled={running || assets === 0 || !!blocked}
           aria-label="Compare forecasts"
           title="Compare forecasts: run twice, with perfect forecasts and with what a real controller would know (yesterday's load, the day-ahead weather forecast, prices only once published, cars only once plugged in)">
           {job?.kind === "compare" ? <Loader2 size={14} className="spin" /> : <Scale size={14} />}
@@ -181,7 +187,7 @@ export function Toolbar() {
             {job.kind === "run" && <><Loader2 size={13} className="spin" /><Elapsed since={job.started} /></>}
           </button>
         ) : (
-          <button className="btn primary" data-tour="run" onClick={() => run()} disabled={assets === 0} title="Run simulation (Ctrl+Enter)">
+          <button className="btn primary" data-tour="run" onClick={() => run()} disabled={assets === 0 || !!blocked} title={blocked || "Run simulation (Ctrl+Enter)"}>
             {again ? <RotateCw size={14} /> : <Play size={14} />}
             {again ? "Re-run" : "Run"}
           </button>
