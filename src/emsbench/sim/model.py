@@ -287,12 +287,59 @@ ASSET_TYPES: dict[str, type[AssetBase]] = {
 }
 
 
+Weekday = Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+WEEKDAYS: tuple[Weekday, ...] = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+_HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
+
+
+class ContractWindow(BaseModel):
+    """A recurring window in which a flexible grid contract lowers the import limit.
+
+    Times are the site's local clock (the simulation clock; European data uses fixed CET). The window runs from
+    `start` to `end`; an end at or before the start wraps past midnight (22:00-06:00), and start == end means the
+    whole day. `days` are the days on which the window *starts*. A time step that overlaps the window for any part
+    gets the window's limit (conservative: the contract applies to the whole step).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    start: str = Field(title="From (HH:MM)", pattern=_HHMM)
+    end: str = Field(title="To (HH:MM)", pattern=r"^(([01]\d|2[0-3]):[0-5]\d|24:00)$")
+    days: list[Weekday] = param(
+        list(WEEKDAYS), "Days",
+        help="Days on which the window starts. Default: every day.",
+        source="Design choice: neither the ACM description of the Dutch time-block right ('time windows agreed with "
+        "the grid operator') nor the guide's worked example (section 8.2, 16:00-20:00) limits windows to working "
+        "days, and a narrower default would silently loosen the contract",
+    )
+    import_limit_kw: float = param(
+        ..., "Limit inside the window", unit="kW", ge=0,
+        help="Most the site may draw during the window. If the firm limit is lower, the firm limit applies.",
+    )
+
+
 class GridConnection(BaseModel):
     model_config = ConfigDict(extra="forbid")
     import_limit_kw: float | None = param(
         None, "Import limit", unit="kW", ge=0,
-        help="Maximum power the site may draw (connection or transformer rating). "
-        "Empty = unlimited.",
+        help="Maximum power the site may draw (connection or transformer rating, or the firm part of a flexible "
+        "contract). Empty = unlimited.",
+    )
+    contract_windows: list[ContractWindow] = Field(
+        default_factory=list, title="Flexible contract windows",
+        description="Recurring windows with a lower import limit, e.g. a Dutch time-block contract (firm access "
+        "except in agreed windows). One all-day window, or just the import limit, is a capacity-limited contract. "
+        "Where windows overlap, the lowest limit applies. Empty = a firm connection.",
+        json_schema_extra={"hidden": True, "unit": "", "source": "Contract types: Monterde, Alvarez and Valarezo "
+                           "2025, https://doi.org/10.1007/s40518-025-00268-7 (guide section 3.2)"},
+    )
+    reliability_target: float = param(
+        0.9, "Reliability target (share of days)", ge=0, le=1,
+        help="Share of days on which import must stay under the limit at every step for the contract to count as "
+        "kept. 0.9 = a 'P90' promise: the limit holds on at least 90% of days.",
+        source="Guide section 4.2, worked example 'what a P90 promise means': the reserve is chosen 'so that the "
+        "limit holds on at least 90% of days'; Energinet's 90% minimum reliability for reserve bids from stochastic "
+        "resources (arXiv 2412.02308)",
     )
     export_limit_kw: float | None = param(
         None, "Export limit", unit="kW", ge=0,
@@ -381,7 +428,8 @@ class ControllerSpec(BaseModel):
         "self_consumption", "Battery strategy",
         help="idle: never used. self_consumption: store spare solar, use it when short. "
         "price_arbitrage: also charge from the grid at the day's cheapest hours and "
-        "discharge at the most expensive. peak_shaving: keep grid import under a threshold. "
+        "discharge at the most expensive. peak_shaving: keep grid import under a threshold (or under the import "
+        "limit of a contract window, when that is lower). "
         "mpc: model predictive control, plans the battery and all EV charging together over the next hours "
         "with a linear program and re-plans regularly (the EV strategy below is then ignored).",
     )

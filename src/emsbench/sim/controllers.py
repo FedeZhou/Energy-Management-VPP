@@ -58,6 +58,9 @@ class Observation:
     month_peak_kw: float = 0.0  # highest import so far this billing month (for demand charges)
     tou_peaks: tuple[tuple[float, float], ...] = ()  # (rate, highest import so far this month) per window
     heat_pumps: tuple[HPState, ...] = ()
+    # This step's import limit: the firm limit, or lower inside a flexible-contract window (sim/contracts.py).
+    # None = unlimited. The engine enforces it anyway; rules that aim below it (peak shaving) read it here.
+    import_limit_kw: float | None = None
 
 
 @dataclass(frozen=True)
@@ -100,7 +103,12 @@ def battery_power(spec: ControllerSpec, obs: Observation, net_kw: float) -> floa
     if spec.battery == "self_consumption":
         return -net_kw  # surplus (net<0) -> charge; deficit -> discharge
     if spec.battery == "peak_shaving":
-        return spec.peak_threshold_kw - net_kw  # charge below threshold, discharge above
+        # Keep import under the threshold, and under this step's import limit when that is lower (a contract
+        # window). Charge below the target, discharge above.
+        target = spec.peak_threshold_kw
+        if obs.import_limit_kw is not None:
+            target = min(target, obs.import_limit_kw)
+        return target - net_kw
     if spec.battery == "price_arbitrage":
         window = obs.price_ahead
         cheapest, dearest = float(window.min()), float(window.max())

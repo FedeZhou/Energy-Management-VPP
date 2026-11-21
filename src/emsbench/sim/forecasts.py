@@ -1,8 +1,8 @@
 """What controllers are told about the future: perfect knowledge, or what a real system would know.
 
 Both kinds answer the same two questions, so a controller cannot tell which one it has:
-`window(name, t, steps)` for the series load, pv, price and demand_rate, and `sessions(charger, t, steps)`
-for car visits expected to start after step t.
+`window(name, t, steps)` for the series load, pv, price, export_price, demand_rate and import_limit, and
+`sessions(charger, t, steps)` for car visits expected to start after step t.
 
 Realistic forecasts use only information a real controller would have at step t:
 
@@ -17,6 +17,8 @@ Realistic forecasts use only information a real controller would have at step t:
   12:58-13:01, MESC 2024), so before 13:00 a controller knows prices until midnight, after 13:00 until
   the end of tomorrow; beyond that, the last known day repeated. Fixed tariffs are known in advance;
 - demand charges: known (they are part of the tariff);
+- import limit: known (the firm limit and the windows of a flexible contract are agreed in advance). A future
+  day-ahead operating envelope would be handled like day-ahead prices;
 - cars: unknown until they plug in. Once plugged in, departure and energy are known, as if the driver
   had entered them in an app.
 """
@@ -49,7 +51,8 @@ class FutureSession:
 
 
 class Forecast(Protocol):
-    """What the controller is told about the future. `name` is load, pv, price or demand_rate."""
+    """What the controller is told about the future. `name` is load, pv, price, export_price, demand_rate or
+    import_limit (kW per step, inf = unlimited)."""
 
     def window(self, name: str, t: int, steps: int) -> FloatArray: ...
 

@@ -10,13 +10,14 @@ import time
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from emsbench.sim.engine import FloatArray, SimResult, simulate
-from emsbench.sim.model import ASSET_TYPES, MAX_STEPS, ControllerSpec, GridConnection, Site, Tariff
+from emsbench.sim.model import ASSET_TYPES, MAX_STEPS, ContractWindow, ControllerSpec, GridConnection, Site, Tariff
 from emsbench.sim.profiles import default_library
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -67,6 +68,8 @@ def catalog() -> dict[str, Any]:
         },
         "site": {
             "grid": _fields(GridConnection), "tariff": _fields(Tariff),
+            # site.grid.contract_windows is a list of these (hidden from the plain grid form above)
+            "contract_window": _fields(ContractWindow),
             "controller": _fields(ControllerSpec),
             "period": [f for f in _fields(Site) if f["name"] in ("start", "days", "step_minutes")],
             "max_steps": MAX_STEPS,
@@ -116,13 +119,20 @@ def presets() -> list[dict[str, Any]]:
     return out
 
 
-def _series(arr: FloatArray, digits: int = 3) -> list[float]:
-    return [round(float(v), digits) for v in arr]
+def _series(arr: FloatArray, digits: int = 3) -> list[float | None]:
+    """Rounded values; non-finite ones (an unlimited import limit is inf) become null."""
+    return [round(float(v), digits) if np.isfinite(v) else None for v in arr]
+
+
+def _kpis(r: SimResult) -> dict[str, Any]:
+    """Numeric KPIs rounded, plus the contract-reliability KPIs (null when the site has no import limit)."""
+    rel = {k: round(v, 4) if isinstance(v, float) else v for k, v in r.reliability.items()}
+    return {**{k: round(v, 4) for k, v in r.kpis.items()}, **rel}
 
 
 def _result_json(r: SimResult) -> dict[str, Any]:
     return {
-        "kpis": {k: round(v, 4) for k, v in r.kpis.items()},
+        "kpis": _kpis(r),
         "warnings": r.warnings,
         "site": {k: _series(v) for k, v in r.site.items()},
         "assets": {a: {k: _series(v) for k, v in s.items()} for a, s in r.assets.items()},
@@ -150,7 +160,7 @@ def run_simulation(site: Site) -> dict[str, Any]:
         "time": {"start": result.start.isoformat(), "step_minutes": result.step_minutes,
                  "steps": int(result.site["grid_kw"].size)},
         "result": _result_json(result),
-        "baseline": {"kpis": {k: round(v, 4) for k, v in baseline.kpis.items()},
+        "baseline": {"kpis": _kpis(baseline),
                      "site": {"grid_kw": _series(baseline.site["grid_kw"])}},
         "runtime_s": round(time.perf_counter() - started, 2),
     }

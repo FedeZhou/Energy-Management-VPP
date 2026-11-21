@@ -15,7 +15,9 @@ https://emhass.readthedocs.io/en/latest/advanced_math_model.html), extended with
 - EV charging for every plugged-in car and every car the forecast expects inside the horizon, with
   the energy each needs by departure (soft, with a large penalty for shortfall);
 - the site import limit and per-phase fuse (soft, very large penalty), export limit with solar
-  curtailment;
+  curtailment. The import limit is read per step from the forecast (series "import_limit", inf = unlimited), so a
+  flexible contract's lower limit in its windows (sim/contracts.py), or later a day-ahead envelope, is planned for
+  without changes here; without that series, the firm `SiteLimits.import_limit_kw` applies;
 - demand charges: flat monthly (on top of this month's peak so far) and time-of-use windows;
 - battery wear: a price per kWh cycled from the ageing model in sim/wear.py (`mpc_wear_cost`), or a tiny
   per-kWh throughput cost that only breaks ties when wear is not priced.
@@ -79,7 +81,7 @@ class SiteLimits:
     battery_max_kwh: float
     battery_power_kw: float
     battery_eta: float  # one-way efficiency
-    import_limit_kw: float | None
+    import_limit_kw: float | None  # firm limit; used only if the forecast has no "import_limit" series
     export_limit_kw: float | None
     fuse_kw: float | None  # per phase
     export_price: float
@@ -402,10 +404,15 @@ class MPCController:
                 bal[j] = -1.0
             lp.eq(bal, float(net0[k]))
 
-        if lim.import_limit_kw is not None:
+        try:  # the limit per step (a flexible contract lowers it in windows), else the firm one
+            imp_limit = fc.window("import_limit", obs.t, H)
+        except KeyError:
+            imp_limit = np.full(H, lim.import_limit_kw if lim.import_limit_kw is not None else INF)
+        limited = np.flatnonzero(np.isfinite(imp_limit))
+        if limited.size:
             over = lp.var(H, cost=w * huge * dt)
-            for k in range(H):
-                lp.le({int(imp[k]): 1.0, int(over[k]): -1.0}, lim.import_limit_kw)
+            for k in limited:
+                lp.le({int(imp[k]): 1.0, int(over[k]): -1.0}, float(imp_limit[k]))
 
         if lim.fuse_kw is not None:
             for name in ("L1", "L2", "L3"):

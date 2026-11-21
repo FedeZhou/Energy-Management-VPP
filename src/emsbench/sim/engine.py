@@ -5,8 +5,8 @@ One electrical bus behind one three-phase grid meter. Each step:
 2. ask the controller for battery and EV setpoints,
 3. clip them to physical limits (power, state of charge, energy still needed,
    minimum charging current),
-4. grid-operator dimming (§14a, optional), then the safety layer: site import limit, per-phase fuse,
-   export limit,
+4. grid-operator dimming (§14a, optional), then the safety layer: site import limit (per step: a flexible
+   contract can lower it in windows, see sim/contracts.py), per-phase fuse, export limit,
 5. update states and record everything.
 
 Heat pumps draw heat / COP from the bus and can store heat in a tank; unmet heat is recorded. Cars on
@@ -28,6 +28,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 from emsbench.benchmark.kpis import EpisodeTrace, compute_kpis
+from emsbench.benchmark.reliability import limit_reliability
+from emsbench.sim.contracts import compile_import_limit
 from emsbench.sim.controllers import EVState, HPState, Observation, RuleController
 from emsbench.sim.forecasts import DAY_AHEAD_PUBLISHED_HOUR, Forecast, FutureSession, PerfectForecast, RealisticForecast
 from emsbench.sim.model import (
@@ -66,6 +68,9 @@ class SimResult:
     sources: list[dict[str, str]] = field(default_factory=list)
     currency: str = ""
     warnings: list[str] = field(default_factory=list)
+    # Contract reliability KPIs (benchmark/reliability.py); kept apart from `kpis` because they can be None
+    # (no limit) and include a date.
+    reliability: dict[str, float | int | bool | str | None] = field(default_factory=dict)
 
     @property
     def step_hours(self) -> float:
@@ -239,11 +244,14 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     rec_hp_buf = np.zeros((n_hp, T))
     rec_dimmed = np.zeros(T)
     imp_lim, exp_lim, fuse = site.grid.import_limit_kw, site.grid.export_limit_kw, site.grid.fuse_a
+    # Import limit per step (inf = unlimited), with two days of look-ahead for the MPC (horizon up to 48 h).
+    limit_ext = compile_import_limit(site.grid, start, T + 2 * int(round(86400 / step_s)), step_s)
+    limit = limit_ext[:T]
 
     # What the controllers are told about the future (heat pumps run on demand in these series).
     forecast: Forecast
     actual = {"load": load_tot + hp_need_tot, "pv": pv_tot, "price": price_ext, "export_price": export_ext,
-              "demand_rate": demand_rate}
+              "demand_rate": demand_rate, "import_limit": limit_ext}
     # The sessions the engine will accept (a car arriving while the charger is busy is skipped). A perfect
     # forecast knows them in advance; a realistic one only those already seen (for scenario MPC).
     upcoming: list[list[FutureSession]] = []
@@ -334,6 +342,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                                      float(hp_pmax[j])) for j in range(n_hp)),
             month_peak_kw=month_peak.get(int(bill_month[t]), 0.0),
             tou_peaks=tuple((r, v) for (m, r), v in tou_peak.items() if m == int(bill_month[t])),
+            import_limit_kw=float(limit[t]) if np.isfinite(limit[t]) else None,
         )
         act = controller.act(obs)
 
@@ -400,10 +409,11 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
             rec_dimmed[t] = max(before - after, 0.0)
         base_load = float(load_tot[t] + hp_kw.sum())  # heat pumps are not curtailed by the safety layer
 
-        # Safety layer 1: site import limit
+        # Safety layer 1: site import limit (this step's: the firm limit, or lower inside a contract window)
         net = base_load - pv_out + b_kw.sum() + ev_kw.sum()
-        if imp_lim is not None and net > imp_lim + EPS:
-            excess = net - imp_lim
+        lim_t = float(limit[t])
+        if net > lim_t + EPS:  # never true when unlimited (inf)
+            excess = net - lim_t
             for i in range(len(bats)):  # stop charging batteries
                 r = min(excess, max(b_kw[i], 0.0))
                 b_kw[i] -= r
@@ -576,9 +586,15 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     )
     k.update(_battery_wear(bats, cap, energy_start, rec_soc, step_s, T * dth / 8760, wear_cost_per_kwh))
     k["total_cost_with_wear"] = k["total_cost"] + k["battery_wear_cost"]
+    rel = limit_reliability(rec_grid, limit, start, dth, site.grid.reliability_target)
     if rec_overload.sum() > 0.01:
-        warnings.append(f"Import limit exceeded in {(rec_overload > 0.01).sum()} time steps even after "
+        what = "Import limit (including contract windows)" if site.grid.contract_windows else "Import limit"
+        warnings.append(f"{what} exceeded in {(rec_overload > 0.01).sum()} time steps even after "
                         "using the battery and slowing EV charging.")
+    if rel.limit_target_met is False:
+        warnings.append(f"The limit held on {rel.limit_days_kept} of {rel.limit_days_evaluated} days "
+                        f"({rel.limit_days_kept_share:.0%}), below the reliability target of "
+                        f"{site.grid.reliability_target:.0%}.")
     if rec_fuse_over.sum() > 0.01:
         warnings.append(f"A phase exceeded the {fuse} A fuse in {(rec_fuse_over > 0.01).sum()} time steps "
                         "even after slowing EV charging (the base load alone is too high).")
@@ -595,6 +611,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
         "load_kw": load_tot, "pv_kw": pv_tot - rec_curtail, "pv_curtailed_kw": rec_curtail,
         "battery_kw": rec_bat.sum(axis=0), "ev_kw": rec_ev.sum(axis=0), "hp_kw": rec_hp.sum(axis=0),
         "grid_kw": rec_grid, "dimmed_kw": rec_dimmed,
+        "import_limit_kw": limit.copy(),  # inf = unlimited (the API sends null)
         "price": price.astype(float),
         "soc": (rec_soc * cap[:, None]).sum(axis=0) / cap.sum() if cap.sum() > 0 else np.zeros(T),
         "phase_l1_a": rec_phase[0], "phase_l2_a": rec_phase[1], "phase_l3_a": rec_phase[2],
@@ -616,7 +633,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                         "buffer": rec_hp_buf[j] / hp_cap[j] if hp_cap[j] > 0 else np.zeros(T)}
 
     return SimResult(start, site.step_minutes, month, site_series, assets, k, sessions_out, sources,
-                     price_profile.currency, warnings)
+                     price_profile.currency, warnings, rel.as_dict())
 
 
 HISTORY_DAYS = 8  # days of data before the run handed to realistic forecasts (scenario MPC replays up to 7)

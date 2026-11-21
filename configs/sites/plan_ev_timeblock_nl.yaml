@@ -1,0 +1,66 @@
+# Plan example: a business site with a 20-bay staff car park on a Dutch time-block grid contract, one year hourly.
+# The point of this example is contract reliability: how many days the site keeps its grid limit (the "days kept"
+# and P90 KPIs), with and without a battery.
+#
+# Contract (ILLUSTRATIVE numbers, not a real offer): a time-limited contract in the sense of the guide, section 3.2
+# (Monterde, Alvarez and Valarezo 2025, https://doi.org/10.1007/s40518-025-00268-7: "firm access except in
+# pre-agreed windows", e.g. the Dutch time-block right). Firm 250 kW; 110 kW on working days 08:00-12:00, a window
+# chosen to overlap the morning arrival of the cars and the office's morning peak so that the contract binds.
+# Real time-block windows are agreed with the grid operator (ACM); we found no public example window to copy.
+# Reliability target 0.9 = the model default (guide section 4.2, "the limit holds on at least 90% of days").
+#
+# Data: office load shape from NREL ComStock (California medium office, per 1,000 m², modelled); measured
+# workplace EV sessions of 20 regular drivers (University of Twente / ElaadNL office car park, Utrecht;
+# CC BY-NC-SA 4.0: NON-COMMERCIAL use only); solar modelled from Amsterdam weather (Open-Meteo + pvlib); Dutch
+# day-ahead prices (Energy-Charts / SMARD). Each data set uses its own year for the same season and weekday
+# (sim/profiles.py); the drivers are commuters, not a logistics fleet.
+# Mixing note: no open measured European office load was found, so the load shape is Californian.
+# Sizes (5,000 m² office, 100 kWp, 150 kWh / 75 kW battery, 20 x 11 kW chargers) are example choices.
+# Price adder: Eurostat 2025 Dutch business network costs (0.0936) + taxes excl. VAT (0.0504) = 0.1440 EUR/kWh
+# (nrg_pc_205_c, band IB 20-499 MWh/yr). This site uses about 0.8 GWh/yr (band IC), whose adder may differ;
+# band IC is not loaded in the project.
+# Checked with the simulator on 2026-11-21 (full year): no battery and cars charging on arrival keep the limit on
+# 309 of 365 days (85%, below the 90% target); the peak-shaving battery keeps it on 350 days (96%) and cuts unmet
+# car charging from about 8,000 to 2,000 kWh (the engine slows cars to keep the limit, see sim/engine.py).
+label: Business car park on a time-block contract (NL)
+description: >-
+  A 5,000 m² office with a 20-bay staff car park (real Utrecht commuters), 100 kWp of solar and a 150 kWh battery on
+  a Dutch-style time-block contract: 250 kW firm, 110 kW on working days 08:00-12:00 (illustrative). One year,
+  hourly. Shows on how many days the limit holds.
+site:
+  name: Business car park on a time-block contract
+  mode: plan
+  start: 2025-10-06
+  days: 365
+  step_minutes: 60
+  grid:
+    import_limit_kw: 250
+    contract_windows:
+      - {start: "08:00", end: "12:00", days: [mon, tue, wed, thu, fri], import_limit_kw: 110}
+    reliability_target: 0.9
+  tariff: {price_profile: ec/nl_da, price_adder: 0.144}
+  controller: {battery: peak_shaving, peak_threshold_kw: 250, ev: spread_until_departure}
+  assets:
+    - {type: building, id: office, name: "Office (5,000 m²)", load_profile: comstock/ca_mediumoffice, scale: 5, ui: {x: 80, y: 0}}
+    - {type: pv, id: pv, name: Roof solar, capacity_kwp: 100, profile: om/amsterdam_south30, ui: {x: 80, y: 200}}
+    - {type: battery, id: battery, name: Battery, capacity_kwh: 150, power_kw: 75, ui: {x: 80, y: 400}}
+    - {type: ev_charger, id: c1, name: Bay 1, sessions: utwente/EV102, ui: {x: 760, y: -40}}
+    - {type: ev_charger, id: c2, name: Bay 2, sessions: utwente/EV104, ui: {x: 760, y: 80}}
+    - {type: ev_charger, id: c3, name: Bay 3, sessions: utwente/EV117, ui: {x: 760, y: 200}}
+    - {type: ev_charger, id: c4, name: Bay 4, sessions: utwente/EV137, ui: {x: 760, y: 320}}
+    - {type: ev_charger, id: c5, name: Bay 5, sessions: utwente/EV149, ui: {x: 760, y: 440}}
+    - {type: ev_charger, id: c6, name: Bay 6, sessions: utwente/EV156, ui: {x: 1020, y: -40}}
+    - {type: ev_charger, id: c7, name: Bay 7, sessions: utwente/EV164, ui: {x: 1020, y: 80}}
+    - {type: ev_charger, id: c8, name: Bay 8, sessions: utwente/EV249, ui: {x: 1020, y: 200}}
+    - {type: ev_charger, id: c9, name: Bay 9, sessions: utwente/EV266, ui: {x: 1020, y: 320}}
+    - {type: ev_charger, id: c10, name: Bay 10, sessions: utwente/EV273, ui: {x: 1020, y: 440}}
+    - {type: ev_charger, id: c11, name: Bay 11, sessions: utwente/EV305, ui: {x: 1280, y: -40}}
+    - {type: ev_charger, id: c12, name: Bay 12, sessions: utwente/EV403, ui: {x: 1280, y: 80}}
+    - {type: ev_charger, id: c13, name: Bay 13, sessions: utwente/EV476, ui: {x: 1280, y: 200}}
+    - {type: ev_charger, id: c14, name: Bay 14, sessions: utwente/EV559, ui: {x: 1280, y: 320}}
+    - {type: ev_charger, id: c15, name: Bay 15, sessions: utwente/EV99, ui: {x: 1280, y: 440}}
+    - {type: ev_charger, id: c16, name: Bay 16, sessions: utwente/EV92, ui: {x: 1540, y: -40}}
+    - {type: ev_charger, id: c17, name: Bay 17, sessions: utwente/EV258, ui: {x: 1540, y: 80}}
+    - {type: ev_charger, id: c18, name: Bay 18, sessions: utwente/EV284, ui: {x: 1540, y: 200}}
+    - {type: ev_charger, id: c19, name: Bay 19, sessions: utwente/EV509, ui: {x: 1540, y: 320}}
+    - {type: ev_charger, id: c20, name: Bay 20, sessions: utwente/EV177, ui: {x: 1540, y: 440}}

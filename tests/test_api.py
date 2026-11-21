@@ -99,3 +99,23 @@ def test_invalid_sites_are_rejected_with_a_clear_message() -> None:
                      Building(id="home", load_profile="cl2022/home_2")])
     with pytest.raises(ValidationError, match="minimum state of charge"):
         Battery(id="b", soc_min=0.8, soc_max=0.2)
+
+
+def test_contract_windows_reach_the_response() -> None:
+    cat = client.get("/api/catalog").json()
+    assert "contract_windows" not in {f["name"] for f in cat["site"]["grid"]}  # edited with its own form
+    assert {f["name"] for f in cat["site"]["contract_window"]} == {"start", "end", "days", "import_limit_kw"}
+    presets = {p["id"]: p for p in client.get("/api/presets").json()}
+    site = presets["plan_ev_timeblock_nl"]["site"]
+    assert site["grid"]["contract_windows"][0]["import_limit_kw"] == 110
+    site["days"] = 7
+    body = client.post("/api/simulate", json=site).json()
+    lim = body["result"]["site"]["import_limit_kw"]
+    assert len(lim) == 7 * 24 and lim[9] == 110 and lim[13] == 250 and lim[5 * 24 + 9] == 250  # Saturday
+    for k in (body["result"]["kpis"], body["baseline"]["kpis"]):
+        assert k["limit_days_evaluated"] == 7 and 0 <= k["limit_days_kept_share"] <= 1
+        assert isinstance(k["limit_target_met"], bool)
+    unlimited = {"days": 1, "assets": [], "grid": {}}
+    body = client.post("/api/simulate", json=unlimited).json()
+    assert set(body["result"]["site"]["import_limit_kw"]) == {None}
+    assert body["result"]["kpis"]["limit_days_kept_share"] is None
