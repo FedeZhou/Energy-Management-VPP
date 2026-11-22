@@ -38,6 +38,10 @@ without that the plan hoards energy it would have to pay wear to use. (4) When s
 same, store it now (`EARLY_PER_KWH_HOUR`, a tie-break): the later opportunity is only a forecast. Tuned on drivers
 the full-year study does not use; see results/study_home_de/README_cautious.md.
 
+Device uncertainty (sim/device.py): the MPC plans from the battery energy in the observation, which is the BMS's
+estimate when SoC estimation error is on, and with the nominal battery power (no CC-CV taper). It does not model
+either gap; the engine's plant and safety layer take the consequences, reported as `battery_plan_shortfall_kwh`.
+
 Limitations, stated: billing months that change inside the horizon are
 treated as one month. Forecasts come through the `Forecast` interface (`sim/forecasts.py`): perfect, realistic,
 or several replayed scenarios.

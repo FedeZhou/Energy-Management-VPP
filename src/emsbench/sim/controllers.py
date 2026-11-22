@@ -50,9 +50,11 @@ class Observation:
     pv_kw: float
     price: float
     price_ahead: NDArray[np.float64]  # next 24 h of prices, starting with the current step
+    # As the battery management system reports it: with SoC estimation error on (sim/device.py) this is an estimate,
+    # and the limits below follow from it and the nominal power, not from the true state or a CC-CV taper.
     battery_energy_kwh: float
     battery_capacity_kwh: float
-    battery_max_charge_kw: float  # feasible this step (power and SoC limits)
+    battery_max_charge_kw: float  # feasible this step as far as the controller knows (power and SoC limits)
     battery_max_discharge_kw: float
     evs: tuple[EVState, ...]
     month_peak_kw: float = 0.0  # highest import so far this billing month (for demand charges)
