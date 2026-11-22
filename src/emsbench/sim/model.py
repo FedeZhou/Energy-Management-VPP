@@ -95,6 +95,13 @@ class SolarPV(AssetBase):
 
 
 Chemistry = Literal["lfp", "nmc"]
+PowerTaper = Literal["none", "cc_cv"]
+EVChargingCurve = Literal["constant", "cc_cv"]
+ACN_SIM_TAPER = ("ACN-Sim Linear2StageBattery (Lee, Johansson and Low, IEEE SmartGridComm 2019; "
+                 "https://github.com/zach401/acnportal): full power to transition_soc = 0.8, then 'decrease linearly "
+                 "to 0 at 100% state of charge'")
+BRANDLE_HUG = ("Braendle and Hug 2026, arXiv 2604.12594, eq. 2 and Table I (error grows with |power| x Normal(beta, "
+               "sigma^2), recalibrated below 15% and above 90% SoC)")
 
 
 class Battery(AssetBase):
@@ -149,7 +156,55 @@ class Battery(AssetBase):
         help="Assumed constant. Warmer batteries age faster. The ageing models were fitted between 10 and 45 °C.",
         source="Example choice (indoor installation); fitting range from the BLAST-Lite model notes",
     )
-
+    # Device uncertainty (sim/device.py). All off by default, so existing sites behave exactly as before.
+    power_taper: PowerTaper = param(
+        "none", "Power near full / empty",
+        help="none: full power at any state of charge. cc_cv: like real lithium-ion cells, charging power falls "
+        "linearly to zero above the charge taper point (constant-current, constant-voltage charging) and "
+        "discharging power falls linearly to zero below the discharge taper point. Controllers still plan with the "
+        "full power; the battery delivers what it can.",
+        source=ACN_SIM_TAPER,
+    )
+    taper_charge_soc: float = param(
+        0.8, "Charge taper starts at", ge=0.5, le=1,
+        help="Only with cc_cv. State of charge above which charging power falls linearly to zero at full.",
+        source=f"{ACN_SIM_TAPER}; CityLearn documents the same breakpoint (Battery.capacity_power_curve default "
+        "[[0, 1], [0.8, 1], [1, 0.2]])",
+    )
+    taper_discharge_soc: float = param(
+        0.2, "Discharge taper starts at", ge=0, le=0.5,
+        help="Only with cc_cv. State of charge below which discharging power falls linearly to zero at empty.",
+        source="Example choice: no public LFP derating table found; mirrors the 0.8 charge breakpoint. Shape: power "
+        "limit linear in the energy left, the form fitted by Kazhamiaka, Rosenberg and Keshav 2019, Energy "
+        "Informatics 2:4, https://doi.org/10.1186/s42162-019-0070-6",
+    )
+    soc_error_initial: float = param(
+        0.0, "SoC estimate error at start", ge=-0.5, le=0.5,
+        help="Estimated minus true state of charge at the start: 0.15 = the battery management system reports 15 "
+        "points more than the battery holds. Controllers see the estimate; the battery obeys the truth. Typical "
+        "for LFP in the field: +-15%, outliers above +-40%. A full charge recalibrates it.",
+        source="Accure (battery analytics vendor) via ESS News, 7 Oct 2025, https://www.ess-news.com/?p=6558: "
+        "'SoC estimation errors of +-15% are common in LFP systems, with outliers above +-40%'",
+    )
+    soc_error_drift_bias: float = param(
+        0.0, "SoC estimate drift (systematic)", ge=-0.1, le=0.1,
+        help="Error added per full capacity charged or discharged, always in the same direction. 0.01 = the "
+        "estimate gains 1 point per capacity cycled. Shrinks back near full and empty (recalibration).",
+        source=f"{BRANDLE_HUG}: beta = 1e-3 per MW on a 10 MW / 10 MWh battery at hourly steps, read as 0.01 per "
+        "capacity cycled (the paper gives no units; this conversion is ours)",
+    )
+    soc_error_drift_std: float = param(
+        0.0, "SoC estimate drift (random)", ge=0, le=0.5,
+        help="Random error per full capacity cycled (standard deviation; it grows with the square root of the energy "
+        "cycled). 0.1 = after one capacity in or out, the estimate is typically within +-10 points. Shrinks back "
+        "near full and empty.",
+        source=f"{BRANDLE_HUG}: sigma^2 = 1e-4 (sigma = 0.01 per MW) on a 10 MW / 10 MWh battery at hourly steps, "
+        "read as 0.1 per capacity cycled (our conversion)",
+    )
+    soc_error_seed: int = param(
+        0, "Random seed (SoC estimate)", ge=0,
+        help="Same seed, same random drift: runs are reproducible and strategies can be compared on the same luck.",
+    )
 
     @model_validator(mode="after")
     def _check_soc(self) -> Battery:
@@ -203,6 +258,21 @@ class EVCharger(AssetBase):
         help="Only for bidirectional chargers. Upper limit on energy taken from one car during one visit, to "
         "protect the driver's range and the car battery.",
         source="Example choice",
+    )
+    charging_curve: EVChargingCurve = param(
+        "constant", "Car charging curve",
+        help="constant: a car takes the charger's power until it has its energy. cc_cv: like real cars, it takes "
+        "less near full: power falls linearly to zero above the taper point. Sessions give only the energy, so we "
+        "assume each car stops once nearly full (when it would draw less than the charger's 6 A minimum; the most "
+        "taper possible) and that its battery is the smallest of 8, 24, 40, 60, 85 or 100 kWh that holds that energy. "
+        "Controllers do not know the car's state of charge; the car simply draws less.",
+        source=f"{ACN_SIM_TAPER}; battery sizes: ACN-Sim batt_cap_fn candidate capacities; end of charge at the 6 A "
+        "minimum of IEC 61851-1 (our assumption)",
+    )
+    taper_soc: float = param(
+        0.8, "Car taper starts at", ge=0.5, le=1,
+        help="Only with cc_cv. Car state of charge above which its charging power falls linearly to zero at full.",
+        source=ACN_SIM_TAPER,
     )
 
 

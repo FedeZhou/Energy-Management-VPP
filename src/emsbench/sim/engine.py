@@ -12,6 +12,11 @@ One electrical bus behind one three-phase grid meter. Each step:
 Heat pumps draw heat / COP from the bus and can store heat in a tank; unmet heat is recorded. Cars on
 bidirectional chargers can supply the bus (negative power) while they can still reach their target.
 
+Device uncertainty (sim/device.py, off by default): controllers see the battery management system's SoC estimate
+and the nominal power; the plant integrates the true energy and enforces the true limits (including CC-CV power
+taper near full / empty, and cars that draw less near full). What the controller asked for, within what it believed
+possible, but the battery could not deliver is recorded as the plan shortfall (`battery_plan_shortfall_kwh`).
+
 Phases: buildings, solar, heat pumps and batteries are treated as balanced over L1-L3.
 Three-phase chargers split their power equally; single-phase chargers put it on
 their phase. A car whose own maximum is below a three-phase charger's minimum
@@ -31,6 +36,7 @@ from emsbench.benchmark.kpis import EpisodeTrace, compute_kpis
 from emsbench.benchmark.reliability import limit_reliability
 from emsbench.sim.contracts import compile_import_limit
 from emsbench.sim.controllers import EVState, HPState, Observation, RuleController
+from emsbench.sim.device import SocEstimator, ev_battery, max_taper_power
 from emsbench.sim.forecasts import DAY_AHEAD_PUBLISHED_HOUR, Forecast, FutureSession, PerfectForecast, RealisticForecast
 from emsbench.sim.model import (
     DIM_GZF,
@@ -55,6 +61,7 @@ from emsbench.sim.wear import MAX_YEARS, default_replacement_cost, expected_life
 FloatArray = NDArray[np.float64]
 EPS = 1e-9
 PHASES = ("L1", "L2", "L3")
+SHORTFALL_TOL_KW = 1e-6  # numerical: a step counts as short when the battery missed more than this
 
 
 @dataclass
@@ -202,6 +209,10 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     e_max = cap * np.array([b.soc_max for b in bats])
     energy = np.clip(cap * np.array([b.soc_initial for b in bats]), e_min, e_max)
     energy_start = energy.copy()
+    # Device uncertainty (sim/device.py): SoC-dependent power limits, and the BMS's SoC estimate that controllers see.
+    taper = [b.power_taper == "cc_cv" for b in bats]
+    soc_est = [SocEstimator(b.soc_error_initial, b.soc_error_drift_bias, b.soc_error_drift_std, b.soc_error_seed, k)
+               for k, b in enumerate(bats)]
 
     # EV state per charger
     ev_rem = np.zeros(n_c)
@@ -212,6 +223,9 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     ev_ph = [""] * n_c  # "3" or a phase name
     ev_sess: list[dict[str, Any] | None] = [None] * n_c
     ev_lent = np.zeros(n_c)  # energy taken from the current car this visit (bidirectional chargers)
+    ev_taper = [c.charging_curve == "cc_cv" for c in chargers]
+    ev_batt = np.zeros(n_c)  # assumed car battery (kWh) of the current visit, for the charging curve
+    ev_end = np.zeros(n_c)  # ... and the energy it still lacks to 100% when the visit's energy is delivered
     sessions_out: list[dict[str, Any]] = []
     skipped = 0
     ev_delivered = 0.0
@@ -236,6 +250,9 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
 
     rec_bat = np.zeros((len(bats), T))
     rec_soc = np.zeros((len(bats), T))
+    rec_soc_est = np.zeros((len(bats), T))
+    rec_shortfall = np.zeros(T)  # battery power the controller expected but the battery could not deliver
+    rec_ev_taper = np.zeros(T)  # charging power cars refused near full (charging curve)
     rec_ev = np.zeros((n_c, T))
     rec_ev_on = np.zeros((n_c, T))
     rec_ev_rem = np.zeros((n_c, T))
@@ -326,6 +343,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                 ev_sess[i] = {"charger": c.id, "ev": s.ev_id, "arrival": t, "departure": int(dep),
                               "requested_kwh": round(s.energy_kwh, 3), "delivered_kwh": 0.0, "discharged_kwh": 0.0}
                 ev_lent[i] = 0.0
+                ev_batt[i], ev_end[i] = ev_battery(s.energy_kwh, c.taper_soc, float(ev_min[i]), float(ev_max[i]))
 
         # Bidirectional chargers: how much a car may give back now and still reach its target by departure
         # (charging at full power in the remaining steps), within the per-visit limit.
@@ -335,13 +353,25 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                 slack = (ev_dep[i] - t - 1) * ev_max[i] * dth * c.efficiency - ev_rem[i]
                 lend = max(0.0, min(slack, c.v2g_max_kwh_per_visit - ev_lent[i]))
                 ev_dis[i] = min(float(ev_max[i]), lend * c.efficiency / dth)
-        max_ch = np.minimum(pmax, np.maximum(e_max - energy, 0) / (eta * dth)) if bats else pmax
-        max_dis = np.minimum(pmax, np.maximum(energy - e_min, 0) * eta / dth) if bats else pmax
+        # What the battery can really do this step (true energy; power tapers near full / empty with cc_cv) ...
+        p_ch, p_dis = pmax.copy(), pmax.copy()
+        for bi, b in enumerate(bats):
+            if taper[bi]:
+                p_ch[bi] = max_taper_power(cap[bi] - energy[bi], (1 - b.taper_charge_soc) * cap[bi], pmax[bi], eta[bi],
+                                           dth)
+                p_dis[bi] = max_taper_power(energy[bi], b.taper_discharge_soc * cap[bi], pmax[bi], 1 / eta[bi], dth)
+        max_ch = np.minimum(p_ch, np.maximum(e_max - energy, 0) / (eta * dth)) if bats else pmax
+        max_dis = np.minimum(p_dis, np.maximum(energy - e_min, 0) * eta / dth) if bats else pmax
+        # ... and what the controllers see: the BMS's SoC estimate and the nominal power.
+        seen = np.array([est.estimate(energy[bi] / cap[bi]) * cap[bi] if est.active and cap[bi] > 0 else energy[bi]
+                         for bi, est in enumerate(soc_est)], dtype=float)
+        seen_ch = np.minimum(pmax, np.maximum(e_max - seen, 0) / (eta * dth)) if bats else pmax
+        seen_dis = np.minimum(pmax, np.maximum(seen - e_min, 0) * eta / dth) if bats else pmax
         obs = Observation(
             t=t, step_hours=dth, load_kw=float(load_tot[t]), pv_kw=float(pv_tot[t]),
             price=float(price[t]), price_ahead=forecast.window("price", t, look),
-            battery_energy_kwh=float(energy.sum()), battery_capacity_kwh=float(cap.sum()),
-            battery_max_charge_kw=float(max_ch.sum()), battery_max_discharge_kw=float(max_dis.sum()),
+            battery_energy_kwh=float(seen.sum()), battery_capacity_kwh=float(cap.sum()),
+            battery_max_charge_kw=float(seen_ch.sum()), battery_max_discharge_kw=float(seen_dis.sum()),
             evs=tuple(EVState(bool(ev_on[i]), float(ev_rem[i]), int(ev_dep[i] - t) if ev_on[i] else 0,
                               float(ev_max[i]), float(ev_min[i]), chargers[i].efficiency, ev_ph[i] or "3",
                               bool(ev_dis[i] > 0), float(ev_dis[i]))
@@ -356,6 +386,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
 
         # Physical limits
         ev_kw = np.zeros(n_c)
+        ev_floor = ev_min.copy()  # below this a charger pauses (lower for a car held back by its charging curve)
         for i, req in enumerate(act.ev_kw):
             if ev_on[i] and req < 0 and ev_dis[i] > 0:  # a car gives energy back (bidirectional charger)
                 ev_kw[i] = -min(-req, float(ev_dis[i]))
@@ -364,6 +395,14 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                 want = min(max(req, 0.0), float(ev_max[i]), need_kw)
                 # Below the minimum current the charger pauses, unless the car only needs a top-up.
                 ev_kw[i] = want if want >= ev_min[i] - EPS or want >= need_kw - EPS else 0.0
+                if ev_taper[i] and ev_kw[i] > 0:  # the car takes less near full, whatever the charger offers
+                    c = chargers[i]
+                    room = min(float(ev_rem[i] + ev_end[i]), float(ev_batt[i]))  # energy to 100% (assumed)
+                    car_kw = max_taper_power(room, (1 - c.taper_soc) * ev_batt[i], float(ev_max[i]), c.efficiency, dth)
+                    if car_kw < ev_kw[i]:
+                        rec_ev_taper[t] += ev_kw[i] - car_kw
+                        ev_kw[i] = car_kw
+                    ev_floor[i] = min(ev_min[i], car_kw)
         # Heat pumps: at least enough to meet demand with what is in the tank, at most until the tank is full.
         hp_kw = np.zeros(n_hp)
         for j in range(n_hp):
@@ -374,6 +413,9 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
             hi = min(float(hp_pmax[j]), p_fill)
             hp_kw[j] = hi if p_need > hi else min(max(req, p_need), hi)
         total_b = float(np.clip(act.battery_kw, -max_dis.sum(), max_ch.sum())) if bats else 0.0
+        if bats:  # the part of what the controller asked for, within what it saw as possible, that did not happen
+            expected = float(np.clip(act.battery_kw, -seen_dis.sum(), seen_ch.sum()))
+            rec_shortfall[t] = max(0.0, abs(expected) - abs(total_b))
         b_kw = np.array(_split(total_b, list(max_ch if total_b > 0 else max_dis))) if bats else np.zeros(0)
         pv_out = float(pv_tot[t])
 
@@ -403,7 +445,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                 for i in range(n_c):
                     if dim_ev[i] and ev_kw[i] > 0:
                         ev_kw[i] = min(ev_kw[i], left)
-                        if ev_kw[i] < ev_min[i] - EPS:
+                        if ev_kw[i] < ev_floor[i] - EPS:
                             ev_kw[i] = 0.0
                         left -= ev_kw[i]
                 for kb in range(len(bats)):
@@ -411,7 +453,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                         b_kw[kb] = min(b_kw[kb], max(left, 0.0))
                         left -= b_kw[kb]
             for i in range(n_c):  # a charger squeezed below its minimum current pauses (IEC 61851-1)
-                if 0 < ev_kw[i] < ev_min[i] - EPS:
+                if 0 < ev_kw[i] < ev_floor[i] - EPS:
                     ev_kw[i] = 0.0
             after = float(np.clip(ev_kw, 0, None).sum() + hp_kw.sum() + np.clip(b_kw, 0, None).sum())
             rec_dimmed[t] = max(before - after, 0.0)
@@ -436,7 +478,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                 ev_kw = np.where(ev_kw > 0, ev_kw * (ev_sum - r) / ev_sum, ev_kw)
                 excess -= r
             for i in range(n_c):  # a charger squeezed below its minimum current pauses (IEC 61851-1)
-                if 0 < ev_kw[i] < ev_min[i] - EPS:
+                if 0 < ev_kw[i] < ev_floor[i] - EPS:
                     ev_kw[i] = 0.0
             rec_overload[t] = max(excess, 0.0)
 
@@ -464,7 +506,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
                             ev_kw[i] *= (s - r) / s
                         excess -= r * per_kw
                 for i in range(n_c):  # a charger squeezed below its minimum pauses
-                    if 0 < ev_kw[i] < ev_min[i] - EPS:
+                    if 0 < ev_kw[i] < ev_floor[i] - EPS:
                         ev_kw[i] = 0.0
             base = base_load - pv_out + b_kw.sum()
             over = float(phase_kw(base, ev_kw).max()) - fuse_kw
@@ -488,6 +530,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
             rec_curtail[t] = r
 
         # State updates
+        soc_before = energy / np.where(cap > 0, cap, 1)
         for i in range(len(bats)):
             energy[i] += b_kw[i] * dth * eta[i] if b_kw[i] >= 0 else b_kw[i] * dth / eta[i]
         if bats:
@@ -526,6 +569,10 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
 
         rec_bat[:, t] = b_kw
         rec_soc[:, t] = energy / np.where(cap > 0, cap, 1)
+        for bi, est in enumerate(soc_est):
+            if cap[bi] > 0:
+                est.step(float(soc_before[bi]), abs(float(b_kw[bi])) * dth / cap[bi], dth)
+            rec_soc_est[bi, t] = est.estimate(float(rec_soc[bi, t])) if est.active else rec_soc[bi, t]
         rec_ev[:, t] = ev_kw
         rec_hp[:, t] = hp_kw
         rec_hp_buf[:, t] = hp_buf
@@ -591,6 +638,12 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
         hp_unmet_heat_kwh=float(hp_unmet.sum()),
         hp_scop=hp_heat_delivered / hp_elec if hp_elec > EPS else 0.0,
         dimmed_kwh=float(rec_dimmed.sum() * dth),
+        battery_plan_shortfall_kwh=float(rec_shortfall.sum() * dth),
+        battery_plan_shortfall_steps=float((rec_shortfall > SHORTFALL_TOL_KW).sum()),
+        battery_soc_error_max=float(np.abs(rec_soc_est - rec_soc).max()) if bats and T else 0.0,
+        battery_soc_error_mean=float(np.abs(rec_soc_est - rec_soc).mean(axis=1) @ cap / cap.sum())
+        if bats and T and cap.sum() > 0 else 0.0,
+        ev_taper_limited_kwh=float(rec_ev_taper.sum() * dth),
     )
     k.update(_battery_wear(bats, cap, energy_start, rec_soc, step_s, T * dth / 8760, wear_cost_per_kwh))
     k["total_cost_with_wear"] = k["total_cost"] + k["battery_wear_cost"]
@@ -606,6 +659,10 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     if rec_fuse_over.sum() > 0.01:
         warnings.append(f"A phase exceeded the {fuse} A fuse in {(rec_fuse_over > 0.01).sum()} time steps "
                         "even after slowing EV charging (the base load alone is too high).")
+    if rec_shortfall.sum() * dth > 0.01:
+        warnings.append(f"The battery delivered {rec_shortfall.sum() * dth:,.1f} kWh less than the controller asked "
+                        f"for in {(rec_shortfall > SHORTFALL_TOL_KW).sum()} time steps: its state of charge was not "
+                        "what the controller believed, or its power tapered near full or empty.")
     if skipped:
         warnings.append(f"{skipped} EV visit(s) skipped because the charger was still occupied.")
     if hp_unmet.sum() > 0.5:
@@ -622,6 +679,8 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
         "import_limit_kw": limit.copy(),  # inf = unlimited (the API sends null)
         "price": price.astype(float),
         "soc": (rec_soc * cap[:, None]).sum(axis=0) / cap.sum() if cap.sum() > 0 else np.zeros(T),
+        "soc_estimate": (rec_soc_est * cap[:, None]).sum(axis=0) / cap.sum() if cap.sum() > 0 else np.zeros(T),
+        "battery_shortfall_kw": rec_shortfall,
         "phase_l1_a": rec_phase[0], "phase_l2_a": rec_phase[1], "phase_l3_a": rec_phase[2],
     }
     assets: dict[str, dict[str, FloatArray]] = {}
@@ -633,7 +692,7 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
     for p in pvs:
         assets[p.id] = {"power_kw": -pv_avail[p.id] * (1 - curtail_share)}
     for i, bat in enumerate(bats):
-        assets[bat.id] = {"power_kw": rec_bat[i], "soc": rec_soc[i]}
+        assets[bat.id] = {"power_kw": rec_bat[i], "soc": rec_soc[i], "soc_estimate": rec_soc_est[i]}
     for i, c in enumerate(chargers):
         assets[c.id] = {"power_kw": rec_ev[i], "connected": rec_ev_on[i], "remaining_kwh": rec_ev_rem[i]}
     for j, h in enumerate(hps):

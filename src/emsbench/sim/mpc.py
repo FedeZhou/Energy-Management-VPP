@@ -48,6 +48,10 @@ keeps enough energy in the battery (and leaves cars that can wait for later) to 
 re-plans every step from what actually happened. The tightened limit is soft like the real one (same penalty), so a
 margin that cannot be kept never makes the LP infeasible: the plan keeps as much of it as it can.
 
+Device uncertainty (sim/device.py): the MPC plans from the battery energy in the observation, which is the BMS's
+estimate when SoC estimation error is on, and with the nominal battery power (no CC-CV taper). It does not model
+either gap; the engine's plant and safety layer take the consequences, reported as `battery_plan_shortfall_kwh`.
+
 Limitations, stated: billing months that change inside the horizon are
 treated as one month. Forecasts come through the `Forecast` interface (`sim/forecasts.py`): perfect, realistic,
 or several replayed scenarios.

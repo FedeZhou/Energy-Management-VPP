@@ -398,3 +398,37 @@ The project's focus is now the guide's section 13.3: reliable flexibility for EV
   help) concerned cost on homes. Both can be true.
 - **Per-hour guarantees over-deliver on a per-day promise.** It kept 99.7% of days against a 90% target: the margin is
   sized hour by hour, and a day survives only if every hour does. A day-level margin would be cheaper; not built.
+
+## 19. Device uncertainty: the battery is not what the controller thinks (2026-11-22)
+
+- **A battery cannot measure its own state of charge.** The battery management system (BMS) estimates it, mostly by
+  counting energy in and out and checking against the cell voltage. LFP cells have an almost flat voltage over most
+  of the range, so the estimate drifts: a battery-analytics vendor reports errors of +-15% as common in LFP systems,
+  with outliers above +-40% (Accure, via ESS News 2025). The estimate is corrected only when the voltage curve gets
+  steep again, near full or near empty, which is why home batteries "recalibrate" after a full charge (BYD's service
+  guide, quoted by Fronius 2024). Site Lab copies this with the error model of Braendle and Hug (arXiv 2604.12594):
+  the error grows with the energy cycled and is pulled back to zero near the ends. Their paper gives no units; we
+  read its numbers as 0.01 (systematic) and 0.1 (random) per full capacity cycled **(unsure)**.
+- **The controller sees the estimate; the battery obeys the truth.** When the estimate is too high, a plan that
+  counts on the last kilowatt-hours fails: the battery is really empty. Site Lab reports this as the *plan
+  shortfall*: power the controller asked for, within what it believed possible, that the battery did not deliver.
+- **A battery's power depends on how full it is.** Lithium-ion cells charge at constant current up to a voltage limit
+  and then at constant voltage with falling current (CC-CV), so charging slows near full; the same voltage
+  arithmetic slows discharging near empty. We use ACN-Sim's simple two-stage model: full power up to 80%, then
+  linearly down to zero at 100%. For discharge we mirror it at 20%; that breakpoint is our example choice (no public
+  LFP derating table found).
+- **Cars do the same, but we do not know their battery.** Charging records give the energy a car took, not its
+  battery size or state of charge. We assume (and say so) that every session ended because the car was nearly full,
+  which gives the most taper possible, and pick the smallest of ACN-Sim's candidate battery sizes that holds the
+  energy.
+- **Rules shrug, planners suffer.** In the time-block car park (full year, our runs of 2026-11-22) the peak-shaving
+  rule kept the limit on 349 of 365 days with all device uncertainty on against 350 with ideal devices: the rule
+  never plans with the state of charge, it just asks for "whatever keeps import under the limit" and takes what the
+  battery gives. The car charging curves cost more: undelivered car energy rose from about 2,010 to 2,140 kWh.
+  The MPC with realistic forecasts kept 340-341 days either way (four random seeds), but undelivered car energy rose
+  from about 3,990 to 4,810-4,850 kWh, and in about 1,200 hours a year the battery could not do what the plan asked
+  (5,600-6,000 kWh of shortfall).
+- **Days kept can hide the damage.** The engine's safety layer slows the cars when the battery falls short, so the
+  contract survives and the drivers pay. Read days kept, undelivered car energy and plan shortfall together. A
+  planner that knew its own uncertainty (stochastic MPC with the state of charge as an uncertain quantity, the
+  guide's gap G3) would hold a margin instead; that is the next step, not built yet.
