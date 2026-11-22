@@ -1,0 +1,87 @@
+# Plan example: a fleet depot (22 charging sockets used by a council's fleet vehicles) on a Dutch-style
+# time-block grid contract, 21 weeks hourly (May-September). The point of this example is the main focus of the
+# project: how reliably an EV-heavy business site keeps a flexible grid limit ("days kept", P90), and what keeping it
+# costs in charging that does not finish, with and without a battery. Every data set here allows commercial use.
+#
+# Contract (ILLUSTRATIVE numbers, not a real offer): a time-limited contract in the sense of the guide, section 3.2
+# (Monterde, Alvarez and Valarezo 2025, https://doi.org/10.1007/s40518-025-00268-7: "firm access except in
+# pre-agreed windows", e.g. the Dutch time-block right; UK networks call it a "profiled connection", see the UK Power
+# Networks Optimise Prime dataset guidance, 2023, Table 23, whose example lowers a depot's limit 13:00-17:00).
+# Firm 80 kW (about the depot's highest import with cars charging on arrival); 20 kW on working days 14:00-18:00, a
+# window chosen to overlap the fleet's return to the depot (half of all plug-ins are at 14:00-16:00 in the data), so
+# that the contract binds. Reliability target 0.9 = the model default (guide section 4.2).
+#
+# Data: measured charging sessions of Leeds City Council's fleet at its Knowsthorpe HQ depot, May-Sep 2023 (11
+# two-socket charge points; Data Mill North, Open Government Licence v3.0). The file has no charger ratings: the
+# highest average session power is 7.2 kW, so the sockets are set to 7.4 kW single-phase (230 V x 32 A), spread over
+# L1-L3; that rating is our assumption. Depot building: NREL ComStock warehouse load shape (California, modelled,
+# CC BY 4.0); solar modelled from Amsterdam weather (Open-Meteo + pvlib, CC BY 4.0); Dutch day-ahead prices
+# (Energy-Charts / SMARD, CC BY 4.0). Each data set uses its own year for the same season and weekday
+# (sim/profiles.py): the fleet is from 2023, prices and solar from 2026.
+# Mixing note: a UK fleet on a Dutch tariff and contract, with a Californian building shape. No open European depot
+# data with building load was small enough to download (Optimise Prime, CC BY 4.0, is about 130 GB; see
+# docs/data-sources.md). The vehicles are a council fleet (not identified in the data), not a parcel operator.
+# Sizes (3,000 m² depot building, 50 kWp, 100 kWh / 50 kW battery) are example choices.
+# Price adder: Eurostat 2025 Dutch business network costs (0.0936) + taxes excl. VAT (0.0504) = 0.1440 EUR/kWh
+# (nrg_pc_205_c, band IB 20-499 MWh/yr), as in plan_ev_timeblock_nl.yaml.
+# Run length: the fleet data covers May-September 2023 only, so the example runs 21 weeks, not a year.
+# Checked with the simulator on 2026-11-22 (147 days, all with a limit): the limit holds on 147 of 147 days (100%)
+# in every variant, because the engine slows the cars to keep it (sim/engine.py) and fleet vehicles parked for hours
+# can wait. The price of the contract shows up as charging not finished by departure:
+#   - no battery: the P90 day reaches the limit exactly (daily peak ratio 1.00); 1,309 kWh unmet in 262 of 1,503
+#     sessions;
+#   - same without the 14-18 h window (firm 80 kW only): 1,070 kWh unmet in 225 sessions, the same as with no limit at
+#     all. This floor is not the contract: hourly steps shorten each stay to whole hours (arrival rounded up,
+#     departure down), so short sessions cannot finish. The window costs about 240 kWh over 21 weeks (about 1.2% of
+#     the 19,100 kWh delivered);
+#   - peak-shaving battery: 1,074 kWh unmet (226 sessions): it gives back almost all of that charging, for 206 EUR
+#     more energy cost (9,004 vs 8,798 EUR) and 629 EUR of modelled battery wear;
+#   - MPC battery: 1,071 kWh unmet with a perfect forecast, 1,070 with a realistic one; total cost 4,845 / 5,050 EUR
+#     (it also moves solar into the evening), 1,000 / 932 EUR of wear.
+# Takeaway: at this depot, slowing the chargers alone keeps the window; the battery buys back about 1% of the
+# charging. A tighter window, a bigger building load or shorter stays would change that (try them in the app).
+label: Fleet depot on a time-block contract (open data)
+description: >-
+  A council fleet depot with 22 charging sockets (real Leeds fleet sessions, open licence), a 3,000 m² building, 50 kWp
+  of solar and a 100 kWh battery on a Dutch-style time-block contract: 80 kW firm, 20 kW on working days 14:00-18:00
+  when the fleet returns (illustrative). May-September, hourly. Shows whether the limit holds and how much charging it
+  costs.
+site:
+  name: Fleet depot on a time-block contract
+  mode: plan
+  start: 2026-05-04
+  days: 147
+  step_minutes: 60
+  grid:
+    import_limit_kw: 80
+    contract_windows:
+      - {start: "14:00", end: "18:00", days: [mon, tue, wed, thu, fri], import_limit_kw: 20}
+    reliability_target: 0.9
+  tariff: {price_profile: ec/nl_da, price_adder: 0.144}
+  controller: {battery: peak_shaving, peak_threshold_kw: 80, ev: as_fast_as_possible}
+  assets:
+    - {type: building, id: depot, name: "Depot building (3,000 m²)", load_profile: comstock/ca_warehouse, scale: 3, ui: {x: 80, y: 0}}
+    - {type: pv, id: pv, name: Roof solar, capacity_kwp: 50, profile: om/amsterdam_south30, ui: {x: 80, y: 200}}
+    - {type: battery, id: battery, name: Battery, capacity_kwh: 100, power_kw: 50, ui: {x: 80, y: 400}}
+    - {type: ev_charger, id: c1, name: "Charger 1 A", sessions: leeds/1324-01a, max_power_kw: 7.4, phases: 1, phase: L1, ui: {x: 760, y: -40}}
+    - {type: ev_charger, id: c2, name: "Charger 1 B", sessions: leeds/1324-01b, max_power_kw: 7.4, phases: 1, phase: L2, ui: {x: 760, y: 80}}
+    - {type: ev_charger, id: c3, name: "Charger 2 A", sessions: leeds/1324-02a, max_power_kw: 7.4, phases: 1, phase: L3, ui: {x: 760, y: 200}}
+    - {type: ev_charger, id: c4, name: "Charger 2 B", sessions: leeds/1324-02b, max_power_kw: 7.4, phases: 1, phase: L1, ui: {x: 760, y: 320}}
+    - {type: ev_charger, id: c5, name: "Charger 3 A", sessions: leeds/1324-03a, max_power_kw: 7.4, phases: 1, phase: L2, ui: {x: 760, y: 440}}
+    - {type: ev_charger, id: c6, name: "Charger 3 B", sessions: leeds/1324-03b, max_power_kw: 7.4, phases: 1, phase: L3, ui: {x: 760, y: 560}}
+    - {type: ev_charger, id: c7, name: "Charger 4 A", sessions: leeds/1324-04a, max_power_kw: 7.4, phases: 1, phase: L1, ui: {x: 1020, y: -40}}
+    - {type: ev_charger, id: c8, name: "Charger 4 B", sessions: leeds/1324-04b, max_power_kw: 7.4, phases: 1, phase: L2, ui: {x: 1020, y: 80}}
+    - {type: ev_charger, id: c9, name: "Charger 5 A", sessions: leeds/1324-05a, max_power_kw: 7.4, phases: 1, phase: L3, ui: {x: 1020, y: 200}}
+    - {type: ev_charger, id: c10, name: "Charger 5 B", sessions: leeds/1324-05b, max_power_kw: 7.4, phases: 1, phase: L1, ui: {x: 1020, y: 320}}
+    - {type: ev_charger, id: c11, name: "Charger 6 A", sessions: leeds/1324-06a, max_power_kw: 7.4, phases: 1, phase: L2, ui: {x: 1020, y: 440}}
+    - {type: ev_charger, id: c12, name: "Charger 6 B", sessions: leeds/1324-06b, max_power_kw: 7.4, phases: 1, phase: L3, ui: {x: 1020, y: 560}}
+    - {type: ev_charger, id: c13, name: "Charger 7 A", sessions: leeds/1324-07a, max_power_kw: 7.4, phases: 1, phase: L1, ui: {x: 1280, y: -40}}
+    - {type: ev_charger, id: c14, name: "Charger 7 B", sessions: leeds/1324-07b, max_power_kw: 7.4, phases: 1, phase: L2, ui: {x: 1280, y: 80}}
+    - {type: ev_charger, id: c15, name: "Charger 8 A", sessions: leeds/1324-08a, max_power_kw: 7.4, phases: 1, phase: L3, ui: {x: 1280, y: 200}}
+    - {type: ev_charger, id: c16, name: "Charger 8 B", sessions: leeds/1324-08b, max_power_kw: 7.4, phases: 1, phase: L1, ui: {x: 1280, y: 320}}
+    - {type: ev_charger, id: c17, name: "Charger 9 A", sessions: leeds/1324-09a, max_power_kw: 7.4, phases: 1, phase: L2, ui: {x: 1280, y: 440}}
+    - {type: ev_charger, id: c18, name: "Charger 9 B", sessions: leeds/1324-09b, max_power_kw: 7.4, phases: 1, phase: L3, ui: {x: 1280, y: 560}}
+    - {type: ev_charger, id: c19, name: "Charger 10 A", sessions: leeds/1324-10a, max_power_kw: 7.4, phases: 1, phase: L1, ui: {x: 1540, y: -40}}
+    - {type: ev_charger, id: c20, name: "Charger 10 B", sessions: leeds/1324-10b, max_power_kw: 7.4, phases: 1, phase: L2, ui: {x: 1540, y: 80}}
+    - {type: ev_charger, id: c21, name: "Charger 11 A", sessions: leeds/1324-11a, max_power_kw: 7.4, phases: 1, phase: L3, ui: {x: 1540, y: 200}}
+    - {type: ev_charger, id: c22, name: "Charger 11 B", sessions: leeds/1324-11b, max_power_kw: 7.4, phases: 1, phase: L1, ui: {x: 1540, y: 320}}
