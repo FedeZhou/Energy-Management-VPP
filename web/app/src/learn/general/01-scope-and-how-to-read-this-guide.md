@@ -12,7 +12,7 @@ This guide is a working map of one fast-moving space: **electricity grid congest
 1. **Understand the grid** and why it is congested.
 2. **Know the state of the art** in research: how flexibility is measured, modelled, controlled and planned, and where the gaps are.
 3. **Know the market**: which companies and startups are active, what they do, and what can be learned from them.
-4. **Choose a direction**: what to focus on for research, a well-paid career or a company, and which skills to build.
+4. **Choose a direction**: what to focus on for research or a well-paid career, and which skills to build.
 
 | Part | Chapters | Question answered |
 | --- | --- | --- |

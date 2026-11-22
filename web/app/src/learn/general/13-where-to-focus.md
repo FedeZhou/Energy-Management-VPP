@@ -1,9 +1,9 @@
 ---
-title: "13. Where to focus: research, career and company"
+title: "13. Where to focus: research and career"
 sidebar_position: 14
 ---
 
-# 13. Where to focus: research, career and company
+# 13. Where to focus: research and career
 
 **In simple terms.** This chapter brings together the grid problem (Chapters 2–3), the research gaps (Chapters 4–9 and 12) and the market lessons (Chapters 10–11) into a practical recommendation.
 
@@ -20,19 +20,15 @@ Funding rounds signal investor belief, not proven profitable markets.
 
 ## 13.2 Segment comparison
 
-| Segment | Employability | Startup upside | Competition | Fit with this profile |
-| --- | --- | --- | --- | --- |
-| Battery optimisation and trading | Very high | Low for a newcomer: capital-heavy, scale wins | Very high | Medium |
-| Behind-the-meter EMS for congested businesses | High | Medium: real pain, fragmented market, needs a sharp niche | High and growing | High |
-| EV charging sites, depots and battery-buffered charging | High: charger makers, charge point operators, fleets | Medium–high in a niche such as logistics depots | Medium, rising | Very high |
-| Planning, sizing and contract choice | Medium: integrators, consultancies, grid operators | Medium: low capital, but strongest when sold to integrators or tied to operation | Medium: sizing is bundled by optimisers such as Entrix and Furo; contract-aware reliability is uncrowded | High |
-| Battery health and state estimation | High | Medium: leaders established | Medium–high | Medium |
-| Flexible data centres | High, mainly US | High, but needs access to data-centre operators | Low in Europe | Low–medium |
-| Grid-operator tools | Good at grid operators | Lower: slow, procurement-driven buyers | Medium | Medium |
-
-![Figure 22. The segments placed by the ratings in the table above. Positions are judgements, not measurements; filled markers show a high or very high fit with this profile.](figures/segments.svg)
-
-*Figure 22. The segments placed by the ratings in the table above. Positions are judgements, not measurements; filled markers show a high or very high fit with this profile.*
+| Segment | Employability | Competition | Fit with this profile |
+| --- | --- | --- | --- |
+| Battery optimisation and trading | Very high | Very high | Medium |
+| Behind-the-meter EMS for congested businesses | High | High and growing | High |
+| EV charging sites, depots and battery-buffered charging | High: charger makers, charge point operators, fleets | Medium, rising | Very high |
+| Planning, sizing and contract choice | Medium: integrators, consultancies, grid operators | Medium: sizing is bundled by optimisers such as Entrix and Furo; contract-aware reliability is uncrowded | High |
+| Battery health and state estimation | High | Medium–high | Medium |
+| Flexible data centres | High, mainly US | Low in Europe | Low–medium |
+| Grid-operator tools | Good at grid operators | Medium | Medium |
 
 ## 13.3 Recommended focus: reliable flexibility for EV-heavy sites
 
@@ -45,7 +41,7 @@ The strongest overlap of research gap, market need and personal fit is **reliabl
 Why this combination works:
 
 - **Employability hedge.** The same skills are exactly what battery optimisers, charging-software companies and integrators hire for.
-- **Startup wedge.** Integrators run thousands of feasibility studies (Section 11.3), and battery optimisers such as Entrix and Furo already bundle sizing with operation. What none of the companies reviewed here prominently offers is a quantified reliability tied to a flexible grid contract; that, not sizing itself, is the differentiator. A contract-aware planning and reliability engine could be sold to them, to battery vendors and to consultants, then extended into operation.
+- **An uncrowded gap.** Integrators run thousands of feasibility studies (Section 11.3), and battery optimisers such as Entrix and Furo already bundle sizing with operation. What none of the companies reviewed here prominently offers is a quantified reliability tied to a flexible grid contract; that, not sizing itself, is the open question.
 
 ## 13.5 What to avoid
 
@@ -55,7 +51,7 @@ Why this combination works:
 
 ## 13.6 Decision rules and next steps
 
-**Decision rules.** If interviews show integrators would pay for a reliability or sizing engine now, build it sooner. If the main goal becomes a high salary soon, target battery optimisers and charging-software companies. Otherwise, follow the research route and keep testing the market.
+**Decision rules.** If the main goal becomes a high salary soon, target battery optimisers and charging-software companies. Otherwise, follow the research route and keep testing the market.
 
 **Next steps.**
 
@@ -68,4 +64,4 @@ Why this combination works:
 - **Europe is tightening the rules.** Since April 2026, EU-funded projects may not use solar or battery power conversion systems from "high-risk" countries, with requirements applying to grid-connected projects from November 2026 ([S&P Global](https://www.spglobal.com/energy/en/news-research/latest-news/electric-power/081326-eu-pv-storage-inverter-funding-ban-could-reflect-shift-toward-clean-energy)). Lithuania banned remote access by Chinese companies to solar, wind and storage installations above 100 kW in November 2024 ([pv magazine](https://www.pv-magazine.com/2026/10/08/eu-expert-group-urges-curbs-on-high-risk-solar-suppliers/)). Renewable auctions must apply non-price criteria, including cybersecurity and resilience, to at least 30% of auctioned capacity from 30 December 2025 ([Global Policy Watch](https://www.globalpolicywatch.com/?p=16001)).
 - **Compliance is getting heavier.** From 18 February 2027, every industrial battery above 2 kWh placed on the EU market needs a digital battery passport, which also covers stationary storage ([Z2Data](https://www.z2data.com/insights/why-the-eu-digital-product-passport-will-reshape-compliance-for-battery-manufacturers-in-2027)).
 
-The opportunity sits in the gap between cheap, capable Chinese hardware and European buyers who need it to be secure, compliant, reliable and bankable.
+The open need sits in the gap between cheap, capable Chinese hardware and European buyers who need it to be secure, compliant, reliable and bankable.

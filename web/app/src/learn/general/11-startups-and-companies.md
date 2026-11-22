@@ -73,4 +73,4 @@ The players relevant to site flexibility fall into seven groups:
 
 ## 11.5 Assessment
 
-The market is crowded at the level of generic energy management and battery trading, and is moving towards integrated, financed offers. The opening is in what integrators, EMS companies and battery optimisers still lack: contract-aware planning and operation with a quantified reliability, especially for EV-heavy sites. The same companies are also the most likely employers, partners, customers and acquirers for anyone with deep skills in this area.
+The market is crowded at the level of generic energy management and battery trading, and is moving towards integrated, financed offers. The opening is in what integrators, EMS companies and battery optimisers still lack: contract-aware planning and operation with a quantified reliability, especially for EV-heavy sites. The same companies are also the most likely employers and partners for anyone with deep skills in this area.

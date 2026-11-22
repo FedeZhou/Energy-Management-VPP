@@ -13,6 +13,6 @@ sidebar_position: 1
 
 **Market.** Generic energy management and battery trading are crowded. Money flows to whoever operates the assets (Entrix: €43 million, 3 GW contracted) and to integrated, financed offers (Decade Energy: €22 million, zero-capex depot energy systems, over 1,500 feasibility studies). Basic load management comes as standard with chargers from major makers. Grid operators and alliances increasingly ask for predictable flexibility, but none of the companies reviewed here quantifies it for a site: that is the clearest white space.
 
-**Recommended focus.** Reliable flexibility for EV-heavy business sites (depots, charging hubs, retail and fuel-station sites): battery sizing and contract choice with a stated probability of breaching the grid limit, plus an uncertainty-aware controller that keeps the promise, both built on one site model. The likely buyers are integrators, charging-software companies, battery vendors and consultants.
+**Recommended focus.** Reliable flexibility for EV-heavy business sites (depots, charging hubs, retail and fuel-station sites): battery sizing and contract choice with a stated probability of breaching the grid limit, plus an uncertainty-aware controller that keeps the promise, both built on one site model.
 
 **Skills to build.** Energy markets, optimisation under uncertainty, probabilistic forecasting and customer discovery.
