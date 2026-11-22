@@ -377,3 +377,24 @@ The project's focus is now the guide's section 13.3: reliable flexibility for EV
   for this personal project and are kept out of the public demo, but a product or startup built on them would need
   the rights holders' permission or another dataset. This matters because the guide's suggested first project
   (section 13.6) is probabilistic battery sizing for a charging site on open Dutch data.
+
+## 18. A chance constraint that keeps the promise (2026-11-22)
+
+- **A forecast can grade itself.** Every hour the controller sees how far the net load (load minus solar) was from
+  its forecast. The errors at the same clock time over the last few weeks are a ready-made probability distribution:
+  no bell curve assumed (`sim/uncertainty.py`). On the time-block car park the 90% quantile built this way was
+  exceeded on 8.4% of hours, close to the 10% it promises: a usable probabilistic forecast from nothing but history.
+- **The scenario approach turns "90% of days" into a number of days to look back.** Choose the margin that would have
+  covered the error on each of the last N days. The chance it fails on more than 10% of new days is at most 0.9^N,
+  so N = 29 days gives 95% confidence (the guide's example: 66 days, 99.9%). One margin per clock hour is one decision
+  variable, which is why so few days suffice; making the whole plan the decision would need hundreds.
+- **The margin works by keeping energy back, not by importing less now.** The plan treats future hours as if the
+  load came in high, so it keeps the battery charged for them and leaves cars that can wait for later; the current
+  hour is metered and gets no margin. Same LP size, +7% runtime.
+- **Result: the first controller here to beat the rule on keeping the limit** (`mpc_execution: chance`): 364 of 365
+  days against 350 for the peak-shaving rule and 341 for the cautious MPC, 2.4% cheaper than the rule including
+  wear, but 38% more undelivered car energy than the rule (results/chance_mpc/README.md). So the guide's preference
+  for chance-constrained MPC held on the objective it is meant for, while the earlier finding (replayed days did not
+  help) concerned cost on homes. Both can be true.
+- **Per-hour guarantees over-deliver on a per-day promise.** It kept 99.7% of days against a 90% target: the margin is
+  sized hour by hour, and a day survives only if every hour does. A day-level margin would be cheaper; not built.
