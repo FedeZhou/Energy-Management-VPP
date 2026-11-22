@@ -38,6 +38,16 @@ without that the plan hoards energy it would have to pay wear to use. (4) When s
 same, store it now (`EARLY_PER_KWH_HOUR`, a tie-break): the later opportunity is only a forecast. Tuned on drivers
 the full-year study does not use; see results/study_home_de/README_cautious.md.
 
+Keeping a promise under uncertainty (`mpc_execution = "chance"`): the cautious planner, plus a chance constraint on the
+import limit. A chance constraint asks the limit to hold with probability at least the site's reliability target
+instead of always; it is replaced by a tightened deterministic one (constraint tightening, guide section 7.2): for every
+future step the plan keeps import below the limit minus a back-off, the margin by which the net load may exceed its
+forecast (forecast series "net_backoff", from `sim/uncertainty.py`: the largest past error at that time of day over the
+number of days the scenario approach asks for). The current step is metered, so it gets no margin. The plan therefore
+keeps enough energy in the battery (and leaves cars that can wait for later) to cover a higher-than-forecast load, and
+re-plans every step from what actually happened. The tightened limit is soft like the real one (same penalty), so a
+margin that cannot be kept never makes the LP infeasible: the plan keeps as much of it as it can.
+
 Limitations, stated: billing months that change inside the horizon are
 treated as one month. Forecasts come through the `Forecast` interface (`sim/forecasts.py`): perfect, realistic,
 or several replayed scenarios.
@@ -69,6 +79,7 @@ MILP_TIME_LIMIT_S = 10.0  # exact mode, per solve; the best plan found so far is
 # held for a whole day earns 0.00024, against tariffs of 0.08 to 0.40 per kWh). On the tuning set 1e-5 and 1e-4 gave
 # the same result within 2 EUR in 2,000 and 1e-3 was 23 EUR worse (results/study_home_de/README_cautious.md).
 EARLY_PER_KWH_HOUR = 1e-5
+CAUTIOUS = ("cautious", "chance")  # execution modes with the cautious habits (chance adds the chance constraint)
 
 
 @dataclass(frozen=True)
@@ -250,7 +261,7 @@ class MPCController:
         # (zero with a perfect forecast). The next re-plan starts from the battery's real state.
         error = actual_net - float(self.plan.net_kw[k])
         battery = planned - error
-        if self.spec.mpc_execution == "cautious" and abs(error) > 1e-9:
+        if self.spec.mpc_execution in CAUTIOUS and abs(error) > 1e-9:
             # ... but never by trading more with the grid than without the correction: no charging from an import
             # the plan did not ask for (less demand than forecast: import less instead), no discharging into an
             # export (less solar than forecast: export less instead).
@@ -261,6 +272,19 @@ class MPCController:
             elif error > 0 and grid < 0:
                 battery = min(planned, battery - grid)
         return Action(battery_kw=battery, ev_kw=tuple(ev_kw))
+
+    def _backoff(self, fc: Forecast, t: int) -> FloatArray:
+        """Chance mode: the margin (kW) below the import limit for each step of the horizon; zeros otherwise, and for
+        the current step (metered) and forecasts that do not know their uncertainty (perfect ones)."""
+        H = self.horizon
+        if self.spec.mpc_execution != "chance":
+            return np.zeros(H)
+        try:
+            b = np.clip(np.asarray(fc.window("net_backoff", t, H), dtype=float), 0.0, None)
+        except KeyError:
+            return np.zeros(H)
+        b[0] = 0.0
+        return b
 
     def _scenarios(self) -> list[Forecast]:
         """The futures to plan for: one forecast, or several replayed from history (scenario MPC)."""
@@ -298,7 +322,7 @@ class MPCController:
         lim, H, dt = self.lim, self.horizon, self.lim.step_hours
         load = fc.window("load", obs.t, H).copy()
         pv = fc.window("pv", obs.t, H).copy()
-        cautious = self.spec.mpc_execution == "cautious"
+        cautious = self.spec.mpc_execution in CAUTIOUS
         if cautious:  # this step's load and solar are measured, not forecast
             load[0] = obs.load_kw + sum(h.heat_kw / max(h.cop, 1.0) for h in obs.heat_pumps)
             pv[0] = obs.pv_kw
@@ -408,11 +432,12 @@ class MPCController:
             imp_limit = fc.window("import_limit", obs.t, H)
         except KeyError:
             imp_limit = np.full(H, lim.import_limit_kw if lim.import_limit_kw is not None else INF)
+        backoff = self._backoff(fc, obs.t)
         limited = np.flatnonzero(np.isfinite(imp_limit))
         if limited.size:
             over = lp.var(H, cost=w * huge * dt)
             for k in limited:
-                lp.le({int(imp[k]): 1.0, int(over[k]): -1.0}, float(imp_limit[k]))
+                lp.le({int(imp[k]): 1.0, int(over[k]): -1.0}, max(0.0, float(imp_limit[k]) - float(backoff[k])))
 
         if lim.fuse_kw is not None:
             for name in ("L1", "L2", "L3"):
