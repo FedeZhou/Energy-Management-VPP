@@ -31,11 +31,23 @@ benchmark, a generic controller scoreboard) are kept in the docs as background.
 **Where it stands (November 2026).** Built: flexible grid contracts (time windows compiled into a
 limit for every time step), reliability measures (days the limit was kept against a target, P90 daily
 peak against the limit), rule controllers and an MPC on perfect or realistic forecasts, battery wear
-from an ageing model, a business car park example on a time-block contract, and a Compare tab that
-benchmarks every strategy. Not yet: a sweep over battery size and contract choice that shows cost
-against breach risk, probabilistic forecasts with chance constraints, uncertainty in the devices
-themselves (state of charge, charging curves), a logistics depot example, and validation on a real
-site. The full list is in Learn, *Limits and roadmap*.
+from an ageing model, and a Compare tab that benchmarks every strategy. Added on 22 November 2026:
+
+- a **Size & contract planner** that replays a site for battery sizes x contract options and shows cost
+  against days kept, with the cheapest option for each level of reliability and a recommendation; an
+  option only counts if cars are left short by at most a tolerance (default 1% of the energy they asked
+  for, a setting, not a sourced number);
+- a **chance-constrained MPC** that plans against the limit minus a safety margin learned from its own past
+  forecast errors. On the business car park example (one year, our runs) it kept the limit on 364 of 365
+  days, against 350 for the peak-shaving rule and 341 for the cautious MPC, and cost less than the rule,
+  but left more car energy undelivered than the rule ([results/chance_mpc](results/chance_mpc/README.md));
+- optional **device uncertainty**: a battery whose state-of-charge estimate drifts, power that tapers near
+  full and empty, cars that charge more slowly near full;
+- a **fleet depot example** on real Leeds City Council charging sessions (Open Government Licence).
+
+Not yet: validation on a real site (it needs a partner with metered data), a margin sized per day rather
+than per hour, forecasts of car arrivals, and reliability stated as a probability across many years.
+The full list is in Learn, *Limits and roadmap*.
 
 A site (home, apartment garage, office, car park, commercial site, data center) is a configuration of
 sources, storage and loads: buildings, solar, batteries, EV chargers (including bidirectional), heat
@@ -45,7 +57,7 @@ pumps and data centers. The engine stays generic; the EV focus is a matter of ex
 
 | | What you get | Needs |
 | --- | --- | --- |
-| **[Open the demo](https://fedezhou.github.io/Energy-Management-VPP/)** | The example sites with pre-computed results (scene, charts, numbers, "Compare forecasts") and all Learn pages | A browser |
+| **[Open the demo](https://fedezhou.github.io/Energy-Management-VPP/)** | The example sites with pre-computed results (scene, charts, numbers, "Compare forecasts"), including a fleet depot on a flexible contract built on open-licence data, and all Learn pages | A browser |
 | [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/FedeZhou/Energy-Management-VPP?quickstart=1) | The full live app: change any site and simulate it | A GitHub account (Codespaces has a free monthly allowance). First start takes several minutes: it installs everything, and the first run downloads the open data (~400 MB) |
 | Your computer | The full live app, offline after the first data download | Python 3.11 and Node 22, see below |
 
@@ -55,13 +67,15 @@ pumps and data centers. The engine stays generic; the EV focus is a matter of ex
   **Plan** (hourly, up to a year: costs, savings, battery wear, on how many days the grid limit
   held) and **Operate** (1-15 minute steps over days: EV visits, phase currents, fuses), on measured
   open data. A **Compare** tab pins runs side by side and benchmarks every battery strategy with
-  perfect and realistic forecasts.
+  perfect and realistic forecasts; a **Size & contract** tab compares battery sizes and contract options
+  by cost and days kept.
 - **Learn**, in two parts: general knowledge (a guide to grid congestion and site flexibility: the
   grid, flexible connection contracts, the state of the art in modelling, control and planning, the
   market, batteries and BESS) and how Site Lab works (how it models each system, how it is built,
   how its controllers decide, worked examples and its limits), each statement cited.
 - **Results**: a CityLearn baseline scoreboard ([results/](results/baseline_scoreboard.md)) and
-  studies such as [the home study with realistic forecasts](results/study_home_de/summary.md).
+  studies such as [the home study with realistic forecasts](results/study_home_de/summary.md) and
+  [the chance-constrained MPC on a business car park](results/chance_mpc/README.md).
 
 Background and plain-language notes: [docs/research.md](docs/research.md),
 [LEARNING.md](LEARNING.md), [docs/market-landscape.md](docs/market-landscape.md).
@@ -95,9 +109,11 @@ bash scripts/deploy_pages.sh           # static build, published to the gh-pages
 Only public, openly licensed data and open source tools: see
 [docs/data-sources.md](docs/data-sources.md) for sources, licences and attribution. One source
 (Utrecht workplace EV sessions) is licensed for non-commercial use only (CC BY-NC-SA 4.0), so the
-two examples that use it, the office car park and the time-block contract example
-(`configs/sites/plan_ev_timeblock_nl.yaml`), are left out of the public demo and run only in the
-live app. The
+examples that use it (the office car park and the time-block contract examples,
+`configs/sites/plan_ev_timeblock_nl*.yaml`) are left out of the public demo and run only in the
+live app; the demo export reads each source's licence from the data registry. The depot example
+(`configs/sites/plan_fleet_depot_timeblock.yaml`) uses Leeds City Council fleet sessions under the
+Open Government Licence v3.0, which allows commercial use, so it is in the demo. The
 non-commercial licence also means a commercial product could not be built on that data without
 the rights holders' permission or another dataset. Personal project, not affiliated with any company.
 

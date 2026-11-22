@@ -27,24 +27,31 @@ the guide's section 12.2, the limitations in section 4.4):
 
 | Open question | Status in emsbench |
 | --- | --- |
-| G4: planning models contracts as tariffs and ignores the operational controller | **Partly.** Contracts are now limits, not tariffs: `site.grid.contract_windows` (time-block style) compile into a per-step import limit (`sim/contracts.py`) that the safety layer, peak shaving and the MPC obey. Every run reports days kept against a target, excess energy and the P90 daily peak ratio (`benchmark/reliability.py`). Missing: the sweep over battery size x contract that turns this into a planning answer. |
-| G2: flexibility quantified with a probability at site level | **First step.** Days kept is an empirical share over one simulated year, not a probability with a stated confidence (the scenario approach of the guide's section 4.2 is not implemented). |
-| Section 4.4, point 1: a single site deciding, before signing, what limit it can live with | **Addressed in form:** the measures are per site and per contract. Example: `configs/sites/plan_ev_timeblock_nl.yaml` (illustrative contract). |
+| G4: planning models contracts as tariffs and ignores the operational controller | **Partly, with a planner.** Contracts are limits, not tariffs: `site.grid.contract_windows` (time-block style) compile into a per-step import limit (`sim/contracts.py`) that the safety layer, peak shaving and the MPC obey. Every run reports days kept against a target, excess energy and the P90 daily peak ratio (`benchmark/reliability.py`). The Size & contract tab (`web/app/src/planner.ts`, 2026-11-22) replays the site for battery sizes x contract options with the site's own controller and plots cost against days kept, with a front and a recommendation; a service-level rule counts an option as feasible only if cars are left short by at most a tolerance (default 1% of requested energy, an owner setting, not a sourced number). |
+| G2: flexibility quantified with a probability at site level | **Partly.** Days kept is still an empirical share over one simulated year. The chance MPC (`sim/uncertainty.py`, `mpc_execution: chance`) applies the scenario approach of the guide's section 4.2 to a per-hour margin (N = 29 days for a 90% target at 95% confidence), so the margin, not the days-kept number, carries a stated confidence. |
+| Section 4.4, point 1: a single site deciding, before signing, what limit it can live with | **Addressed in form:** the measures and the planner are per site and per contract. Examples: `configs/sites/plan_ev_timeblock_nl.yaml` and `configs/sites/plan_fleet_depot_timeblock.yaml` (illustrative contracts; the depot uses Leeds City Council fleet data under OGL v3, so it is in the public demo). |
 | Section 4.3: dynamic operating envelopes | **Prepared, not built:** the limit reaches the MPC as a forecast series (`import_limit`), so a day-ahead limit can replace the compiled one. |
-| G3 (device uncertainty), G1 (composable models with uncertainty), G5 (real-site validation) | **Not addressed yet.** Exact state of charge, no SoC-dependent power, no EV CC-CV taper; no real business site data. |
+| G3: device uncertainty | **Simulated, not yet planned for** (`sim/device.py`, 2026-11-22): optional SoC estimation error with recalibration, CC-CV taper for batteries and cars, and a plan-shortfall KPI. On the time-block car park days kept barely moved (350 -> 349 rule, 341 -> 340 MPC) because the engine slows the cars; undelivered EV energy and plan shortfall rose (LEARNING.md section 19). No controller yet treats the SoC as uncertain. |
+| G1 (composable models with uncertainty), G5 (real-site validation) | **Not addressed yet.** No real business site data; validation needs a partner. |
 
 **Tension to keep in view.** The guide prefers stochastic, scenario-based or chance-constrained MPC for keeping a
-promise under uncertainty (its sections 7.2 and 12.2, gap G3). Our own results so far point the other way: on four
+promise under uncertainty (its sections 7.2 and 12.2, gap G3). Our first results pointed the other way: on four
 German homes with realistic forecasts, an MPC that replayed three recent days as scenarios did **not** beat the
 simple rule, while a "cautious" deterministic MPC (four habits of a planner that distrusts its forecast) did
 (`results/study_home_de/README_cautious.md`; section 10 below; LEARNING.md section 16). On the time-block example
-(one year, our runs of 2026-11-21) the limit held on 96% of days with the peak-shaving rule, 93% with the cautious
-MPC on realistic forecasts and 100% with the same MPC on perfect forecasts, so again a simple rule kept the limit
-more often than the realistic optimiser (the MPC was cheaper and the rows differ in EV energy delivered, so this is
-not a clean comparison). Neither result tests what the guide recommends: replayed days are not a probabilistic
-forecast, and the home study minimised cost, not breaches. The next controller work must therefore compare a
-chance-constrained MPC against the cautious MPC and the peak-shaving rule **on the limit-keeping objective**,
-before assuming it wins.
+(one year, our runs of 2026-11-21) the limit held on 96% of days with the peak-shaving rule and 93% with the cautious
+MPC on realistic forecasts. Neither result tested what the guide recommends, so we then compared a
+chance-constrained MPC with the cautious MPC and the peak-shaving rule **on the limit-keeping objective**
+(`results/chance_mpc/README.md`, our runs of 2026-11-22, same site and year). **The guide's preference held on that
+objective:** the chance MPC kept the limit on 364 of 365 days, against 350 for the rule and 341 for the cautious MPC,
+and cost 171,378 EUR a year including battery wear, against 175,593 (rule) and 169,562 (cautious). **But it left more
+car energy undelivered than the rule** (2,772 kWh against 2,006; the cautious MPC 3,985), mostly cars that leave
+inside the morning window, and it **over-delivers on the target** (99.7% of days against 90%): its margin is sized
+hour by hour from the worst error of the last 29 days, a more cautious envelope than a promise about days needs.
+So the tension is now narrower, not gone: the home result (replayed days did not help on cost) and the car-park
+result (a chance constraint helps on breaches) concern different objectives and can both be true. Open: a day-level
+(joint) margin that gives back cost and car energy, a forecast of car arrivals, and a test on more than one site
+and year (this was the site the question was asked on, not a holdout).
 
 ---
 
@@ -260,7 +267,8 @@ Audiences:
 *Update (2026-11-21):* the phases above are superseded by the guide's section 13.3 focus (see "Direction
 (2026-11-21)" at the top). Next: a battery size x contract sweep reported as cost against breach risk, device
 uncertainty, probabilistic forecasts with chance constraints, a depot or charging-hub example on open Dutch data,
-and validation on a real site.
+and validation on a real site. *Update (2026-11-22):* the first four are built (size & contract planner, chance MPC,
+device uncertainty, Leeds fleet depot on OGL v3 data); real-site validation remains and needs a partner.
 
 
 ---

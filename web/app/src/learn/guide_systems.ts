@@ -203,7 +203,7 @@ t_{\text{empty}} &= \frac{\eta\, E_{\mathrm{cap}}}{P} = \frac{0.949 \times 10}{5
       { kind: "p", text: "The full model, with the limits on power and fullness every strategy shares, is in [chapter 10](#learn-g-engine). Two details matter here. First, efficiency is constant: it does not change with power, temperature or age {code_engine}. Second, when a site has several batteries, the engine adds them up for the controller and splits the requested power between them in proportion to how much each can still take or give {code_engine}." },
 
       { kind: "h", text: "State of charge" },
-      { kind: "p", text: "State of charge (SoC) is how full the battery is, as a share of capacity. Site Lab lets you set a minimum, a maximum and a starting value {code_model}. The minimum is also how a reserve is kept: in the data center example, the battery doubles as the UPS (the backup that bridges a power cut until the generator starts), and a minimum of 12.5% keeps its backup energy out of reach of every strategy {code_engine} {ex_dc}. The starting value defaults to 0, CityLearn's default {code_model}; that choice matters for wear, as shown below. Controllers know the state of charge exactly; real systems estimate it, see [Appendix A.6](#learn-appendix-a-batteries/h-how-a-bms-estimates-state-of-charge) {code_engine}." },
+      { kind: "p", text: "State of charge (SoC) is how full the battery is, as a share of capacity. Site Lab lets you set a minimum, a maximum and a starting value {code_model}. The minimum is also how a reserve is kept: in the data center example, the battery doubles as the UPS (the backup that bridges a power cut until the generator starts), and a minimum of 12.5% keeps its backup energy out of reach of every strategy {code_engine} {ex_dc}. The starting value defaults to 0, CityLearn's default {code_model}; that choice matters for wear, as shown below. By default controllers know the state of charge exactly; real systems estimate it, see [Appendix A.6](#learn-appendix-a-batteries/h-how-a-bms-estimates-state-of-charge). An optional estimate that drifts with use and recalibrates near full and empty is in [chapter 22](#learn-g-devices) {code_engine} {gr_code_device}." },
 
       { kind: "h", text: "The chemistry setting: LFP or NMC" },
       { kind: "p", text: "Site Lab's battery has a 'Cell chemistry (for wear)' setting: lfp or nmc. It changes only which ageing model prices wear, not the efficiency or power {code_model} {code_wear}. How the two chemistries differ in cost and life is in [Appendix A.2](#learn-appendix-a-batteries/sa-2)." },
@@ -252,7 +252,7 @@ t_{\text{empty}} &= \frac{\eta\, E_{\mathrm{cap}}}{P} = \frac{0.949 \times 10}{5
 
       { kind: "h", text: "What Site Lab leaves out" },
       { kind: "list", items: [
-        "Voltage, current and resistance: efficiency does not depend on power, and full power is available at any state of charge {code_engine}.",
+        "Voltage, current and resistance: efficiency does not depend on power, and by default full power is available at any state of charge. An optional CC-CV taper (power falling near full and empty) is in [chapter 22](#learn-g-devices) {code_engine} {gr_code_device}.",
         "Temperature is a constant you set (default 25 °C); the LFP model was fitted between 10 and 45 °C {code_model} {blast_lite}.",
         "Fast charging: both cells were tested at gentle rates, so high C-rates are outside what the models know {blast_lite}.",
         "Uneven ageing of cells inside one system, and the depth-dependent wear that a flat price per kWh cannot see: see [chapter 16](#learn-g-mpc) and market-dispatch research on cycle-ageing costs {xu2017}.",
@@ -321,7 +321,7 @@ t_{\text{empty}} &= \frac{\eta\, E_{\mathrm{cap}}}{P} = \frac{0.949 \times 10}{5
 
       { kind: "h", text: "What Site Lab leaves out" },
       { kind: "list", items: [
-        "The slowdown as a car's battery approaches full (charging taper); the car's own state of charge is not modelled, only the energy it asks for (see [Section 5.2](#learn-modelling-site-assets/s5-2) and [Appendix A.8](#learn-appendix-a-batteries/sa-8)).",
+        "The slowdown as a car's battery approaches full (charging taper), unless switched on: an optional charging curve assumes each car's battery and stops near full ([chapter 22](#learn-g-devices)); the car's real state of charge is never known, only the energy it asks for (see [Section 5.2](#learn-modelling-site-assets/s5-2) and [Appendix A.8](#learn-appendix-a-batteries/sa-8)) {gr_code_device}.",
         "Which phases a real car uses: inferred from its power only {code_engine}.",
         "DC fast charging and public charging; realistic simulators such as ACN-Sim also model battery charging behaviour and unbalanced three-phase infrastructure {lee2020acnsim}.",
         "Aggregators and markets around EV fleets, which the early framework of EV grid integration sets out {lopes2010}.",

@@ -2,6 +2,7 @@ import { ROADMAP_SOURCES } from "./roadmap";
 import { EXAMPLE_SOURCES } from "./examples";
 import { GUIDE_CONTROL_SOURCES } from "./guide_control";
 import { GUIDE_IMPL_SOURCES } from "./guide_impl";
+import { GUIDE_RELIABILITY_SOURCES } from "./guide_reliability";
 import { GUIDE_SYSTEMS_SOURCES } from "./guide_systems";
 
 // Every source cited on the Learn pages. `read` says how deeply it was checked (2026-11-08):
@@ -200,6 +201,7 @@ const list: Source[] = [
   ...GUIDE_SYSTEMS_SOURCES,
   ...GUIDE_IMPL_SOURCES,
   ...GUIDE_CONTROL_SOURCES,
+  ...GUIDE_RELIABILITY_SOURCES,
   ...ROADMAP_SOURCES,
 ];
 

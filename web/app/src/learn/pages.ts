@@ -2,6 +2,7 @@
 import { EXAMPLE_PAGES } from "./examples";
 import { GUIDE_CONTROL_PAGES } from "./guide_control";
 import { GUIDE_IMPL_PAGES } from "./guide_impl";
+import { GUIDE_RELIABILITY_PAGES } from "./guide_reliability";
 import { GUIDE_SYSTEMS_PAGES } from "./guide_systems";
 import { ROADMAP_PAGES } from "./roadmap";
 
@@ -38,6 +39,7 @@ export const PAGES: Page[] = [
   ...GUIDE_SYSTEMS_PAGES,
   ...GUIDE_IMPL_PAGES,
   ...GUIDE_CONTROL_PAGES,
+  ...GUIDE_RELIABILITY_PAGES,
   ...EXAMPLE_PAGES,
   ...ROADMAP_PAGES,
 ];
