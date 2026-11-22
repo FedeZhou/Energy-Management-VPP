@@ -5,6 +5,7 @@ import { useScenarios } from "../scenarios";
 import { useStore } from "../store";
 import { dayLabel, kw, money, num, pct, pts, qty, signed, stepLabel, timeAt } from "../util";
 import { Compare } from "./Compare";
+import { Planner } from "./Planner";
 import { ExportMenu } from "./Export";
 import { Help } from "./Help";
 import { Sessions } from "./Sessions";
@@ -301,7 +302,7 @@ function ForecastCompare() {
   );
 }
 
-type Tab = "charts" | "compare" | "sessions" | "sources";
+type Tab = "charts" | "compare" | "planner" | "sessions" | "sources";
 
 export function Results() {
   const r = useStore((s) => s.result);
@@ -322,6 +323,7 @@ export function Results() {
   const tabs: { id: Tab; label: string }[] = [
     { id: "charts", label: "Charts" },
     { id: "compare", label: scenarioCount ? `Compare · ${scenarioCount}` : "Compare" },
+    { id: "planner", label: "Size & contract" },
     ...(showSessions ? [{ id: "sessions" as Tab, label: "EV sessions" }] : []),
     { id: "sources", label: "Data sources" },
   ];
@@ -388,6 +390,7 @@ export function Results() {
             </div>
           )}
           {active === "compare" && <Compare />}
+          {active === "planner" && <Planner />}
           {active === "sessions" && <Sessions />}
           {active === "sources" && <div className="tab-pane"><p className="pane-intro">The data behind each component in this run. <Help topic="sources" /></p><Sources /></div>}
         </div>

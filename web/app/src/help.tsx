@@ -141,6 +141,33 @@ export const HELP = {
       </>
     ),
   },
+  planner: {
+    title: "Size & contract planner",
+    body: (
+      <>
+        <p>Choosing a battery and a grid contract together: the planner runs this site once for every battery size and contract option you list, and puts each run's cost next to how reliably it kept the import limit.</p>
+        <h5>What each run is</h5>
+        <ul>
+          <li>A normal simulation of a copy of the site: same period, data, control strategy and forecasts. Only the battery size and the contract change.</li>
+          <li><b>Battery size</b>: every battery is scaled to the total you type and keeps its power per kWh (its C-rate). 0 removes the battery. A site without a battery gets one with the default battery's settings.</li>
+          <li><b>Contract options</b>: today's contract, the firm limit with no windows, and the windows' reduced limit at other percentages of today's value. They are variants to explore, not offers: a real grid operator sets which contracts exist and what they cost.</li>
+        </ul>
+        <h5>Reading the results</h5>
+        <ul>
+          <li><b>Cost incl. wear</b> is the energy bill plus battery wear: the share of the battery's replacement value this period used up (expected life from the ageing model). It is how a bigger battery shows up as a cost. It is not a full investment case: no financing, installation, discount rate or grid-contract fee is included. Where the currency has no default replacement cost, wear is not priced and only the bill is compared.</li>
+          <li><b>Days kept</b> is the share of days on which import never went over the limit (see "Flexible contracts and reliability").</li>
+          <li>The line joins the <b>front</b>: options where no cheaper option keeps the limit on as many days. Options off the front cost more for the same or less reliability.</li>
+          <li>The recommendation is the cheapest option that meets the reliability target. Check <b>EV short</b> too: the simulator slows car charging to keep the limit, so a contract can look reliable because cars got less energy.</li>
+        </ul>
+        <h5>Limits</h5>
+        <ul>
+          <li>This is one replay of the simulated year. "Kept on 92% of days" counts those days; it is not a probability with a confidence range. A different year of weather, prices or cars would give a different count, and one or two days can move an option across the target.</li>
+          <li>With perfect forecasts the controller knows the future, which makes batteries look more capable than they will be in operation. Plan with realistic forecasts for a fairer answer.</li>
+          <li>The guide's chapter 8 (planning and sizing under uncertainty) explains why sizing should be stated as how often the limit holds, and section 4.2 why a promise like "90% of days" is the useful form. Turning the count into a probability needs many simulated years (scenarios), which the planner does not do yet.</li>
+        </ul>
+      </>
+    ),
+  },
   tariff: {
     title: "Tariff",
     body: (
