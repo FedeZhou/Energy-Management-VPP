@@ -1,0 +1,71 @@
+# Plan example: the time-block car park of plan_ev_timeblock_nl.yaml with DEVICE UNCERTAINTY switched on (guide gap
+# G3, sim/device.py). Same site, contract, data and controller; only the devices are less ideal than the controller
+# believes:
+# - battery SoC estimate: starts 15 points high (Accure via ESS News 2025: +-15% is typical for LFP) and drifts with
+#   use, 0.01 (systematic) and 0.1 (random, std) per capacity cycled (Braendle and Hug 2026, arXiv 2604.12594, Table I,
+#   converted to per-capacity units by us); recalibrated near full and empty;
+# - battery power tapers above 80% (charge) and below 20% (discharge) SoC (CC-CV; ACN-Sim's two-stage model, the
+#   discharge breakpoint is an example choice);
+# - cars draw less near full (same model; car battery and SoC assumed, see EVCharger.charging_curve).
+# Seed 0 for the SoC drift. All parameter sources are in sim/model.py. Data, sizes, contract and price adder are those
+# of plan_ev_timeblock_nl.yaml (see its notes; the Utrecht EV sessions are CC BY-NC-SA 4.0: non-commercial use only).
+#
+# Checked with the simulator on 2026-11-22 (full year, seed 0; ideal devices = plan_ev_timeblock_nl.yaml):
+#   controller                 devices          days kept   total cost   EV unmet (sessions)   battery plan shortfall
+#   peak_shaving (this file)   ideal            350 / 365   EUR 173,330  2,006 kWh (276)       0
+#   peak_shaving               uncertain        349 / 365   EUR 173,314  2,137 kWh (320)       2,597 kWh in 983 h
+#   mpc, realistic forecasts   ideal            341 / 365   EUR 167,194  3,985 kWh (391)       0
+#   mpc, realistic forecasts   uncertain        340 / 365   EUR 167,191  4,845 kWh (922)       5,654 kWh in 1,226 h
+# One at a time (peak_shaving / mpc): SoC error alone 350 / 342 days, EV unmet 2,006 / 4,053 kWh; battery taper alone
+# 349 / 340 days, 2,045 / 4,075 kWh; car charging curves alone 350 / 341 days, 2,100 / 4,759 kWh. Largest SoC
+# estimate error in the year: 0.26 (rule) and 0.33 (mpc). Reading: the limit is kept on about as many days, because
+# the engine's safety layer slows the cars when the battery cannot deliver; the cost of the gap shows up as car energy
+# not delivered (mostly the car charging curves) and as plans the battery could not follow (shortfall). The rule never
+# plans with the state of charge, so the SoC error alone changes nothing physical for it (its shortfall counts only
+# requests the battery could not meet). Costs fall slightly because less car energy is bought.
+# Seeds 1-3 (mpc, uncertain): 341 days each, EV unmet 4,806-4,824 kWh, shortfall 5,605-6,001 kWh: the +-1 day above
+# is noise; the EV and shortfall figures are stable.
+label: Business car park, time-block contract, uncertain devices (NL)
+description: >-
+  The time-block car park with uncertain devices: the battery's state-of-charge estimate is off and drifts, its power
+  tapers near full and empty, and cars draw less near full. Same office, 20 Utrecht commuters, 100 kWp of solar,
+  150 kWh battery and 250 / 110 kW time-block contract (illustrative) as the ideal-device example. One year, hourly.
+  Compare the days the limit holds.
+site:
+  name: Business car park on a time-block contract (uncertain devices)
+  mode: plan
+  start: 2025-10-06
+  days: 365
+  step_minutes: 60
+  grid:
+    import_limit_kw: 250
+    contract_windows:
+      - {start: "08:00", end: "12:00", days: [mon, tue, wed, thu, fri], import_limit_kw: 110}
+    reliability_target: 0.9
+  tariff: {price_profile: ec/nl_da, price_adder: 0.144}
+  controller: {battery: peak_shaving, peak_threshold_kw: 250, ev: spread_until_departure}
+  assets:
+    - {type: building, id: office, name: "Office (5,000 m²)", load_profile: comstock/ca_mediumoffice, scale: 5, ui: {x: 80, y: 0}}
+    - {type: pv, id: pv, name: Roof solar, capacity_kwp: 100, profile: om/amsterdam_south30, ui: {x: 80, y: 200}}
+    - {type: battery, id: battery, name: Battery, capacity_kwh: 150, power_kw: 75, power_taper: cc_cv,
+       soc_error_initial: 0.15, soc_error_drift_bias: 0.01, soc_error_drift_std: 0.1, soc_error_seed: 0, ui: {x: 80, y: 400}}
+    - {type: ev_charger, id: c1, name: Bay 1, sessions: utwente/EV102, charging_curve: cc_cv, ui: {x: 760, y: -40}}
+    - {type: ev_charger, id: c2, name: Bay 2, sessions: utwente/EV104, charging_curve: cc_cv, ui: {x: 760, y: 80}}
+    - {type: ev_charger, id: c3, name: Bay 3, sessions: utwente/EV117, charging_curve: cc_cv, ui: {x: 760, y: 200}}
+    - {type: ev_charger, id: c4, name: Bay 4, sessions: utwente/EV137, charging_curve: cc_cv, ui: {x: 760, y: 320}}
+    - {type: ev_charger, id: c5, name: Bay 5, sessions: utwente/EV149, charging_curve: cc_cv, ui: {x: 760, y: 440}}
+    - {type: ev_charger, id: c6, name: Bay 6, sessions: utwente/EV156, charging_curve: cc_cv, ui: {x: 1020, y: -40}}
+    - {type: ev_charger, id: c7, name: Bay 7, sessions: utwente/EV164, charging_curve: cc_cv, ui: {x: 1020, y: 80}}
+    - {type: ev_charger, id: c8, name: Bay 8, sessions: utwente/EV249, charging_curve: cc_cv, ui: {x: 1020, y: 200}}
+    - {type: ev_charger, id: c9, name: Bay 9, sessions: utwente/EV266, charging_curve: cc_cv, ui: {x: 1020, y: 320}}
+    - {type: ev_charger, id: c10, name: Bay 10, sessions: utwente/EV273, charging_curve: cc_cv, ui: {x: 1020, y: 440}}
+    - {type: ev_charger, id: c11, name: Bay 11, sessions: utwente/EV305, charging_curve: cc_cv, ui: {x: 1280, y: -40}}
+    - {type: ev_charger, id: c12, name: Bay 12, sessions: utwente/EV403, charging_curve: cc_cv, ui: {x: 1280, y: 80}}
+    - {type: ev_charger, id: c13, name: Bay 13, sessions: utwente/EV476, charging_curve: cc_cv, ui: {x: 1280, y: 200}}
+    - {type: ev_charger, id: c14, name: Bay 14, sessions: utwente/EV559, charging_curve: cc_cv, ui: {x: 1280, y: 320}}
+    - {type: ev_charger, id: c15, name: Bay 15, sessions: utwente/EV99, charging_curve: cc_cv, ui: {x: 1280, y: 440}}
+    - {type: ev_charger, id: c16, name: Bay 16, sessions: utwente/EV92, charging_curve: cc_cv, ui: {x: 1540, y: -40}}
+    - {type: ev_charger, id: c17, name: Bay 17, sessions: utwente/EV258, charging_curve: cc_cv, ui: {x: 1540, y: 80}}
+    - {type: ev_charger, id: c18, name: Bay 18, sessions: utwente/EV284, charging_curve: cc_cv, ui: {x: 1540, y: 200}}
+    - {type: ev_charger, id: c19, name: Bay 19, sessions: utwente/EV509, charging_curve: cc_cv, ui: {x: 1540, y: 320}}
+    - {type: ev_charger, id: c20, name: Bay 20, sessions: utwente/EV177, charging_curve: cc_cv, ui: {x: 1540, y: 440}}
