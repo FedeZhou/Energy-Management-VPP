@@ -49,6 +49,7 @@ from emsbench.sim.model import (
     SolarPV,
 )
 from emsbench.sim.profiles import Profile, ProfileLibrary
+from emsbench.sim.uncertainty import QUANTILE_DAYS, NetLoadUncertainty, persistence_errors, scenario_days
 from emsbench.sim.wear import MAX_YEARS, default_replacement_cost, expected_life, wear_price_per_kwh
 
 FloatArray = NDArray[np.float64]
@@ -71,6 +72,9 @@ class SimResult:
     # Contract reliability KPIs (benchmark/reliability.py); kept apart from `kpis` because they can be None
     # (no limit) and include a date.
     reliability: dict[str, float | int | bool | str | None] = field(default_factory=dict)
+    # Calibration of the probabilistic net-load forecast (realistic forecasts only, sim/uncertainty.py); None values
+    # where it cannot be evaluated.
+    calibration: dict[str, float | int | None] = field(default_factory=dict)
 
     @property
     def step_hours(self) -> float:
@@ -266,9 +270,13 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
             accepted.append(FutureSession(int(a), int(dep), float(s.energy_kwh), mx, mn, car_phase))
             free_from = int(dep)
         upcoming.append(accepted)
+    uncertainty: NetLoadUncertainty | None = None
     if site.controller.forecast == "realistic":
         forecast = _realistic_forecast(site, lib, actual, used, start, T, step_s, pvs, warnings)
         forecast.ev_visits = upcoming
+        uncertainty = _net_load_uncertainty(site, lib, used, forecast, T, step_s, pvs)
+        if site.controller.battery == "mpc" and site.controller.mpc_execution == "chance":
+            forecast.uncertainty = uncertainty
     else:
         forecast = PerfectForecast(actual, upcoming, int(round(86400 / step_s)))
 
@@ -632,11 +640,112 @@ def simulate(site: Site, lib: ProfileLibrary) -> SimResult:
         assets[h.id] = {"power_kw": rec_hp[j], "heat_kw": hp_heat[j], "cop": hp_cop[j],
                         "buffer": rec_hp_buf[j] / hp_cap[j] if hp_cap[j] > 0 else np.zeros(T)}
 
+    calibration = _calibration(site, uncertainty, T, warnings)
     return SimResult(start, site.step_minutes, month, site_series, assets, k, sessions_out, sources,
-                     price_profile.currency, warnings, rel.as_dict())
+                     price_profile.currency, warnings, rel.as_dict(), calibration)
+
+
+def _calibration(site: Site, unc: NetLoadUncertainty | None, T: int,
+                 warnings: list[str]) -> dict[str, float | int | None]:
+    """Was the probabilistic net-load forecast calibrated on this run? (sim/uncertainty.py)
+
+    forecast_quantile_level q (= the reliability target); forecast_quantile_exceed_share: share of steps whose actual
+    net load exceeded the q-quantile forecast made a step earlier, against forecast_quantile_exceed_expected = 1 - q
+    (calibrated if close; higher = the forecast was overconfident); forecast_quantile_steps: steps evaluated.
+    Chance MPC only: chance_backoff_days N, chance_backoff_exceed_share (steps whose error exceeded the margin) against
+    chance_backoff_exceed_allowed = 1 - target.
+    """
+    q = site.grid.reliability_target
+    out: dict[str, float | int | None] = {
+        "forecast_quantile_level": None, "forecast_quantile_exceed_share": None,
+        "forecast_quantile_exceed_expected": None, "forecast_quantile_steps": None,
+        "chance_backoff_days": None, "chance_backoff_exceed_share": None, "chance_backoff_exceed_allowed": None,
+    }
+    if unc is None:
+        return out
+    share, n = unc.calibration(T, q)
+    out.update(forecast_quantile_level=q, forecast_quantile_exceed_share=share,
+               forecast_quantile_exceed_expected=1.0 - q, forecast_quantile_steps=n)
+    c = site.controller
+    if c.battery == "mpc" and c.mpc_execution == "chance":
+        b_share, b_n = unc.backoff_exceedance(T)
+        out.update(chance_backoff_days=unc.backoff_days, chance_backoff_exceed_share=b_share,
+                   chance_backoff_exceed_allowed=1.0 - q)
+        if b_n < T:
+            warnings.append(f"Chance MPC: the safety margin needs {unc.backoff_days} days of past forecast errors; "
+                            f"{T - b_n} of {T} steps had fewer (less history before the run), so their margin is less "
+                            "certain.")
+    return out
 
 
 HISTORY_DAYS = 8  # days of data before the run handed to realistic forecasts (scenario MPC replays up to 7)
+
+
+def _net_load_uncertainty(site: Site, lib: ProfileLibrary, used: dict[tuple[str, str], tuple[Profile, dt.datetime]],
+                          forecast: RealisticForecast, T: int, step_s: int, pvs: list[SolarPV]) -> NetLoadUncertainty:
+    """Past errors of the realistic net-load forecast, for quantile forecasts and the chance MPC's margin.
+
+    Uses as many whole days before the run as the quantiles and the margin need, or as many as all the data has
+    (only genuine data, never a repeated day), then the run itself. A query at step t reads only errors before t
+    (sim/uncertainty.py).
+    """
+    day = int(round(86400 / step_s))
+    c = site.controller
+    chance = c.battery == "mpc" and c.mpc_execution == "chance"
+    n_back = scenario_days(site.grid.reliability_target, c.mpc_chance_confidence) if chance else 0
+    want = max(QUANTILE_DAYS, n_back) + 1  # one more: the first day's error needs the day before it
+    hist: tuple[FloatArray, FloatArray, FloatArray | None] | None = None
+    for days in range(want, 1, -1):
+        hist = _history(site, lib, used, days * day, step_s, pvs, forecast.pv_dayahead is not None)
+        if hist is not None:
+            break
+    load_run, pv_run = forecast.actual["load"][:T], forecast.actual["pv"][:T]
+    pv_fc_run = forecast.pv_dayahead[:T] if forecast.pv_dayahead is not None else None
+    if hist is None:
+        load, pv, pv_fc = load_run, pv_run, pv_fc_run
+    else:
+        load, pv = np.concatenate([hist[0], load_run]), np.concatenate([hist[1], pv_run])
+        pv_fc = None
+        if pv_fc_run is not None:  # no archived forecast before the run: NaN, so those errors stay unknown
+            before = hist[2] if hist[2] is not None else np.full(hist[1].size, np.nan)
+            pv_fc = np.concatenate([before, pv_fc_run])
+    return NetLoadUncertainty(persistence_errors(load, pv, pv_fc, day), load.size - T, day, n_back)
+
+
+def _history(site: Site, lib: ProfileLibrary, used: dict[tuple[str, str], tuple[Profile, dt.datetime]], steps: int,
+             step_s: int, pvs: list[SolarPV],
+             with_pv_forecast: bool) -> tuple[FloatArray, FloatArray, FloatArray | None] | None:
+    """Load (with heat pumps on demand), solar and archived solar forecast for the `steps` steps before the run,
+    continuous with the run's data; None if any load or solar series has less history (the forecast alone may be
+    None)."""
+    def before(asset_id: str, kind: str) -> FloatArray | None:
+        p, src = used[(asset_id, kind)]
+        return p.before(src, steps, step_s)
+
+    load = np.zeros(steps)
+    for a in site.assets:
+        if isinstance(a, Building | DataCenter):
+            b = before(a.id, "load")
+            if b is None:
+                return None
+            load += b * (a.scale if isinstance(a, Building) else a.it_scale * a.pue)
+        elif isinstance(a, HeatPump):
+            q, cop = before(a.id, "heat"), before(a.id, "cop")
+            if q is None or cop is None:
+                return None
+            load += q * a.annual_heat_kwh / np.maximum(cop, 1.0)
+    pv = np.zeros(steps)
+    pv_fc: FloatArray | None = np.zeros(steps) if with_pv_forecast else None
+    for p in pvs:
+        b = before(p.id, "pv")
+        if b is None:
+            return None
+        pv += b * p.capacity_kwp
+        if pv_fc is not None:
+            fc = lib.profiles.get(f"{p.profile}@dayahead")
+            f = fc.before(used[(p.id, "pv")][1], steps, step_s) if fc is not None else None
+            pv_fc = None if f is None else pv_fc + f * p.capacity_kwp
+    return load, pv, pv_fc
 
 
 def _realistic_forecast(site: Site, lib: ProfileLibrary, actual: dict[str, FloatArray],

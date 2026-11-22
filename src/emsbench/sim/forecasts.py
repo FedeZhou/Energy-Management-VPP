@@ -21,6 +21,10 @@ Realistic forecasts use only information a real controller would have at step t:
   day-ahead operating envelope would be handled like day-ahead prices;
 - cars: unknown until they plug in. Once plugged in, departure and energy are known, as if the driver
   had entered them in an app.
+
+A realistic forecast can also say how uncertain its net load is (`sim/uncertainty.py`): series "net_backoff" is the
+safety margin (kW) a chance-constrained MPC subtracts from the import limit, computed from the forecast's own past
+errors. A perfect forecast has no such series (its errors are zero).
 """
 
 from __future__ import annotations
@@ -30,6 +34,8 @@ from typing import Protocol
 
 import numpy as np
 from numpy.typing import NDArray
+
+from emsbench.sim.uncertainty import NetLoadUncertainty
 
 FloatArray = NDArray[np.float64]
 
@@ -119,6 +125,7 @@ class RealisticForecast:
     first_step_of_day: int  # steps from midnight to the run's first step
     price_published_step: int | None  # step of the day when tomorrow's prices are published; None = known
     ev_visits: list[list[FutureSession]] = field(default_factory=list)  # per charger; only past ones are used
+    uncertainty: NetLoadUncertainty | None = None  # past forecast errors, for "net_backoff"
 
     def scenario(self, back: int) -> HistoryScenario:
         """A possible future replayed from `back` + 1 days ago (see HistoryScenario)."""
@@ -134,6 +141,10 @@ class RealisticForecast:
             return persistence(self.pv_before, self.actual["pv"], t, steps, d)
         if name in ("price", "export_price"):  # both follow the day-ahead price, so both are known once published
             return self._published(name, t, steps)
+        if name == "net_backoff":
+            if self.uncertainty is None:
+                raise KeyError(name)
+            return self.uncertainty.backoff(t, steps)
         return _pad(self.actual[name], t, steps, d)
 
     def known_until(self, t: int) -> int:

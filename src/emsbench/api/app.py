@@ -125,8 +125,9 @@ def _series(arr: FloatArray, digits: int = 3) -> list[float | None]:
 
 
 def _kpis(r: SimResult) -> dict[str, Any]:
-    """Numeric KPIs rounded, plus the contract-reliability KPIs (null when the site has no import limit)."""
-    rel = {k: round(v, 4) if isinstance(v, float) else v for k, v in r.reliability.items()}
+    """Numeric KPIs rounded, plus the contract-reliability KPIs (null when the site has no import limit) and the
+    forecast-calibration KPIs (null without realistic forecasts)."""
+    rel = {k: round(v, 4) if isinstance(v, float) else v for k, v in {**r.reliability, **r.calibration}.items()}
     return {**{k: round(v, 4) for k, v in r.kpis.items()}, **rel}
 
 

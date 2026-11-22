@@ -418,7 +418,7 @@ EVStrategy = Literal["as_fast_as_possible", "spread_until_departure", "cheapest_
 HeatPumpStrategy = Literal["on_demand", "cheap_hours", "solar_surplus"]
 EVDischargeStrategy = Literal["never", "high_prices"]
 ForecastMode = Literal["perfect", "realistic"]
-MPCExecution = Literal["plan", "hybrid", "cautious"]
+MPCExecution = Literal["plan", "hybrid", "cautious", "chance"]
 
 
 class ControllerSpec(BaseModel):
@@ -457,10 +457,26 @@ class ControllerSpec(BaseModel):
         "may be wrong: use the meter for the current step; never let the battery trade extra with the grid to make up "
         "for a forecast error; value energy left at the end of the plan net of the wear of using it; store energy now "
         "rather than later when the cost is the same (the last two change the plan itself, not only how it is "
-        "followed).",
+        "followed). chance: cautious, and in addition plans against the import limit minus a safety margin, so that "
+        "the limit holds with the reliability target's probability even when the load turns out higher than "
+        "forecast. The margin for each hour is the largest amount by which the net load (load minus solar) exceeded "
+        "its forecast at that hour over recent days (needs realistic forecasts; with perfect ones it equals cautious).",
         source="hybrid: design choice, local self-consumption control with a planning layer on top, as in the layered "
         "architectures on the Learn page 'Control layers and time scales'. cautious: our own design, tuned on drivers "
-        "the full-year study does not use (results/study_home_de/README_cautious.md)",
+        "the full-year study does not use (results/study_home_de/README_cautious.md). chance: constraint tightening "
+        "(guide section 7.2, Figure 14) with the margin from the scenario approach (guide section 4.2; Campi, Garatti "
+        "and Prandini, Handbook of MPC) on the forecast's own past errors (non-parametric, as Babic et al. 2023)",
+    )
+    mpc_chance_confidence: float = param(
+        0.95, "Chance MPC: confidence", ge=0.5, le=0.999,
+        help="Only used by mpc with execution 'chance'. How sure the safety margin should be of meeting the "
+        "reliability target at each hour. It sets how many past days the margin looks back over: the fewest days N "
+        "with target^N <= 1 - confidence (29 days for a 90% target at 95% confidence). Higher: a longer look-back "
+        "and a larger, costlier margin.",
+        source="Scenario approach, guide section 4.2: the chance that a margin covering all N sampled days fails more "
+        "often than eps on new days is at most (1 - eps)^N (Campi, Garatti and Prandini, Handbook of MPC, "
+        "https://marco-campi.unibs.it/pdf-pszip/Handbook%20MPC.pdf). 95% is our choice (a common confidence level; "
+        "the guide's example uses 99.9% with 66 days)",
     )
     mpc_scenarios: int = param(
         1, "MPC scenarios", ge=1, le=10,
