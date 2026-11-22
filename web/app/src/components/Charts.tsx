@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts/core";
 import { BarChart, LineChart } from "echarts/charts";
-import { AxisPointerComponent, DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TitleComponent, TooltipComponent } from "echarts/components";
+import {
+  AxisPointerComponent, DataZoomComponent, GridComponent, LegendComponent, MarkAreaComponent, MarkLineComponent, TitleComponent, TooltipComponent,
+} from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import { importLimitSeries } from "../api";
 import { useStore } from "../store";
@@ -9,7 +11,20 @@ import { useTheme } from "../theme";
 import { dayLabel, isMidnight, num, readVar, stepLabel, timeAt, UNIT_SPACE } from "../util";
 
 echarts.use([LineChart, BarChart, GridComponent, TooltipComponent, DataZoomComponent, LegendComponent, AxisPointerComponent,
-  TitleComponent, MarkLineComponent, CanvasRenderer]);
+  TitleComponent, MarkLineComponent, MarkAreaComponent, CanvasRenderer]);
+
+/** Contiguous runs of steps where `v` > 0, as [first, last] index pairs (for shading spans). */
+function spans(v: number[] | undefined): [number, number][] {
+  const out: [number, number][] = [];
+  if (!v) return out;
+  let a = -1;
+  for (let i = 0; i <= v.length; i++) {
+    const on = i < v.length && v[i] > 1e-6;
+    if (on && a < 0) a = i;
+    if (!on && a >= 0) { out.push([a, i - 1]); a = -1; }
+  }
+  return out;
+}
 
 // Stacked panels share one time axis. Series colours are the energy tokens (styles.css), validated
 // as a categorical set in both themes; identity is also carried by the legend and by line style
@@ -18,6 +33,8 @@ interface Panel { key: string; title: string; height: number }
 const GAP = 40; // between panels: room for the next panel's title
 const LEGEND_H = 30; // the legend has its own row, so it never collides with a panel title
 const LEFT = 56;
+const EST_NAME = "SoC as estimated";
+const SHORT_NAME = "Battery fell short";
 const RIGHT = 20;
 
 /** Axis numbers: thousands separators, no needless decimals. */
@@ -135,8 +152,30 @@ export function Charts() {
     if (idx.flex !== undefined) {
       series.push({ name: "Battery", type: "bar", data: s.battery_kw, xAxisIndex: idx.flex, yAxisIndex: idx.flex, barCategoryGap: "15%", itemStyle: { color: batt, borderRadius: 1 }, large: true });
       legend.push("Battery");
+      // Plan shortfall: steps where the battery delivered less than the controller asked (SoC estimate off, or power
+      // tapering). A state, not a flow: faint --bad bands behind the bars, named in the legend and, through an
+      // invisible line carrying the kW, in the tooltip.
+      const short = s.battery_shortfall_kw;
+      const runs = spans(short);
+      if (runs.length) {
+        series.push({
+          ...lineS(SHORT_NAME, short.map((q) => (q > 1e-6 ? q : null)) as number[], bad, idx.flex, { lineStyle: { width: 0, color: bad, opacity: 0 }, connectNulls: false, sampling: undefined, z: 0 }),
+          markArea: { silent: true, itemStyle: { color: bad, opacity: dark ? 0.16 : 0.14 },
+            data: runs.map(([a, b]) => [{ xAxis: a }, { xAxis: b }]) },
+        });
+        legend.push({ name: SHORT_NAME, icon: "rect" });
+      }
     }
-    if (idx.soc !== undefined) series.push(lineS("Battery charge", s.soc.map((q) => q * 100), batt, idx.soc, { areaStyle: { color: batt, opacity: 0.14 } }));
+    if (idx.soc !== undefined) {
+      series.push(lineS("Battery charge", s.soc.map((q) => q * 100), batt, idx.soc, { areaStyle: { color: batt, opacity: 0.14 } }));
+      // What the battery management system believed (device uncertainty). Only when it differs from the truth at the
+      // precision shown (half a percentage point): dashed ink-2, so it reads as a reading, not as a second battery.
+      const est = s.soc_estimate;
+      if (Array.isArray(est) && est.some((q, i) => Math.abs(q - s.soc[i]) > 0.005)) {
+        series.push(lineS(EST_NAME, est.map((q) => q * 100), ink2, idx.soc, { lineStyle: { width: 1.25, color: ink2, type: [4, 3] } }));
+        legend.push({ name: EST_NAME, icon: dashedKey });
+      }
+    }
     const phaseNames = ["L1", "L2", "L3"];
     if (idx.phase !== undefined) {
       const fuse = site.grid.fuse_a;
@@ -180,7 +219,7 @@ export function Charts() {
           const i = ps[0].dataIndex;
           const fmt = (n: string, val: number) => n === "Import price" ? `${cur}${num(val, 3)}/kWh`
             : phaseNames.includes(n) ? `${num(val, 1)}${UNIT_SPACE}A`
-              : n === "Battery charge" ? `${num(val, 0)}%` : `${num(val, Math.abs(val) >= 100 ? 0 : 1)}${UNIT_SPACE}kW`;
+              : n === "Battery charge" || n === EST_NAME ? `${num(val, 0)}%` : `${num(val, Math.abs(val) >= 100 ? 0 : 1)}${UNIT_SPACE}kW`;
           const row = (marker: string, name: string, text: string, strongRow = false) => `<div style="display:flex;align-items:center;gap:8px;line-height:20px">${marker}<span style="flex:1;color:${strongRow ? ink : ink2}">${name}</span><b style="font-weight:${strongRow ? 600 : 500};font-family:${mono};font-size:11.5px;font-variant-numeric:tabular-nums">${text}</b></div>`;
           // A null is "no value at this step" (the import limit where the contract sets none): no row.
           const rows = ps.filter((p) => p.value != null).map((p) => row(p.marker, p.seriesName, fmt(p.seriesName, Number(p.value))));

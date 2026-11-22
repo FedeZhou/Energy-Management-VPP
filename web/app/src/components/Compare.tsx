@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FolderOpen, Loader2, Pin, X } from "lucide-react";
+import { AlertTriangle, FolderOpen, Loader2, Pin, X } from "lucide-react";
 import * as echarts from "echarts/core";
 import { LineChart } from "echarts/charts";
 import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import type { Site } from "../api";
+import { evService, floorKwh, floorOf, shortReason, useFloors, usePlanner } from "../planner";
+import { floorText } from "./Planner";
 import { benchmarkAxis, useScenarios, type Scenario } from "../scenarios";
 import { useStore } from "../store";
 import { useTheme } from "../theme";
-import { dayLabel, isMidnight, kw, money, num, pct, qty, readVar, timeAt } from "../util";
+import { dayLabel, isMidnight, kw, money, num, pct, pctFine, qty, readVar, timeAt } from "../util";
 import { Help } from "./Help";
 import { PRETTY } from "./Inspector";
 
@@ -48,6 +50,18 @@ export function Compare() {
   const m = (v: number) => money(v, cur);
   const sites = list.map((s) => s.site);
   const any = (t: string) => (ss: Site[]) => ss.some((s) => s.assets.some((a) => a.type === t));
+  // Service-level rule (same tolerance as the Size & contract planner): a run that left the cars more than the
+  // tolerance short is not feasible; it stays in the table, greyed, but cannot be "best".
+  const tol = usePlanner((s) => s.evTolerance);
+  // The no-limit floor per site (planner.ts evFloor), measured once per distinct site and shared with the planner.
+  const floors = useFloors((s) => s.floors);
+  useEffect(() => { for (const sc of list) void useFloors.getState().ensure(sc.site); }, [list]);
+  const svc = (sc: Scenario) => evService(sc.result.result.kpis, tol, floorKwh(floorOf(floors, sc.site)));
+  const feasible = (sc: Scenario) => svc(sc)?.feasible ?? true;
+  const anyEv = list.some((sc) => svc(sc));
+  const anyInfeasible = list.some((sc) => !feasible(sc));
+  const firstEv = list.find((sc) => svc(sc));
+  const beyond = firstEv && floorKwh(floorOf(floors, firstEv.site)) > 0.05 ? " beyond that" : "";
 
   const allColumns: Column[] = [
     { key: "total_cost", title: "Total cost", fmt: m, lower: true, show: () => true },
@@ -60,8 +74,11 @@ export function Compare() {
     { key: "battery_life_years", title: "Battery life", fmt: (v) => qty(v, "yr", 1), lower: false, show: any("battery") },
   ];
   const columns = allColumns.filter((c) => c.show(sites));
+  // "Best" is awarded among feasible runs only (a run that skipped the cars' energy is cheaper and lower-peaked by
+  // construction); the EV column itself compares every run.
   const best = (c: Column) => {
-    const vals = list.map((s) => s.result.result.kpis[c.key]).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+    const pool = c.key === "ev_unmet_kwh" ? list : list.filter(feasible);
+    const vals = pool.map((s) => s.result.result.kpis[c.key]).filter((v): v is number => typeof v === "number" && Number.isFinite(v));
     if (!vals.length) return null;
     const lo = Math.min(...vals), hi = Math.max(...vals);
     if (hi - lo < 1e-9) return null; // all equal: nothing is "best"
@@ -107,6 +124,7 @@ export function Compare() {
                 <tr>
                   <th>Scenario</th>
                   {columns.map((c) => <th key={c.key}>{c.title}</th>)}
+                  {anyEv && <th title={`Share of the cars' requested energy delivered; feasible if at most ${pctFine(tol)} is left undelivered`}>EV served</th>}
                   <th>vs best</th>
                   <th title="Overlay grid power below (up to three)">Overlay</th>
                   <th aria-label="Actions" />
@@ -117,8 +135,12 @@ export function Compare() {
                   const k = sc.result.result.kpis;
                   const cost = k[costKey];
                   const vs = bestCost != null && Math.abs(bestCost) > 1e-9 ? ((cost - bestCost) / Math.abs(bestCost)) * 100 : 0;
+                  const e = svc(sc);
+                  const ok = feasible(sc);
+                  const vsText = bestCost == null ? "—" : vs < 0.05 && ok ? "best" : `${vs < 0 ? "−" : "+"}${num(Math.abs(vs), 1)}%`;
                   return (
-                    <tr key={sc.id} className={sc.result === result ? "current" : ""}>
+                    <tr key={sc.id} className={`${sc.result === result ? "current" : ""} ${ok ? "" : "cmp-infeasible"}`}
+                      title={e && !ok ? `Not feasible: ${shortReason(e)} (service level ${pctFine(tol)})` : undefined}>
                       <td>
                         <input className="cmp-name" value={sc.name} placeholder={label(sc, list)} aria-label="Scenario name"
                           onChange={(e) => rename(sc.id, e.target.value)} />
@@ -126,10 +148,18 @@ export function Compare() {
                       {columns.map((c) => {
                         const v = k[c.key];
                         const b = best(c);
-                        const isBest = typeof v === "number" && b != null && Math.abs(v - b) < 1e-9 && list.length > 1;
+                        const isBest = typeof v === "number" && b != null && Math.abs(v - b) < 1e-9 && list.length > 1
+                          && (ok || c.key === "ev_unmet_kwh");
                         return <td key={c.key} className={isBest ? "best" : ""}>{typeof v === "number" ? c.fmt(v) : "—"}</td>;
                       })}
-                      <td className={bestCost != null && vs < 0.05 ? "best" : ""}>{bestCost == null ? "—" : vs < 0.05 ? "best" : `+${num(vs, 1)}%`}</td>
+                      {anyEv && (
+                        <td>
+                          {!e ? "—" : ok ? pctFine(e.served) : (
+                            <span className="kpi-status bad"><AlertTriangle size={12} aria-hidden /><span>{pctFine(e.served)} · not feasible</span></span>
+                          )}
+                        </td>
+                      )}
+                      <td className={vsText === "best" ? "best" : ""}>{vsText}</td>
                       <td><input type="checkbox" checked={overlay.includes(sc.id)} onChange={() => toggle(sc.id)}
                         disabled={!overlay.includes(sc.id) && overlay.length >= 3} aria-label={`Overlay ${label(sc, list)}`} /></td>
                       <td className="cmp-row-actions">
@@ -142,6 +172,15 @@ export function Compare() {
               </tbody>
             </table>
           </div>
+          {anyEv && (
+            <p className="pl-caption">
+              {firstEv ? `${floorText(floorOf(floors, firstEv.site), firstEv.site.step_minutes)} ` : ""}
+              {anyInfeasible
+                ? `Greyed rows are not feasible: they left more than ${pctFine(tol)} of the cars' energy undelivered${beyond}, so they cannot be "best", and "vs best" compares with feasible runs only. `
+                : `Every run is feasible (at most ${pctFine(tol)} of the cars' energy undelivered${beyond}). `}
+              The service level is set in Size & contract. <Help topic="serviceLevel" />
+            </p>
+          )}
           <CostGap list={list} costKey={costKey} fmt={m} />
           <Overlay list={list.filter((s) => overlay.includes(s.id))} labels={list.filter((s) => overlay.includes(s.id)).map((s) => label(s, list))} />
         </>

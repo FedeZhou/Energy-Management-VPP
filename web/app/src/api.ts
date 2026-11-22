@@ -85,7 +85,8 @@ export interface Site {
     network_fee_profile?: string };
   controller: {
     battery: string; peak_threshold_kw: number; ev: string; heat_pump?: string; ev_discharge?: string;
-    forecast?: "perfect" | "realistic"; mpc_execution?: "plan" | "hybrid" | "cautious";
+    forecast?: "perfect" | "realistic"; mpc_execution?: "plan" | "hybrid" | "cautious" | "chance";
+    mpc_chance_confidence?: number;
   };
   assets: Asset[];
 }
@@ -150,6 +151,29 @@ export function reliabilityOf(kpis: Record<string, number>): LimitReliability | 
   const k = kpis as unknown as Partial<Record<keyof LimitReliability, unknown>>;
   if (typeof k.limit_days_kept_share !== "number" || typeof k.limit_days_evaluated !== "number") return null;
   return kpis as unknown as LimitReliability;
+}
+
+/** Calibration of the probabilistic net-load forecast (sim/engine.py _calibration), present with realistic
+ *  forecasts; the back-off fields only for the chance MPC. Null fields mean "not evaluated". */
+export interface Calibration {
+  /** The quantile forecast's level q (= the reliability target), the share of steps whose net load came out above
+   *  it, and the share expected for a calibrated forecast (1 - q). */
+  quantileLevel: number;
+  quantileExceedShare: number;
+  quantileExceedExpected: number;
+  /** Chance MPC: look-back N (days), share of steps whose forecast error exceeded the safety margin, share allowed. */
+  backoffDays: number | null;
+  backoffExceedShare: number | null;
+  backoffExceedAllowed: number | null;
+}
+
+export function calibrationOf(kpis: Record<string, number>): Calibration | null {
+  const k = kpis as unknown as Record<string, unknown>;
+  const n = (key: string) => (typeof k[key] === "number" && Number.isFinite(k[key]) ? (k[key] as number) : null);
+  const q = n("forecast_quantile_level"), share = n("forecast_quantile_exceed_share"), exp = n("forecast_quantile_exceed_expected");
+  if (q == null || share == null || exp == null) return null;
+  return { quantileLevel: q, quantileExceedShare: share, quantileExceedExpected: exp, backoffDays: n("chance_backoff_days"),
+    backoffExceedShare: n("chance_backoff_exceed_share"), backoffExceedAllowed: n("chance_backoff_exceed_allowed") };
 }
 
 /** The import limit per step (null = unlimited at that step), or null when the result has no such series

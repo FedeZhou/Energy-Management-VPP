@@ -22,6 +22,10 @@ export const PRETTY: Record<string, string> = {
   plan: "Follow the plan",
   hybrid: "Hybrid (rule + plan)",
   cautious: "Cautious (best with realistic forecasts)",
+  chance: "Chance (safety margin under the limit)",
+  cc_cv: "CC-CV (slower near full / empty)",
+  none: "None (full power at any charge)",
+  constant: "Constant (full power until done)",
   as_fast_as_possible: "As fast as possible",
   spread_until_departure: "Spread until departure",
   cheapest_hours: "Cheapest hours",
@@ -409,6 +413,19 @@ function Period({ site }: { site: Site }) {
   );
 }
 
+/** A note with the "Device uncertainty" help, placed right before the first device-uncertainty field (battery
+ *  taper and SoC estimate, car charging curve) so the reader meets the explanation where the settings start. */
+const DEVICE_FIELDS = ["power_taper", "charging_curve"];
+function deviceNote(fields: Field[]): Record<string, React.ReactNode> | undefined {
+  const i = fields.findIndex((f) => DEVICE_FIELDS.includes(f.name));
+  if (i < 1) return undefined;
+  return { [fields[i - 1].name]: (
+    <p className="sect-note device-note">
+      Device uncertainty (off by default): what the device really does, against what the controller believes. <Help topic="deviceUncertainty" />
+    </p>
+  ) };
+}
+
 export function Inspector() {
   const catalog = useStore((s) => s.catalog);
   const site = useStore((s) => s.site);
@@ -451,6 +468,7 @@ export function Inspector() {
           <HeadTools ids={["params"]} />
         </div>
         <Section id="params" title="Parameters" help={asset.type} fields={spec.fields.filter((f) => f.name !== "name")} values={asset}
+          after={deviceNote(spec.fields.filter((f) => f.name !== "name"))}
           summary={assetSpec(asset, (pid) => profiles?.load.find((p) => p.id === pid)?.label.split(" (")[0] ?? pid)}
           onChange={(n, v) => updateAsset(asset.id, { [n]: v })} />
       </aside>
@@ -467,6 +485,7 @@ export function Inspector() {
     (f.name !== "peak_threshold_kw" || site.controller.battery === "peak_shaving")
     && (!f.name.startsWith("mpc_") || mpc)
     && (f.name !== "mpc_scenarios" || site.controller.forecast === "realistic") // scenarios sample forecast errors
+    && (f.name !== "mpc_chance_confidence" || site.controller.mpc_execution === "chance") // read only by chance
     && (f.name !== "battery" || hasBattery || hasEv) // without a battery the optimiser can still plan EV charging
     && (f.name !== "ev" || hasEv)
     && (f.name !== "heat_pump" || hasHp)
@@ -509,7 +528,14 @@ export function Inspector() {
       <Section id="controller" title="Control strategy" help="controller" fields={ctrlFields} disabled={ctrlDisabled}
         summary={[hasBattery || hasEv ? `Battery: ${PRETTY[site.controller.battery] ?? site.controller.battery}` : "",
           hasEv && !mpc ? `EV: ${PRETTY[site.controller.ev] ?? site.controller.ev}` : ""].filter(Boolean).join(" · ") || "Nothing to control"}
-        values={site.controller} onChange={(n, v) => updateSection("controller", { [n]: v })}>
+        values={site.controller} onChange={(n, v) => updateSection("controller", { [n]: v })}
+        after={mpc && site.controller.mpc_execution === "chance" ? { mpc_execution: (
+          <p className="sect-note">
+            Plans every future hour under the import limit minus a margin learned from the forecast's past errors.
+            {site.controller.forecast !== "realistic" ? " With perfect forecasts there are no errors to learn from, so it behaves like Cautious: switch Forecasts to Realistic." : ""}
+            {" "}<Help topic="chanceMpc" />
+          </p>
+        ) } : undefined}>
         {!hasBattery && hasEv && <p className="sect-note">No battery here: of the battery strategies only Optimiser (MPC) has an effect, because it also plans EV charging.</p>}
       </Section>
       {selectedId !== METER_ID && grid}

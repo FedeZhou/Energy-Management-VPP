@@ -1,9 +1,9 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, ChevronDown, ChevronUp, Pause, Play, SkipBack, SkipForward } from "lucide-react";
-import { reliabilityOf, type LimitReliability } from "../api";
+import { calibrationOf, reliabilityOf, type Calibration, type LimitReliability } from "../api";
 import { useScenarios } from "../scenarios";
 import { useStore } from "../store";
-import { dayLabel, kw, money, num, pct, pts, qty, signed, stepLabel, timeAt } from "../util";
+import { dayLabel, kw, money, num, pct, pctFine, pts, qty, signed, stepLabel, timeAt } from "../util";
 import { Compare } from "./Compare";
 import { Planner } from "./Planner";
 import { ExportMenu } from "./Export";
@@ -21,7 +21,7 @@ interface Card {
 
 /** The tooltip of the "Limit kept" card, in plain words: days, energy over the limit, worst step, and the
  *  daily peak at the target share (P90 for a 90% target), which says how close the run came. */
-function reliabilityDetail(rel: LimitReliability, base: LimitReliability | null): string {
+function reliabilityDetail(rel: LimitReliability, base: LimitReliability | null, cal: Calibration | null, stepWord: string): string {
   const t = rel.limit_reliability_target;
   const lines = [`Import stayed under the limit at every step on ${num(rel.limit_days_kept)} of ${num(rel.limit_days_evaluated)} days `
     + `(target ${pct(t)} of days). Days without any limit are not counted.`];
@@ -41,7 +41,22 @@ function reliabilityDetail(rel: LimitReliability, base: LimitReliability | null)
     lines.push(`${p} daily peak: ${num(r, 2)} × the limit. ${pct(t)} of days peaked at or below ${pct(r)} of the limit at that time, ${how}.`);
   }
   if (base) lines.push(`Baseline: kept on ${pct(base.limit_days_kept_share)} of days, ${qty(base.limit_excess_kwh, "kWh", "auto")} above the limit.`);
+  if (cal) lines.push(...calibrationLines(cal, stepWord));
   return lines.join("\n");
+}
+
+/** Was the forecast's own uncertainty right on this run? (realistic forecasts; engine _calibration) In plain words:
+ *  the chance MPC's safety margin, then the quantile forecast. `stepWord` is "hours" or "steps". */
+function calibrationLines(cal: Calibration, stepWord: string): string[] {
+  const out: string[] = [];
+  if (cal.backoffExceedShare != null && cal.backoffExceedAllowed != null) {
+    out.push(`Chance MPC: forecast margin exceeded on ${pctFine(cal.backoffExceedShare)} of ${stepWord}, ${pctFine(cal.backoffExceedAllowed)} allowed`
+      + `${cal.backoffDays ? ` (margin = the largest forecast error at that time of day over the last ${num(cal.backoffDays)} days)` : ""}.`);
+  }
+  const q = `P${Math.round(cal.quantileLevel * 100)}`;
+  out.push(`Forecast check: net load came out above its ${q} forecast on ${pctFine(cal.quantileExceedShare)} of ${stepWord} `
+    + `(${pctFine(cal.quantileExceedExpected)} if the forecast knew its own uncertainty; more = overconfident, less = cautious).`);
+  return out;
 }
 
 /** Change against the baseline as a signed value, e.g. "−€20.25 (−60%)". Shares in percentage points
@@ -101,11 +116,28 @@ function Kpis() {
         detail: `${lifeTxt} Wear is not priced: set the battery's replacement cost (no default outside EUR sites).` });
     }
   }
+  // Plan shortfall (device uncertainty, sim/device.py): power the controller asked for, within what it believed the
+  // battery could do, that the battery did not deliver (SoC estimate off, or power tapering near full/empty).
+  if (has("battery") && k.battery_plan_shortfall_kwh > 0) {
+    const steps = k.battery_plan_shortfall_steps;
+    const errMax = k.battery_soc_error_max ?? 0, errMean = k.battery_soc_error_mean ?? 0;
+    const unit = r.time.step_minutes === 60 ? (steps === 1 ? "hour" : "hours") : (steps === 1 ? "step" : "steps");
+    cards.push({ label: "Plan shortfall", value: qty(k.battery_plan_shortfall_kwh, "kWh", "auto"),
+      delta: `in ${num(steps)} ${unit}`, good: false,
+      detail: `The battery delivered ${qty(k.battery_plan_shortfall_kwh, "kWh", "auto")} less than the controller asked for, in ${num(steps)} ${unit}. `
+        + (errMax > 0.0005
+          ? `The controller sees the battery's own state-of-charge estimate, which was off by up to ${num(errMax * 100, 0)} points (${num(errMean * 100, 1)} points on average). `
+          : "The state-of-charge estimate was exact, so this is the power tapering near full or empty. ")
+        + "The safety layer covers the gap by slowing cars or importing more: check EV energy and Limit kept." });
+  }
   if (has("ev_charger")) {
     const short = k.ev_unmet_kwh > 0.5;
+    const taper = (k.ev_taper_limited_kwh ?? 0) > 0.5
+      ? `. Cars took ${qty(k.ev_taper_limited_kwh, "kWh", 0)} less than offered because their charging slows near full (charging curve)` : "";
     cards.push({ label: "EV energy", value: qty(k.ev_delivered_kwh, "kWh", 0),
       delta: short ? `${qty(k.ev_unmet_kwh, "kWh", 1)} short` : "All targets met", good: short ? false : null,
-      detail: short ? `${k.ev_sessions_unmet} of ${k.ev_sessions} finished visits left short` : `${k.ev_sessions} finished visits` });
+      detail: (short ? `${k.ev_sessions_unmet} of ${k.ev_sessions} finished visits left short; ${pctFine(k.ev_unmet_kwh / Math.max(k.ev_delivered_kwh + k.ev_unmet_kwh, 1e-9))} of the energy the cars asked for undelivered`
+        : `${k.ev_sessions} finished visits`) + taper });
   }
   if (has("heat_pump")) {
     const unmet = k.hp_unmet_heat_kwh > 0.5;
@@ -134,7 +166,7 @@ function Kpis() {
       label: "Limit kept", value: `${pct(rel.limit_days_kept_share)} of days`,
       ...(relBase ? delta(rel.limit_days_kept_share, relBase.limit_days_kept_share, pts, false, false) : {}),
       status: { ok: met, text: met ? `Target ${pct(target)} met` : `Below ${pct(target)} target` },
-      detail: reliabilityDetail(rel, relBase),
+      detail: reliabilityDetail(rel, relBase, calibrationOf(k), r.time.step_minutes === 60 ? "hours" : "time steps"),
     });
   } else if (site.grid.import_limit_kw != null) {
     const over = k.grid_overload_kwh > 0.01;

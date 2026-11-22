@@ -1,7 +1,7 @@
 /* Export of a run as files: the time series and the KPI summary as CSV (RFC 4180, dot decimals, no
    thousands separators, UTF-8 with a BOM so Excel detects the encoding), plus safe file names.
    Pure functions, no DOM: the download itself lives in components/Export.tsx. */
-import { importLimitSeries, reliabilityOf, type AssetType, type LimitReliability, type SimResponse, type Site } from "./api";
+import { calibrationOf, importLimitSeries, reliabilityOf, type AssetType, type LimitReliability, type SimResponse, type Site } from "./api";
 import { timeAt } from "./util";
 
 export interface Table { header: string[]; rows: (string | number | null | undefined)[][] }
@@ -49,6 +49,8 @@ const SITE_SERIES: { key: string; label: (cur: string) => string; scale?: number
   { key: "pv_curtailed_kw", label: () => "Solar curtailed (kW)", device: "pv" },
   { key: "battery_kw", label: () => "Batteries total (kW, + charging, - discharging)", device: "battery" },
   { key: "soc", label: () => "Battery state of charge (%)", scale: 100, device: "battery" },
+  { key: "soc_estimate", label: () => "Battery state of charge as estimated by the BMS, seen by the controller (%)", scale: 100, device: "battery" },
+  { key: "battery_shortfall_kw", label: () => "Battery shortfall: power asked for but not delivered (kW)", device: "battery" },
   { key: "ev_kw", label: () => "EV chargers total (kW, + charging, - discharging)", device: "ev_charger" },
   { key: "hp_kw", label: () => "Heat pumps total (kW)", device: "heat_pump" },
   { key: "dimmed_kw", label: () => "Held back by grid-operator dimming (kW)" },
@@ -152,12 +154,23 @@ export function kpiTable(r: SimResponse, site: Site): Table {
     add(k.battery_life_capped ? "Battery life (at the ageing model's cap)" : "Battery life", "battery_life_years", "years");
     add("Battery equivalent full cycles", "battery_equivalent_full_cycles", "cycles");
     add("Battery ageing from cycling", "battery_cycle_wear_share", "%", 100);
+    // Device uncertainty (sim/device.py): zero unless an SoC estimate error or a power taper is set.
+    add("Battery plan shortfall (asked for, not delivered)", "battery_plan_shortfall_kwh", "kWh", 1, false);
+    add("Time steps with a battery shortfall", "battery_plan_shortfall_steps", "steps", 1, false);
+    add("Largest SoC estimate error", "battery_soc_error_max", "% points", 100, false);
+    add("Average SoC estimate error (capacity-weighted)", "battery_soc_error_mean", "% points", 100, false);
   }
   if (has("ev_charger")) {
     add("EV energy delivered", "ev_delivered_kwh", "kWh");
     add("EV energy short", "ev_unmet_kwh", "kWh");
     add("EV visits finished", "ev_sessions", "visits");
     add("EV visits left short", "ev_sessions_unmet", "visits");
+    const served = (x: Record<string, number>) => {
+      const req = x.ev_delivered_kwh + x.ev_unmet_kwh;
+      return typeof req === "number" && req > 1e-6 ? (x.ev_delivered_kwh / req) * 100 : null;
+    };
+    rows.push(["EV energy served (delivered / (delivered + short))", served(k), served(b), "%"]);
+    add("EV energy cars refused near full (charging curve)", "ev_taper_limited_kwh", "kWh", 1, false);
   }
   if (has("heat_pump")) {
     add("Heat pump electricity", "hp_electric_kwh", "kWh");
@@ -186,5 +199,17 @@ export function kpiTable(r: SimResponse, site: Site): Table {
     pair(`Daily peak at the target share (${p}), as a multiple of the limit (<= 1 = target met)`,
       (x) => x.limit_daily_peak_ratio_at_target, "x limit");
   } else if (site.grid.import_limit_kw != null) add("Energy over the import limit", "grid_overload_kwh", "kWh");
+  // Forecast calibration (realistic forecasts) and the chance MPC's margin; not run for the baseline.
+  const cal = calibrationOf(k);
+  if (cal) {
+    const p = `P${Math.round(cal.quantileLevel * 100)}`;
+    rows.push([`Steps with net load above its ${p} forecast`, cal.quantileExceedShare * 100, null, "%"]);
+    rows.push([`Expected for a calibrated ${p} forecast`, cal.quantileExceedExpected * 100, null, "%"]);
+    if (cal.backoffExceedShare != null) {
+      rows.push(["Chance MPC: steps whose forecast error exceeded the safety margin", cal.backoffExceedShare * 100, null, "%"]);
+      rows.push(["Chance MPC: share allowed (1 - reliability target)", cal.backoffExceedAllowed != null ? cal.backoffExceedAllowed * 100 : null, null, "%"]);
+      rows.push(["Chance MPC: days of past errors behind the margin", cal.backoffDays, null, "days"]);
+    }
+  }
   return { header: ["Metric", "Value", "Baseline", "Unit"], rows };
 }

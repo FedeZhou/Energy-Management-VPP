@@ -82,7 +82,7 @@ export const HELP = {
           <dt>Self-consumption</dt><dd>Stores spare solar and covers demand from storage when solar is short.</dd>
           <dt>Price arbitrage</dt><dd>Stores spare solar, fills up from the grid at the cheapest step of the next 24 hours, and covers the site at the most expensive one.</dd>
           <dt>Peak shaving</dt><dd>Aims for the lower of its threshold and this step's import limit (lower inside a contract window): discharges when demand is above that target and recharges below it. It does not look ahead; of the strategies, only MPC plans for a window before it starts.</dd>
-          <dt>MPC</dt><dd>Model predictive control: every re-plan (hourly by default, and when a car plugs in) it solves an optimisation over the planning horizon (24 hours by default) for the battery and all cars together, minimising energy cost, any demand charges and, when the battery has a replacement cost, battery wear (a price per kWh cycled from the same ageing model). How the plan is carried out is the <b>MPC execution</b> setting: <i>plan</i> follows it and lets the battery absorb forecast errors; <i>hybrid</i> stores all spare solar like the self-consumption rule and lets the plan only add to it; <i>cautious</i> plans from this step's measured load and solar, never trades extra with the grid to keep to a wrong plan, and values leftover energy net of wear (the best choice with realistic forecasts in our tests). <b>MPC scenarios</b> above 1 plan for several futures replayed from recent days. The EV strategy below is then ignored. Heat pumps run on demand and cars are not discharged under MPC yet.</dd>
+          <dt>MPC</dt><dd>Model predictive control: every re-plan (hourly by default, and when a car plugs in) it solves an optimisation over the planning horizon (24 hours by default) for the battery and all cars together, minimising energy cost, any demand charges and, when the battery has a replacement cost, battery wear (a price per kWh cycled from the same ageing model). How the plan is carried out is the <b>MPC execution</b> setting: <i>plan</i> follows it and lets the battery absorb forecast errors; <i>hybrid</i> stores all spare solar like the self-consumption rule and lets the plan only add to it; <i>cautious</i> plans from this step's measured load and solar, never trades extra with the grid to keep to a wrong plan, and values leftover energy net of wear (the best choice for cost with realistic forecasts in our tests); <i>chance</i> is cautious plus a safety margin under the import limit for every future hour, sized from the forecast's own past errors so the limit holds on the reliability target's share of days (needs realistic forecasts; its <b>confidence</b> setting and a worked example are under "Chance-constrained MPC"). <b>MPC scenarios</b> above 1 plan for several futures replayed from recent days. The EV strategy below is then ignored. Heat pumps run on demand and cars are not discharged under MPC yet.</dd>
         </dl>
         <h5>EV charging</h5>
         <dl>
@@ -157,7 +157,7 @@ export const HELP = {
           <li><b>Cost incl. wear</b> is the energy bill plus battery wear: the share of the battery's replacement value this period used up (expected life from the ageing model). It is how a bigger battery shows up as a cost. It is not a full investment case: no financing, installation, discount rate or grid-contract fee is included. Where the currency has no default replacement cost, wear is not priced and only the bill is compared.</li>
           <li><b>Days kept</b> is the share of days on which import never went over the limit (see "Flexible contracts and reliability").</li>
           <li>The line joins the <b>front</b>: options where no cheaper option keeps the limit on as many days. Options off the front cost more for the same or less reliability.</li>
-          <li>The recommendation is the cheapest option that meets the reliability target. Check <b>EV short</b> too: the simulator slows car charging to keep the limit, so a contract can look reliable because cars got less energy.</li>
+          <li>The recommendation is the cheapest <b>feasible</b> option that meets the reliability target. On sites with chargers, feasible means the cars got their energy: at most the <b>service level</b> you set (1% by default) of what they asked for left undelivered. The simulator slows car charging to keep the limit, so without this rule a contract could look reliable and cheap because cars got less energy. Options that miss it stay in the chart (hollow grey) and the table (greyed, with the share undelivered) but are not recommended and not on the front; if none is feasible, the recommendation says so and names the one with the smallest shortfall. See "Service level".</li>
         </ul>
         <h5>Limits</h5>
         <ul>
@@ -165,6 +165,70 @@ export const HELP = {
           <li>With perfect forecasts the controller knows the future, which makes batteries look more capable than they will be in operation. Plan with realistic forecasts for a fairer answer.</li>
           <li>The guide's chapter 8 (planning and sizing under uncertainty) explains why sizing should be stated as how often the limit holds, and section 4.2 why a promise like "90% of days" is the useful form. Turning the count into a probability needs many simulated years (scenarios), which the planner does not do yet.</li>
         </ul>
+      </>
+    ),
+  },
+  serviceLevel: {
+    title: "Service level: the cars' energy is part of the promise",
+    body: (
+      <>
+        <p>A site with chargers promises two things: to keep the grid limit, and to give the cars the energy they ask for. The simulator keeps the limit by slowing cars when nothing else is left, so a set-up can look reliable (many days kept) and cheap (less energy bought) only because drivers left with less. The service-level rule stops such options from winning.</p>
+        <h5>The rule</h5>
+        <ul>
+          <li>Requested energy = energy delivered + energy still missing when cars left. Cars still plugged in at the end of the period count what they got so far and no shortfall (their outcome is unknown).</li>
+          <li><b>The floor.</b> Some cars cannot get all their energy whatever the contract: the charging records are replayed at the time step, so with hourly steps each stay is rounded to whole hours. Each batch therefore runs one <b>reference</b>: the same site with no import limit, no contract windows, no battery and every car charged at full power from arrival. What the cars still miss there is the floor. On the time-block car park it is 1,746 of 62,131 kWh (2.8%), on the Leeds fleet depot 1,070 of 20,157 kWh (5.3%) (our runs, 22 Nov 2026). It does not depend on the battery, the contract or the strategy (on both examples the site's own strategy with no limit misses exactly the same), so one reference serves the whole planner batch and every Compare row on the same site.</li>
+          <li>An option is <b>feasible</b> if (energy missing − floor) is at most the service level times the requested energy: the rule counts only what the contract and the control add. The default, 1%, is a setting (the promise you choose to make), not a number from a source. Change it in Size &amp; contract; Compare uses the same value.</li>
+          <li>Example: the depot as shipped (80 kW firm, 20 kW on working days 14:00–18:00, 100 kWh battery): cars asked for 20,157 kWh and got 19,083 kWh, so 1,074 kWh is missing; minus the 1,070 kWh floor that is 4 kWh (0.02%), well inside 1%: feasible. Without the floor the same option would read "5.3% undelivered" and nothing on this site could ever pass.</li>
+          <li>If the reference run fails (or in the public demo, which cannot run it) the floor is 0 and all missing energy counts; the planner and Compare say so.</li>
+          <li>Sites without chargers: the rule does not apply and every option is feasible.</li>
+        </ul>
+        <h5>Where it is used</h5>
+        <ul>
+          <li><b>Size &amp; contract</b>: the recommendation and the front line consider feasible options only. Others stay visible, greyed, with the share undelivered. If none is feasible, the recommendation says so and names the option with the smallest shortfall.</li>
+          <li><b>Compare</b>: the <b>EV served</b> column is the share of requested energy delivered. "Best" (the dot) and "vs best" compare feasible runs only; the EV short column still compares all of them.</li>
+        </ul>
+      </>
+    ),
+  },
+  chanceMpc: {
+    title: "Chance-constrained MPC",
+    body: (
+      <>
+        <p><b>MPC execution: chance</b> is the cautious MPC with a safety margin. A forecast of the site's load is always somewhat wrong; if the plan uses the whole import limit, a load a bit higher than forecast breaks it. So for every future hour the MPC plans against <b>the limit minus a margin</b> (the "back-off"). The hour being metered now gets no margin, because its load is measured.</p>
+        <h5>How big the margin is</h5>
+        <p>For each time of day, the margin is the largest amount by which the net load (load minus solar) came out above its forecast at that time over the last <b>N</b> days. N comes from two numbers: the <b>reliability target</b> of the grid connection (90% of days by default) and the <b>confidence</b> setting (95% by default):</p>
+        <p>N = ceil( ln(1 − confidence) / ln(target) )</p>
+        <p>Worked example: ln(1 − 0.95) = ln(0.05) = −3.00 and ln(0.90) = −0.105, so N = ceil(28.4) = <b>29 days</b>. The theory (the "scenario approach") then says: if days were independent and alike, the chance that a margin covering the worst of 29 days fails on more than 10% of new days is at most 0.9<sup>29</sup> = 4.7%, under the 5% asked for. Asking for 99.9% confidence needs 66 days and gives a larger margin; 50% needs 7 days.</p>
+        <h5>Why it over-delivers on a daily target</h5>
+        <p>The guarantee is per hour, and the worst of 29 days is cautious: for independent days the margin should be exceeded in about 1 hour in 30 (3.3%), well under the 10% a 90% target allows. On the time-block car park example (one year, realistic forecasts, our run of 22 Nov 2026) it kept the limit on 364 of 365 days against a 90% target, cost 1.1% more than the cautious MPC, and left more car energy undelivered than the peak-shaving rule (2.8 against 2.0 MWh). A margin sized for days rather than hours could give some of that back; it is not built.</p>
+        <h5>What to check after a run</h5>
+        <ul>
+          <li>The <b>Limit kept</b> tooltip: how often the margin was exceeded against the share allowed (on the car park: 3.1% of hours, 10% allowed), and whether the P90 forecast was calibrated.</li>
+          <li><b>EV energy</b> and the service level: a cautious margin can be paid for by the cars.</li>
+          <li>A warning when the run starts with less than N days of history: the first days' margins are less certain.</li>
+        </ul>
+        <p>Needs realistic forecasts; with perfect ones it is the same as cautious. Real days are not independent (weekdays, seasons), which is why the margin uses only the most recent days and why the run reports how often it was exceeded. Sources: the guide's sections 4.2 (scenario approach) and 7.2 (constraint tightening); Campi, Garatti and Prandini, Handbook of Model Predictive Control; results in results/chance_mpc/README.md.</p>
+      </>
+    ),
+  },
+  deviceUncertainty: {
+    title: "Device uncertainty",
+    body: (
+      <>
+        <p>Controllers usually plan as if the devices were exactly known. Real ones are not, and three effects can be switched on (all off by default):</p>
+        <dl>
+          <dt>Battery state-of-charge estimate</dt><dd>A battery cannot measure how full it is; its management system estimates it, and for LFP cells the estimate drifts. Errors of ±15% are common in LFP systems, outliers above ±40% (Accure, via ESS News, Oct 2025). Set a starting error and a drift per capacity cycled; it shrinks back near full and empty, where the cells recalibrate. The controller sees the estimate, the battery obeys the truth.</dd>
+          <dt>Battery power near full / empty</dt><dd><i>cc_cv</i>: full power up to 80%, then falling linearly to zero at 100% (ACN-Sim's model); discharging mirrored below 20% (an example choice: no public LFP derating table was found). Controllers still plan with full power.</dd>
+          <dt>Car charging curves</dt><dd>Cars draw less near full. Charging records give only the energy, so the simulator assumes each visit ended nearly full: the most slowing possible.</dd>
+        </dl>
+        <h5>What you see</h5>
+        <ul>
+          <li><b>Plan shortfall</b> card and a warning: energy the battery did not deliver though the controller asked for it within what it believed possible.</li>
+          <li>Faint red bands in the battery power chart where it fell short, and a dashed "SoC as estimated" line next to the true charge.</li>
+          <li>In the EV energy tooltip: energy cars refused near full.</li>
+        </ul>
+        <h5>Days kept can hide device problems</h5>
+        <p>When the battery falls short, the safety layer slows the cars to keep the limit, so the contract looks fine and the drivers pay. On the time-block car park (one year, our runs of 22 Nov 2026) the peak-shaving rule kept the limit on 349 days with all three effects on against 350 without, but car energy undelivered rose from about 2,010 to 2,140 kWh. Always read days kept together with <b>EV served</b> and <b>Plan shortfall</b>; the service-level rule does this for the planner and Compare.</p>
       </>
     ),
   },
@@ -223,6 +287,7 @@ export const HELP = {
       <>
         <p><b>Capacity</b> (kWh) is how much energy it holds; <b>power</b> (kW) is how fast it can charge or discharge.</p>
         <p>Round-trip losses are split evenly between charging and discharging. The charge level stays between the minimum and maximum you set.</p>
+        <p><b>Power near full / empty</b> (off by default): with <i>cc_cv</i>, charging power falls linearly to zero above the charge taper point (80% by default) and discharging power below the discharge taper point (20%), like real lithium-ion cells. <b>SoC estimate error</b> (off by default): the controller sees the battery management system's estimate of its charge, which can start off and drift; the battery obeys its true charge. See "Device uncertainty".</p>
         <p><b>Wear</b>: each run is scored with NREL's BLAST-Lite ageing model for the chosen chemistry (LFP or NMC) at the set temperature, giving an expected life and a wear cost from the replacement cost and the end-of-life capacity. Cycles (energy discharged ÷ capacity) are shown too, as a simple count.</p>
       </>
     ),
@@ -238,6 +303,7 @@ export const HELP = {
           <li>Single-phase chargers load one phase; three-phase chargers split power over all three.</li>
           <li>A car still needing energy at departure "left short".</li>
           <li>Bidirectional (V2H): a car may give energy back while it can still reach its target by departure at full power, up to a per-visit limit. Lent energy is added to what the car still needs, with losses both ways.</li>
+          <li>Car charging curve (off by default): with <i>cc_cv</i> a car draws less near full, falling linearly to zero above the taper point. The data gives only each visit's energy, so the simulator assumes the car ended nearly full and picks the smallest of 8–100 kWh batteries that holds it. Controllers do not know the car's charge; the car simply draws less. See "Device uncertainty".</li>
         </ul>
       </>
     ),
@@ -253,7 +319,8 @@ export const HELP = {
           <dt>Prices</dt><dd>Day-ahead market prices only once published, around 13:00 for the next day; beyond that, the last known day repeated. Fixed tariffs are known in advance.</dd>
           <dt>Cars</dt><dd>Unknown until they plug in; then their departure time and energy are known, as if the driver had entered them in an app.</dd>
         </dl>
-        <p><b>Compare forecasts</b> runs the site both ways. The difference is what perfect knowledge would be worth, and shows how much a strategy depends on its forecast. Simple reactive rules (self-consumption) do not look ahead, so they are unaffected. When the forecast is wrong, MPC lets the battery take up the difference so the grid exchange stays as planned, then re-plans. With <b>MPC execution: cautious</b> it never trades extra with the grid to do so, plans with the measured present and stores solar at the first chance: with realistic forecasts that beat the simple rule in our full-year study, where the plain plan did not.</p>
+        <p><b>Compare forecasts</b> runs the site both ways. The difference is what perfect knowledge would be worth, and shows how much a strategy depends on its forecast. Simple reactive rules (self-consumption) do not look ahead, so they are unaffected. When the forecast is wrong, MPC lets the battery take up the difference so the grid exchange stays as planned, then re-plans. With <b>MPC execution: cautious</b> it never trades extra with the grid to do so, plans with the measured present and stores solar at the first chance: with realistic forecasts that beat the simple rule in our full-year study, where the plain plan did not. <b>MPC execution: chance</b> goes one step further and plans under the import limit minus a margin learned from how wrong this forecast has been (see "Chance-constrained MPC"); with perfect forecasts there is nothing to learn and it behaves like cautious.</p>
+        <p>With realistic forecasts the run also checks the forecast's own uncertainty: how often the net load (load minus solar) came out above its P90 forecast (10% of hours would be right for a 90% target). It is in the tooltip of the <b>Limit kept</b> card.</p>
         <p>A realistic run can occasionally come out cheaper: a plan that is optimal for a forecast is not always best for the real day, and the end of the period is valued differently.</p>
       </>
     ),
@@ -278,8 +345,9 @@ export const HELP = {
         <dt>Solar self-use</dt><dd>The share of solar used on site rather than exported.</dd>
         <dt>Cost incl. wear</dt><dd>Total cost plus battery wear: the share of the battery's value this period used up.</dd>
         <dt>Battery wear</dt><dd>NREL's BLAST-Lite ageing model (LFP or NMC; calendar and cycle ageing, depth of discharge, state of charge, temperature) estimates how many years the battery would last if it were always run like this, until it holds its end-of-life share of its capacity (80% by default). Wear = replacement cost × the share of that life this period used. An idle battery ages too, so the baseline has wear. Default replacement costs are 2022 German averages excluding VAT (1,200 €/kWh for home systems), higher than today's prices; set your own in the battery. Without a price (non-EUR sites) only the life is shown.</dd>
-        <dt>EV energy</dt><dd>Energy delivered to cars, and how much was missing at departure.</dd>
-        <dt>Limit kept</dt><dd>Shown when there is an import limit (firm or contract windows): the share of days on which import stayed under the limit at every step, against the reliability target (90% by default). Its tooltip adds the energy above the limit, the worst overshoot and the P90 daily peak. Details: the "?" next to Contract windows.</dd>
+        <dt>Plan shortfall</dt><dd>Shown only when it happened: energy the battery did not deliver although the controller asked for it within what it believed possible, because the battery's state-of-charge estimate was off or its power tapered near full or empty. Its tooltip gives the hours and the largest and average estimate error. See "Device uncertainty".</dd>
+        <dt>EV energy</dt><dd>Energy delivered to cars, and how much was missing at departure (also as a share of what the cars asked for). With car charging curves on, the tooltip adds the energy cars refused near full.</dd>
+        <dt>Limit kept</dt><dd>Shown when there is an import limit (firm or contract windows): the share of days on which import stayed under the limit at every step, against the reliability target (90% by default). Its tooltip adds the energy above the limit, the worst overshoot and the P90 daily peak; with realistic forecasts, how often the net load beat its P90 forecast; with the chance MPC, how often its safety margin was exceeded against the share allowed. Details: the "?" next to Contract windows.</dd>
         <dt>Heat pump</dt><dd>Electricity used, the average COP over the period, and any heat demand left unmet.</dd>
         <dt>Car to home</dt><dd>Energy cars gave back through bidirectional chargers.</dd>
         <dt>Dimmed (§14a)</dt><dd>Energy the grid operator's limit held back from controllable devices.</dd>
@@ -292,7 +360,9 @@ export const HELP = {
       <ul>
         <li>All panels share one time axis. The top panel shows each component: every building or load by name (grey, told apart by line style), EV charging, solar and the grid. The dashed blue line is grid power in the baseline. With an import limit, a dark dashed stepped line shows the limit at each step (it drops inside contract windows); grid import above it is an overshoot.</li>
         <li>Hover to see each component's power and the total demand at that moment.</li>
-        <li>Positive battery power is charging, negative is discharging.</li>
+        <li>Positive battery power is charging, negative is discharging. Faint red bands in the battery power panel ("Battery fell short") mark hours in which the battery delivered less than the controller asked; hover for the kW missing.</li>
+        <li>In the state-of-charge panel, a dashed grey line ("SoC as estimated") shows what the battery management system reported to the controller, when that differs from the true charge (filled). The gap is the estimate error.</li>
+        <li>The chance MPC's safety margin is not drawn: the simulator does not report the margin hour by hour yet. Its calibration is in the Limit kept tooltip.</li>
         <li>Click a chart to move the playhead there. Drag the slider at the bottom to change the visible window, or use Ctrl+scroll.</li>
       </ul>
     ),

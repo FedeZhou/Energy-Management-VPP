@@ -6,12 +6,13 @@ import { GridComponent, LegendComponent, MarkLineComponent, TooltipComponent } f
 import { CanvasRenderer } from "echarts/renderers";
 import { reliabilityOf, STATIC_DEMO, type Site } from "../api";
 import {
-  batteryBasis, contractOptions, costKey, defaultSizes, MAX_CONTRACTS, MAX_RUNS, paretoFront, parsePercents,
-  parseSizes, round3, siteKey, usePlanner, type ContractOption, type PlanRun,
+  batteryBasis, contractOptions, costKey, DEFAULT_EV_TOLERANCE, defaultSizes, evService, floorKwh, floorOf, MAX_CONTRACTS, MAX_RUNS,
+  paretoFront, parsePercents, parseSizes, parseTolerance, round3, shortReason, siteKey, usePlanner, type ContractOption,
+  type EvFloor, type PlanRun, useFloors,
 } from "../planner";
 import { useStore } from "../store";
 import { useTheme } from "../theme";
-import { kw, money, num, pct, qty, readVar } from "../util";
+import { kw, money, num, pct, pctFine, qty, readVar } from "../util";
 import { Help } from "./Help";
 import { PRETTY } from "./Inspector";
 
@@ -54,14 +55,20 @@ export function Planner() {
   const planned = usePlanner((s) => s.planned);
   const progress = usePlanner((s) => s.progress);
   const error = usePlanner((s) => s.error);
-  const { run, cancel, clear, open } = usePlanner.getState();
+  const tol = usePlanner((s) => s.evTolerance);
+  const { run, cancel, clear, open, setEvTolerance } = usePlanner.getState();
 
   // Inputs start from the site on screen and reset when another site is loaded (not when a variant is opened).
   const [sizesText, setSizesText] = useState(() => defaultSizes(site, catalog).join(", "));
   const [useCurrent, setUseCurrent] = useState(true);
   const [useFirm, setUseFirm] = useState(true);
   const [pctText, setPctText] = useState("80, 120");
-  const resetInputs = () => { setSizesText(defaultSizes(site, catalog).join(", ")); setUseCurrent(true); setUseFirm(true); setPctText("80, 120"); };
+  const [tolText, setTolText] = useState(() => num(tol * 100, "auto"));
+  const changeTol = (text: string) => { setTolText(text); const v = parseTolerance(text); if (v != null) setEvTolerance(v); };
+  const resetInputs = () => {
+    setSizesText(defaultSizes(site, catalog).join(", ")); setUseCurrent(true); setUseFirm(true); setPctText("80, 120");
+    changeTol(num(DEFAULT_EV_TOLERANCE * 100, "auto"));
+  };
   const lastName = useRef(site.name);
   useEffect(() => {
     if (site.name !== lastName.current) { lastName.current = site.name; resetInputs(); }
@@ -71,6 +78,8 @@ export function Planner() {
   const basis = batteryBasis(site, catalog);
   const sizes = parseSizes(sizesText);
   const percents = parsePercents(pctText);
+  const tolOk = parseTolerance(tolText) != null;
+  const siteHasEv = site.assets.some((a) => a.type === "ev_charger");
   const hasWindows = (site.grid.contract_windows ?? []).length > 0;
   const options = useMemo(() => contractOptions(site, { current: useCurrent, firmOnly: useFirm, percents: parsePercents(pctText) ?? [] }),
     [site, useCurrent, useFirm, pctText]);
@@ -78,6 +87,7 @@ export function Planner() {
   const blocked = STATIC_DEMO ? "The public demo cannot run new simulations; open the live app to plan."
     : !sizes ? "Battery sizes: type kWh values separated by commas, e.g. 0, 75, 150"
     : !percents ? "Reduced limit: type percentages separated by commas, e.g. 80, 120"
+    : siteHasEv && !tolOk ? "Cars may be short by: type a percentage between 0 and 100, e.g. 1"
     : !options.length ? "Pick at least one contract option"
     : options.length > MAX_CONTRACTS ? `At most ${MAX_CONTRACTS} contract options, so the chart can tell them apart (now ${options.length})`
     : nRuns > MAX_RUNS ? `${nRuns} runs is too many: at most ${MAX_RUNS}. Try fewer sizes or contracts.`
@@ -91,8 +101,17 @@ export function Planner() {
   const m = (v: number) => money(v, cur, 0);
   const cIndex = (id: string) => contracts.findIndex((c) => c.id === id);
   const cLabel = (id: string) => contracts.find((c) => c.id === id)?.label ?? id;
-  const sorted = [...runs].sort((a, b) => a.result.result.kpis[key] - b.result.result.kpis[key]);
-  const front = paretoFront(runs, key);
+  // Service-level rule: only options that deliver the cars' energy (within the tolerance) can be recommended or sit
+  // on the front; the others stay visible, greyed, with the reason. Feasible options first, each group by cost.
+  // The no-limit reference (planner.ts evFloor): every variant of one plan shares it.
+  const floors = useFloors((s) => s.floors);
+  const floorState = floorOf(floors, runs[0]?.site ?? site);
+  const fk = floorKwh(floorState);
+  const ev = (r: PlanRun) => evService(r.result.result.kpis, tol, fk);
+  const feasible = (r: PlanRun) => ev(r)?.feasible ?? true;
+  const anyEv = runs.some((r) => ev(r));
+  const sorted = [...runs].sort((a, b) => Number(feasible(b)) - Number(feasible(a)) || a.result.result.kpis[key] - b.result.result.kpis[key]);
+  const front = paretoFront(runs.filter(feasible), key);
   const frontIds = new Set(front.map((r) => r.id));
   const anyLimit = runs.some((r) => reliabilityOf(r.result.result.kpis));
   const days = runs[0]?.site.days ?? site.days;
@@ -129,6 +148,18 @@ export function Planner() {
             </label>
           )}
         </div>
+        {siteHasEv && (
+          <label className="pl-row">
+            <span className="pl-label">Service level</span>
+            <span className="pl-check">
+              Cars may be short by at most
+              <input type="text" value={tolText} onChange={(e) => changeTol(e.target.value)} disabled={!!progress} className={`pl-pct ${!tolOk ? "pl-bad" : ""}`}
+                aria-label="Largest share of the cars' requested energy an option may leave undelivered, percent" aria-invalid={!tolOk} />
+              % of the energy they ask for
+            </span>
+            <span className="pl-note">A setting (the promise to drivers), not a sourced number. Options above it are shown but not recommended. <Help topic="serviceLevel" /></span>
+          </label>
+        )}
         {options.length > 0 && (
           <ul className="pl-options" aria-label="Contract options to try">
             {options.map((o, i) => (
@@ -169,11 +200,11 @@ export function Planner() {
               <p className="pl-rec-base">{progress.done} of {progress.total} runs done. The recommendation appears when all runs have finished; the points below fill in as they do.</p>
             </div>
           ) : (
-            <Recommendation runs={runs} sorted={sorted} costKey={key} fmt={m} days={days} label={cLabel} site={site}
+            <Recommendation runs={runs} sorted={sorted} costKey={key} fmt={m} days={days} label={cLabel} site={site} tol={tol} floor={floorState}
               partial={runs.length < planned ? `Stopped early: based on ${runs.length} of ${planned} runs.` : null} />
           )}
           {anyLimit ? (
-            <Scatter runs={runs} front={front} contracts={contracts} costKey={key} fmt={m} theme={theme} />
+            <Scatter runs={runs} front={front} contracts={contracts} costKey={key} fmt={m} theme={theme} tol={tol} floor={fk} />
           ) : (
             <p className="pane-intro">This site has no import limit, so there is no reliability to plot: the table ranks the options by cost.</p>
           )}
@@ -187,7 +218,8 @@ export function Planner() {
                   <th>Days kept</th>
                   <th>Target</th>
                   <th>Over limit</th>
-                  <th>EV short</th>
+                  {anyEv && <th>EV short</th>}
+                  {anyEv && <th>EV served<br /><span className="pl-th-sub">feasible ≤ {pctFine(tol)} short{fk > 0.05 ? " beyond the floor" : ""}</span></th>}
                   <th aria-label="Actions" />
                 </tr>
               </thead>
@@ -195,8 +227,11 @@ export function Planner() {
                 {sorted.map((r) => {
                   const k = r.result.result.kpis;
                   const rel = reliabilityOf(k);
+                  const e = ev(r);
+                  const ok = e?.feasible ?? true;
                   return (
-                    <tr key={r.id} className={r.result === result ? "current" : ""}>
+                    <tr key={r.id} className={`${r.result === result ? "current" : ""} ${ok ? "" : "pl-infeasible"}`}
+                      title={e && !ok ? `Not feasible: ${shortReason(e)} (service level ${pctFine(tol)})` : undefined}>
                       <td>{sizeText(r)}{frontIds.has(r.id) && <span className="pl-tag" title="On the front: no cheaper option keeps the limit on as many days">front</span>}</td>
                       <td><span className="pl-contract"><Marker i={cIndex(r.contract)} theme={theme} />{cLabel(r.contract)}</span></td>
                       <td>{m(k[key])}</td>
@@ -210,7 +245,14 @@ export function Planner() {
                         ) : "—"}
                       </td>
                       <td>{rel ? qty(rel.limit_excess_kwh, "kWh", 0) : "—"}</td>
-                      <td>{typeof k.ev_unmet_kwh === "number" ? qty(k.ev_unmet_kwh, "kWh", 0) : "—"}</td>
+                      {anyEv && <td>{typeof k.ev_unmet_kwh === "number" ? qty(k.ev_unmet_kwh, "kWh", 0) : "—"}</td>}
+                      {anyEv && (
+                        <td>
+                          {!e ? "—" : ok ? pctFine(e.served) : (
+                            <span className="kpi-status bad"><AlertTriangle size={12} aria-hidden /><span>{pctFine(e.served)} · not feasible</span></span>
+                          )}
+                        </td>
+                      )}
                       <td className="cmp-row-actions">
                         <button className="icon-btn sm" onClick={() => open(r.id)} title="Open: make this variant the site and result on screen" aria-label={`Open ${sizeText(r)}, ${cLabel(r.contract)}`}>
                           <FolderOpen size={14} />
@@ -235,25 +277,43 @@ export function Planner() {
   );
 }
 
-/** One plain sentence: the cheapest option that meets the reliability target, or the most reliable one. */
-function Recommendation({ runs, sorted, costKey: key, fmt, days, label, site, partial }: {
+/** One plain sentence: the cheapest feasible option that meets the reliability target, or the most reliable feasible
+ *  one. Feasible = the cars' energy delivered within the service level (planner.ts evService); without EVs every
+ *  option is. If none is feasible, say so and name the option with the smallest shortfall. */
+function Recommendation({ runs, sorted: all, costKey: key, fmt, days, label, site, tol, floor, partial }: {
   runs: PlanRun[]; sorted: PlanRun[]; costKey: string; fmt: (v: number) => string; days: number; label: (id: string) => string; site: Site;
-  partial: string | null;
+  tol: number; floor: EvFloor | "pending" | "error" | undefined; partial: string | null;
 }) {
+  const svc = (r: PlanRun) => evService(r.result.result.kpis, tol, floorKwh(floor));
+  const sorted = all.filter((r) => svc(r)?.feasible ?? true);
+  const dropped = runs.length - sorted.length;
   const per = periodText(days);
   const what = key === "total_cost_with_wear" ? "including battery wear" : "energy bill only";
   const name = (r: PlanRun) => `${r.kwh > 0 ? `${n(r.kwh)} kWh / ${n(r.kw)} kW of battery` : "no battery"} with ${r.contract === "current" ? "the current contract" : `“${label(r.contract)}”`}`;
+  // Only what the contract and control add: the floor (cars short even with no grid limit) has its own line.
+  const fl = floorKwh(floor);
   const evNote = (r: PlanRun) => {
     const ev = r.result.result.kpis.ev_unmet_kwh;
-    return typeof ev === "number" && ev >= 0.5 ? ` Cars were left ${qty(ev, "kWh", 0)} short: the simulator slows charging to keep the limit.` : "";
+    if (typeof ev !== "number") return "";
+    const extra = ev - fl;
+    if (extra < 0.5) return "";
+    return fl > 0.05 ? ` Cars got ${qty(extra, "kWh", 0)} less than with no grid limit: the simulator slows charging to keep the limit.`
+      : ` Cars were left ${qty(ev, "kWh", 0)} short: the simulator slows charging to keep the limit.`;
   };
-  const rels = runs.map((r) => ({ r, rel: reliabilityOf(r.result.result.kpis) }));
+  const rels = sorted.map((r) => ({ r, rel: reliabilityOf(r.result.result.kpis) }));
   const today = round3(batteryBasis(site, null).kwh);
   const base = runs.find((r) => r.contract === "current" && r.kwh === today);
-  const target = rels.find((x) => x.rel)?.rel?.limit_reliability_target ?? 0.9;
+  const target = runs.map((r) => reliabilityOf(r.result.result.kpis)).find((x) => x)?.limit_reliability_target ?? 0.9;
 
   let text: string;
-  if (!rels.some((x) => x.rel)) {
+  if (!sorted.length) {
+    const least = [...runs].sort((a, b) => (svc(a)?.short ?? 0) - (svc(b)?.short ?? 0) || a.result.result.kpis[key] - b.result.result.kpis[key])[0];
+    const e = svc(least)!;
+    const rel = reliabilityOf(least.result.result.kpis);
+    text = `No option delivers the cars' energy within the ${pctFine(tol)} service level${floorKwh(floor) > 0.05 ? " (beyond what they miss with no grid limit)" : ""}, so none is recommended. The smallest shortfall is ${name(least)}: `
+      + `${shortReason(e)} (${qty(e.unmet, "kWh", 0)} of ${qty(e.requested, "kWh", 0)}), ${fmt(least.result.result.kpis[key])} ${per} (${what})`
+      + `${rel ? `, limit kept on ${pct(rel.limit_days_kept_share)} of days` : ""}. More battery, a higher limit or a looser service level are the levers to try.`;
+  } else if (!rels.some((x) => x.rel)) {
     const c = sorted[0];
     text = `This site has no import limit, so only cost is compared. The cheapest option is ${name(c)}: ${fmt(c.result.result.kpis[key])} ${per} (${what}).${evNote(c)}`;
   } else {
@@ -275,32 +335,52 @@ function Recommendation({ runs, sorted, costKey: key, fmt, days, label, site, pa
     } else {
       const best = [...rels].filter((x) => x.rel).sort((a, b) => b.rel!.limit_days_kept_share - a.rel!.limit_days_kept_share
         || a.r.result.result.kpis[key] - b.r.result.result.kpis[key])[0];
-      text = `No option meets the ${pct(target)} target. The most reliable is ${name(best.r)}: limit kept on ${pct(best.rel!.limit_days_kept_share)} of days, ${fmt(best.r.result.result.kpis[key])} ${per} (${what}).${evNote(best.r)}`;
+      text = `No ${dropped ? "feasible " : ""}option meets the ${pct(target)} target. The most reliable is ${name(best.r)}: limit kept on ${pct(best.rel!.limit_days_kept_share)} of days, ${fmt(best.r.result.result.kpis[key])} ${per} (${what}).${evNote(best.r)}`;
     }
   }
   const baseRel = base && reliabilityOf(base.result.result.kpis);
+  const baseSvc = base && svc(base);
   return (
     <div className="pl-rec">
       <span className="panel-title">Recommendation</span>
       <p>{text}</p>
+      {runs.some((r) => svc(r)) && <p className="pl-rec-base">{floorText(floor, runs[0].site.step_minutes)}</p>}
+      {dropped > 0 && sorted.length > 0 && (
+        <p className="pl-rec-base">
+          {dropped} of {runs.length} options left more than {pctFine(tol)} of the cars' energy undelivered{floorKwh(floor) > 0.05 ? " beyond that" : ""}: not feasible, so left out. <Help topic="serviceLevel" />
+        </p>
+      )}
       {partial && <p className="pl-rec-base">{partial}</p>}
       {base && (
         <p className="pl-rec-base">
           Today's set-up ({base.kwh > 0 ? `${n(base.kwh)} kWh` : "no battery"}, current contract): {fmt(base.result.result.kpis[key])} {per}
-          {baseRel ? `, limit kept on ${pct(baseRel.limit_days_kept_share)} of days` : ""}.
+          {baseRel ? `, limit kept on ${pct(baseRel.limit_days_kept_share)} of days` : ""}
+          {baseSvc ? `, ${pctFine(baseSvc.served)} of car energy delivered${baseSvc.feasible ? "" : " (not feasible)"}` : ""}.
         </p>
       )}
     </div>
   );
 }
 
+/** One plain line on the service-level floor (planner.ts evFloor), shared with the Compare tab. */
+export function floorText(f: EvFloor | "pending" | "error" | undefined, stepMinutes: number): string {
+  if (f === "pending") return "Measuring what the cars would miss even with no grid limit (one reference run)…";
+  if (f === "error" || f === undefined) return "No reference run with no grid limit, so the service level counts all undelivered car energy.";
+  if (f.unmetKwh < 0.5) return "With no grid limit every car would get its energy, so the service level counts all undelivered car energy.";
+  const why = stepMinutes >= 60 ? "mostly because hourly steps round each stay to whole hours" : "for example stays too short for the energy asked";
+  return `Cars are short ${qty(f.unmetKwh, "kWh", 0)} (${pctFine(f.unmetKwh / Math.max(f.requestedKwh, 1e-9))} of what they ask for) even with no grid limit and full-power charging, `
+    + `${why}. The service level counts only what the contract and the control add.`;
+}
+
 /** Cost against days kept, one point per run; colour and shape = contract, label = battery size. The line joins
  *  the front (cheapest for each reliability level); the dashed line is the reliability target. */
-function Scatter({ runs, front, contracts, costKey: key, fmt, theme }: {
+function Scatter({ runs, front, contracts, costKey: key, fmt, theme, tol, floor }: {
   runs: PlanRun[]; front: PlanRun[]; contracts: ContractOption[]; costKey: string; fmt: (v: number) => string; theme: "light" | "dark";
+  tol: number; floor: number;
 }) {
   const box = useRef<HTMLDivElement>(null);
-  const sig = runs.map((r) => r.id).join("|") + key + theme;
+  const sig = runs.map((r) => r.id).join("|") + key + theme + tol + "|" + floor;
+  const anyInfeasible = runs.some((r) => evService(r.result.result.kpis, tol, floor)?.feasible === false);
   useEffect(() => {
     if (!box.current || !runs.length) return;
     const c = echarts.init(box.current, undefined, { renderer: "canvas" });
@@ -312,7 +392,17 @@ function Scatter({ runs, front, contracts, costKey: key, fmt, theme }: {
     const byId = new Map(runs.map((r) => [r.id, r]));
     const frontSet = new Set(front.map((r) => r.id));
     const label = (id: string) => contracts.find((x) => x.id === id)?.label ?? id;
+    // Not feasible under the service-level rule: a hollow marker in muted ink (the shape still says the contract)
+    // with a muted label; the tooltip and the table give the reason.
+    const svc = (r: PlanRun) => evService(r.result.result.kpis, tol, floor);
+    const point = (r: PlanRun, show?: boolean) => {
+      const off = svc(r)?.feasible === false;
+      const lab = { ...(show === undefined ? {} : { show }), ...(off ? { color: muted } : {}) };
+      return { id: r.id, value: [r.result.result.kpis[key], kept(r)], name: sizeShort(r), label: lab,
+        ...(off ? { itemStyle: { color: "transparent", borderColor: muted, borderWidth: 1.25 } } : {}) };
+    };
     const tip = (r: PlanRun) => {
+      const e = svc(r);
       const k = r.result.result.kpis;
       const rel = reliabilityOf(k);
       const row = (a: string, b: string) => `<tr><td style="color:${muted};padding-right:12px">${a}</td><td style="text-align:right;font-family:${mono}">${b}</td></tr>`;
@@ -325,6 +415,7 @@ function Scatter({ runs, front, contracts, costKey: key, fmt, theme }: {
           + (rel.limit_daily_peak_ratio_at_target != null ? row(`P${Math.round(rel.limit_reliability_target * 100)} daily peak`, `${num(rel.limit_daily_peak_ratio_at_target, 2)}× limit`) : "") : "")
         + row("Peak import", kw(k.peak_import_kw))
         + (typeof k.ev_unmet_kwh === "number" ? row("EV short", qty(k.ev_unmet_kwh, "kWh", 0)) : "")
+        + (e ? row("EV served", e.feasible ? pctFine(e.served) : `${pctFine(e.served)} · not feasible`) : "")
         + (r.kwh > 0 && k.battery_life_years ? row("Battery life", `${k.battery_life_capped ? "> " : ""}${qty(k.battery_life_years, "yr", 1)}`) : "")
         + "</table>";
     };
@@ -356,8 +447,7 @@ function Scatter({ runs, front, contracts, costKey: key, fmt, theme }: {
           name: ct.label, type: "scatter", z: 2, symbol: SHAPES[i] ?? "circle", symbolSize: SHAPES[i] === "triangle" ? 12 : 10,
           itemStyle: { color: contractColor(i, theme), borderColor: surface, borderWidth: 1 },
           emphasis: { scale: 1.4 },
-          data: runs.filter((r) => r.contract === ct.id && Number.isFinite(kept(r)))
-            .map((r) => ({ id: r.id, value: [r.result.result.kpis[key], kept(r)], name: sizeShort(r) })),
+          data: runs.filter((r) => r.contract === ct.id && Number.isFinite(kept(r))).map((r) => point(r)),
           label: { show: true, position: "right", distance: 10, formatter: (p: { name: string }) => p.name, color: v("--ink-2"), fontSize: 10.5, fontFamily: mono },
         })),
       ],
@@ -384,7 +474,7 @@ function Scatter({ runs, front, contracts, costKey: key, fmt, theme }: {
       }
       c.setOption({ series: [{}, ...contracts.map((ct) => ({
         data: runs.filter((r) => r.contract === ct.id && Number.isFinite(kept(r)))
-          .map((r) => ({ id: r.id, value: [r.result.result.kpis[key], kept(r)], name: sizeShort(r), label: { show: show.has(r.id) } })),
+          .map((r) => point(r, show.has(r.id))),
       }))] });
     };
     placeLabels();
@@ -396,6 +486,11 @@ function Scatter({ runs, front, contracts, costKey: key, fmt, theme }: {
   return (
     <figure className="pl-chart" aria-label="Cost against days the limit was kept, one point per run">
       <div ref={box} style={{ height: 320, width: "100%" }} />
+      {anyInfeasible && (
+        <figcaption className="pl-caption">
+          Hollow grey markers are not feasible: they left more than {pctFine(tol)} of the cars' energy undelivered{floor > 0.05 ? " beyond what the cars miss with no grid limit" : ""}. The front line and the recommendation leave them out.
+        </figcaption>
+      )}
     </figure>
   );
 }

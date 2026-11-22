@@ -39,6 +39,8 @@ export const qty = (v: number, unit: string, d: number | "auto" = "auto") => `${
 /** Power: tiny values snap to zero so idle devices do not flicker between 0.0 and −0.0. */
 export const kw = (v: number, d: number | "auto" = "auto") => qty(Math.abs(v) < 0.05 ? 0 : v, "kW", d);
 export const pct = (v: number) => `${num(Math.round(v * 100))}%`;
+/** A share with one decimal below 10% ("3.1%", "12%"), for small shares that whole percents would flatten. */
+export const pctFine = (v: number) => `${num(v * 100, v === 0 || Math.abs(v) >= 0.1 ? 0 : 1)}%`;
 /** A difference between two percentages, in percentage points. */
 export const pts = (v: number) => `${num(Math.round(v * 100))}${UNIT_SPACE}pts`;
 /** A signed difference: "+1.2 kW", "−€3.40". */

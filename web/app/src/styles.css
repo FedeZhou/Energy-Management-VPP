@@ -358,6 +358,8 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 .sect-body { display: flex; flex-direction: column; gap: 14px; padding: 2px 16px 20px; }
 .sect-note { font-size: 12px; line-height: 17px; color: var(--muted); }
 .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; align-items: end; }
+.fields > .sect-note { grid-column: 1 / -1; margin: 0; }
+.fields > .device-note { border-top: 1px solid var(--border); padding-top: 10px; }
 .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .field.wide { grid-column: 1 / -1; }
 .field-label { display: block; font-size: 12px; line-height: 16px; font-weight: 400; color: var(--muted); }
@@ -746,6 +748,10 @@ input[type="range"]::-moz-range-thumb { width: 9px; height: 9px; border-radius: 
 .pl-table tr.current td:first-child { box-shadow: inset 2px 0 0 var(--ink); }
 .pl-contract { display: inline-flex; align-items: center; gap: 7px; }
 .pl-tag { margin-left: 8px; padding: 1px 5px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); font: 500 10px/14px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+/* Not feasible under the service-level rule: greyed, the reason stays in --bad with its icon and words. */
+.pl-table tr.pl-infeasible td, .cmp-table tr.cmp-infeasible td { color: var(--muted); }
+.pl-table td .kpi-status, .cmp-table td .kpi-status { display: inline-flex; justify-content: flex-end; }
+.pl-caption { margin-top: 4px; font-size: 12px; line-height: 16px; color: var(--muted); }
 .pl-foot { margin: 0; font-size: 12px; line-height: 16px; color: var(--muted); max-width: 110ch; }
 @media (max-width: 1020px) {
   .pl-options, .pl-run { margin-left: 0; padding-left: 0; }

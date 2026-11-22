@@ -1,6 +1,7 @@
 import { create } from "zustand";
-import { api, reliabilityOf, type Asset, type Catalog, type ContractWindow, type SimResponse, type Site } from "./api";
+import { api, reliabilityOf, STATIC_DEMO, type Asset, type Catalog, type ContractWindow, type SimResponse, type Site } from "./api";
 import { useStore } from "./store";
+import { pctFine } from "./util";
 import { contractSummary, siteProblems } from "./validate";
 
 /** Size & contract planner (the guide's planning pillar, chapters 8 and 13.3): replay the site's period once per
@@ -137,6 +138,114 @@ export function parsePercents(text: string): number[] | null {
   return [...new Set(out)];
 }
 
+/** Service-level rule (the owner's decision, a setting and not a sourced number): delivering the cars' energy is
+ *  part of the promise, so an option counts as feasible only if the cars' energy left undelivered is at most this
+ *  share of what they asked for. */
+export const DEFAULT_EV_TOLERANCE = 0.01;
+
+export interface EvService {
+  /** Energy the cars asked for (delivered + left short at departure), delivered, and left short (kWh). */
+  requested: number;
+  delivered: number;
+  unmet: number;
+  /** delivered / requested, and its complement. */
+  served: number;
+  short: number;
+  /** The floor subtracted (kWh short even with no grid limit, see evFloor) and the share of requested energy left
+   *  undelivered beyond it: what the rule judges. */
+  floor: number;
+  added: number;
+  feasible: boolean;
+}
+
+/** How well a run served the cars, against the tolerance; null when there is nothing to serve (no EVs, or no car
+ *  asked for energy), in which case the rule does not apply. Requested = ev_delivered_kwh + ev_unmet_kwh (cars
+ *  still plugged in at the end count what they got so far and no shortfall). Feasible when
+ *  (unmet - floor) <= tolerance x requested: cars that would be short even with no grid limit (the floor) are not
+ *  the contract's doing. */
+export function evService(kpis: Record<string, number>, tolerance: number, floorKwh = 0): EvService | null {
+  const d = kpis.ev_delivered_kwh, u = kpis.ev_unmet_kwh;
+  if (typeof d !== "number" || typeof u !== "number") return null;
+  const requested = d + u;
+  if (!(requested > 1e-6)) return null;
+  const short = Math.max(u, 0) / requested;
+  const floor = Math.max(floorKwh, 0);
+  const added = Math.max(u - floor, 0) / requested;
+  return { requested, delivered: d, unmet: u, served: 1 - short, short, floor, added, feasible: added <= tolerance + 1e-9 };
+}
+
+/** "5.3% of car energy undelivered" (the reason an option is not feasible); with a floor, only the part beyond it. */
+export const shortReason = (ev: EvService) => ev.floor > 0.05
+  ? `${pctFine(ev.added)} more car energy undelivered than with no grid limit`
+  : `${pctFine(ev.short)} of car energy undelivered`;
+
+/* ---- The floor: what the cars would miss even with no grid limit ----
+   Charging records are replayed at the time step, so with hourly steps a stay is rounded to whole hours and some
+   cars cannot get all their energy whatever the contract (2.8% on the time-block car park, 5.3% on the Leeds depot,
+   our runs of 22 Nov 2026). The rule should judge what the contract and the control add, so every batch runs one
+   reference: the same site with no import limit, no contract windows, no battery and every car charged at full power
+   from arrival. It depends on neither battery size, contract nor strategy (checked on both EV examples: the same
+   shortfall as with the site's own strategy), so one run serves a whole planner batch and every Compare row on the
+   same site. */
+
+export interface EvFloor { unmetKwh: number; requestedKwh: number }
+
+/** The reference site behind the floor. */
+export function floorSite(site: Site): Site {
+  const s = clone(site);
+  s.grid = { ...s.grid, import_limit_kw: null, contract_windows: [] };
+  s.assets = s.assets.filter((a) => a.type !== "battery");
+  s.controller = { ...s.controller, battery: "idle", ev: "as_fast_as_possible" };
+  return s;
+}
+export const floorKey = (site: Site) => siteKey(floorSite(site));
+const hasEv = (site: Site) => site.assets.some((a) => a.type === "ev_charger");
+
+interface FloorState {
+  /** By floorKey: the floor, "pending" while its reference run is going, or "error" (the rule then uses no floor). */
+  floors: Record<string, EvFloor | "pending" | "error">;
+  /** Run the reference for this site unless it is known or running; resolves to the floor (null without chargers,
+   *  in the static demo, or on error). */
+  ensure: (site: Site) => Promise<EvFloor | null>;
+}
+
+const floorRuns = new Map<string, Promise<EvFloor | null>>();
+
+export const useFloors = create<FloorState>((set, get) => ({
+  floors: {},
+  ensure(site) {
+    if (!hasEv(site) || STATIC_DEMO) return Promise.resolve(null);
+    const key = floorKey(site);
+    const known = get().floors[key];
+    if (known && typeof known === "object") return Promise.resolve(known);
+    const running = floorRuns.get(key);
+    if (running) return running;
+    set((s) => ({ floors: { ...s.floors, [key]: "pending" } }));
+    const p = api.simulate(floorSite(site)).then((r) => {
+      const k = r.result.kpis;
+      const f: EvFloor = { unmetKwh: Math.max(k.ev_unmet_kwh ?? 0, 0), requestedKwh: (k.ev_delivered_kwh ?? 0) + (k.ev_unmet_kwh ?? 0) };
+      set((s) => ({ floors: { ...s.floors, [key]: f } }));
+      return f;
+    }).catch(() => {
+      set((s) => ({ floors: { ...s.floors, [key]: "error" } }));
+      return null;
+    }).finally(() => floorRuns.delete(key));
+    floorRuns.set(key, p);
+    return p;
+  },
+}));
+
+/** The floor state for a site (undefined = not asked for yet). */
+export const floorOf = (floors: FloorState["floors"], site: Site) => floors[floorKey(site)];
+/** The floor in kWh to subtract, 0 while unknown. */
+export const floorKwh = (f: EvFloor | "pending" | "error" | undefined) => (f && typeof f === "object" ? f.unmetKwh : 0);
+
+/** "1" -> 0.01; null when not a share between 0 and 100%. */
+export function parseTolerance(text: string): number | null {
+  const v = Number(text.replace(/%/g, "").trim());
+  return text.trim() !== "" && Number.isFinite(v) && v >= 0 && v <= 100 ? v / 100 : null;
+}
+
 /** The cost a run is ranked by: cost including battery wear when any run priced wear, else the energy bill. */
 export function costKey(runs: PlanRun[]): "total_cost_with_wear" | "total_cost" {
   return runs.some((r) => r.result.result.kpis.battery_wear_priced) ? "total_cost_with_wear" : "total_cost";
@@ -162,6 +271,10 @@ interface PlanState {
   planned: number;
   progress: { done: number; total: number } | null;
   error: string | null;
+  /** Service-level rule: the largest share of the cars' requested energy an option may leave undelivered and still
+   *  count as feasible. Shared with the Compare tab. */
+  evTolerance: number;
+  setEvTolerance: (v: number) => void;
   run: (sizes: number[], contracts: ContractOption[]) => Promise<void>;
   cancel: () => void;
   clear: () => void;
@@ -200,6 +313,8 @@ export const usePlanner = create<PlanState>((set) => ({
   planned: 0,
   progress: null,
   error: null,
+  evTolerance: DEFAULT_EV_TOLERANCE,
+  setEvTolerance(v) { set({ evTolerance: v }); },
 
   async run(sizes, contracts) {
     const { site, catalog } = useStore.getState();
@@ -226,7 +341,8 @@ export const usePlanner = create<PlanState>((set) => ({
           }
         }
       };
-      await Promise.all([worker(), worker()]);
+      // The no-limit reference for the service-level floor runs alongside (one extra run per batch; it fails soft).
+      await Promise.all([worker(), worker(), useFloors.getState().ensure(site)]);
       if (ctrl !== mine) return;
       set({ runs: out.filter((x): x is PlanRun => x !== null), progress: null });
     } catch (e) {
