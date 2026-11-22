@@ -56,6 +56,20 @@ SOURCES: list[dict[str, Any]] = [
                    "recorded. From 2023 part of the car park was already smart-charged.",
     },
     {
+        "id": "leeds", "prefix": "leeds/", "name": "Fleet depot EV charging, United Kingdom",
+        "provider": "Leeds City Council (Data Mill North)", "kind": "measured",
+        "what": "Sessions of the council's own fleet at its depots and offices: plug-in, unplug, energy. The main "
+                "depot (Knowsthorpe HQ) has 11 two-socket charge points.",
+        "used_for": "EV visits at fleet depots", "resolution": "1 min", "coverage": "May-Sep 2023",
+        "licence": "Open Government Licence v3.0", "commercial_use": True,
+        "attribution": "EV Fleet Chargepoint use (Depot Usage 2023), (c) Leeds City Council, 2023, "
+                       "https://datamillnorth.org/dataset/e7ljx/ev-fleet-chargepoint-use. This information is "
+                       "licensed under the terms of the Open Government Licence.",
+        "url": "https://datamillnorth.org/dataset/e7ljx/ev-fleet-chargepoint-use",
+        "caveats": "Five months only. No vehicle IDs, charger ratings or building load. Two-socket posts are "
+                   "split into sockets by our rule (first free socket). A council fleet, not a parcel depot.",
+    },
+    {
         "id": "energycharts", "prefix": "ec/", "name": "Wholesale electricity prices",
         "provider": "Bundesnetzagentur | SMARD.de via Energy-Charts (Fraunhofer ISE)", "kind": "measured",
         "what": "Day-ahead market prices for Germany, the Netherlands, France and western Denmark.",

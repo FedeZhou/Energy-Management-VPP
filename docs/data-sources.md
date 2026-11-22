@@ -14,6 +14,7 @@ The machine-readable version is `src/emsbench/data/registry.py`.
 | **NREL ComStock** 2025 release 1 | Modelled | Small and medium office, shop, warehouse, primary school, hospital, California, per 1,000 m² | 15 min | weather year 2018 | CC BY 4.0 |
 | **SINTEF** EV dataset (Zenodo) | Measured | 81 regular residents' charging sessions in Norwegian shared garages | 1 min | 2018-2021 | CC BY 4.0 |
 | **University of Twente / ElaadNL** (4TU) | Measured | 64 regular drivers at an office car park in Utrecht | 1 min | 2020-2024 | **CC BY-NC-SA 4.0 (non-commercial)** |
+| **Leeds City Council** fleet depots (Data Mill North) | Measured | Council fleet charging sessions; main depot Knowsthorpe HQ with 11 two-socket charge points | 1 min | May-Sep 2023 | OGL v3.0 |
 | **Energy-Charts** (SMARD data) | Measured | Day-ahead prices: Germany, Netherlands, France, western Denmark | 15 min | from Oct 2025 | CC BY 4.0 |
 | **Eurostat** nrg_pc_204_c / nrg_pc_205_c | Statistics | Household and business price components (energy, network, taxes) for 15 countries | annual | 2025 | CC BY 4.0 |
 | **Open-Meteo** weather + **pvlib** | Modelled | Solar output per kWp: Konstanz, Amsterdam, Paris, Aarhus, Los Angeles; south 30° and east-west 15° | 15 min | from Oct 2025 | CC BY 4.0 / BSD-3 |
@@ -36,6 +37,9 @@ Required by the CC BY licences; also shown in the app.
   Norway*. Zenodo. https://doi.org/10.5281/zenodo.12730566
 - Winschermann, L. et al. *Electric Vehicle Charging Session Data of Large Office Parking Lot*. 4TU.ResearchData.
   https://doi.org/10.4121/80ef3824-3f5d-4e45-8794-3b8791efbd13 (CC BY-NC-SA 4.0)
+- *EV Fleet Chargepoint use* (Depot Usage 2023), (c) Leeds City Council, 2023,
+  https://datamillnorth.org/dataset/e7ljx/ev-fleet-chargepoint-use. This information is licensed under the terms of the
+  Open Government Licence (v3.0).
 - Bundesnetzagentur | SMARD.de, via the Energy-Charts API of Fraunhofer ISE (api.energy-charts.info).
 - Eurostat, nrg_pc_204_c (https://doi.org/10.2908/NRG_PC_204_C) and nrg_pc_205_c (https://doi.org/10.2908/NRG_PC_205_C).
 - Weather data by Open-Meteo.com (CC BY 4.0). pvlib python (BSD-3). Dobos, A. P. (2014), *PVWatts Version 5 Manual*,
@@ -67,6 +71,14 @@ Required by the CC BY licences; also shown in the app.
 - **Twente:** shared IDs listed in the dataset README removed; drivers with at least 150 visits; IDs averaging more than 2
   sessions per weekday removed as shared or fleet cards (our rule; it removed one ID with ~6.6 sessions a day). From March
   2023 part of the car park was smart-charged by the site's controller.
+- **Leeds fleet depots** (`data/leeds.py`): file "Depot Usage 2023 May to November"; sessions actually run 23 Apr -
+  2 Oct 2023, so coverage is set to whole months (1 May - 1 Oct 2023). Rows with 0 kWh (485 of 4,684) or a non-positive
+  duration (7) dropped. Charge start/end equal plug-in/unplug in every row. No charge point ever has more than two
+  cars plugged in at once, so each is read as a two-socket post and every session goes to the first free socket (our
+  rule; the engine models one car per charger). UK summer time (UTC+1) equals fixed CET, so clock times are unchanged.
+  Charger ratings are not in the file: the highest average session power at Knowsthorpe HQ is 7.2 kW (99th percentile
+  per charge point 6.3-7.2 kW), consistent with 7.4 kW (230 V x 32 A) AC sockets. The July-Sept 2020 file of the same
+  dataset is not used (different format; its chargers cannot be matched to the 2023 IDs).
 - **Energy-Charts:** each response states its licence; zones that are not CC BY are rejected automatically.
 - **Eurostat:** the "taxes, fees, levies and charges" component already includes VAT. Household total = energy + network +
   taxes; business prices exclude VAT (recoverable). Price adder = network + taxes. This approximates a dynamic tariff
@@ -92,6 +104,14 @@ Required by the CC BY licences; also shown in the app.
 | Norwegian day-ahead prices (Energy-Charts NO1) | "Private and internal use only"; commercial use prohibited. |
 | Caltech ACN-Data (GitHub copy) | No licence attached; official API needs a personal key. |
 | Google data center power traces | CC BY 4.0, but only through BigQuery with a cloud account. Candidate for later. |
+| UK Power Networks **Optimise Prime** WS2 (Royal Mail depots) | CC BY 4.0 ("license: CC BY 4.0" in the UKPN Open Data Portal record `ukpn-optimise-prime`) and the best depot data found: charge-point power, building load and the real *profiled connections* (time-windowed limits) of each depot, 2020-2022. Charge-point measurements alone are 733 daily files, about 127 GB, plus 4.7 GB of building load, behind a yearly-rotating access token. Too large for a first-run download; candidate for a one-off processing script. |
+| City of Boulder EV charging station data | CC0 ("CC0 License" in the ArcGIS item; DCAT feed `license: creativecommons.org/publicdomain/zero/1.0`). 148,000 sessions at city-owned public chargers, 2018-2023. Commercially usable; public chargers, not a depot. Candidate for a public-charging example. |
+| DfT *Electric Chargepoint Analysis 2017: Local Authority Rapids* | OGL v3.0 ("All content is available under the Open Government Licence v3.0, except where otherwise stated", gov.uk). Single public rapid chargers in 27 English local authorities; chargers are not grouped by site, so no hub can be built. |
+| Dundee City Council public EV charge point usage (2021-2025) | No licence stated: `licenseInfo` empty in every ArcGIS item and no licence in the portal's DCAT feed (checked 2026-11-22). Not usable until the council states one. |
+| ElaadNL open data | Aggregated dashboards; "free to use" but no formal licence and no session-level download found. |
+| Dutch municipal open data (data.overheid.nl) | Searched "laadsessies", "laadpaal transacties", "laadpalen": only charge point locations (CC BY / CC0), no sessions. |
+| Palo Alto EV charging station usage (2011-2020) | City's own Open Data Terms: no named licence, commercial use not expressly permitted ("does not create any right ... not expressly stated"). |
+| Barnet *Electric Vehicle Charging Transactions*, Perth & Kinross session data | No licence in the data.gov.uk record (Barnet) or on the IEEE DataPort listing (Perth & Kinross; the council's charger *locations* are OGL). Not verified further. |
 
 ## Validation checks
 

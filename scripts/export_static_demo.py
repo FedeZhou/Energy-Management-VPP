@@ -10,8 +10,9 @@ API once (in-process, via FastAPI's TestClient) and writes its answers as JSON i
 A static build of the frontend (VITE_STATIC_DEMO=1) reads these files instead of calling the API. Changing a site
 in the demo shows a message pointing to the live app (Codespaces or a local install).
 
-Examples whose data carries a non-commercial licence (CC BY-NC-SA: the Utrecht workplace EV sessions) are left out
-of the public demo; they stay available in the live app.
+Examples that use data from a source whose licence does not allow commercial use (`commercial_use: False` in
+src/emsbench/data/registry.py, e.g. the CC BY-NC-SA Utrecht workplace EV sessions) are left out of the public demo;
+they stay available in the live app.
 
 Usage:  python scripts/export_static_demo.py [--only PRESET ...]
 """
@@ -27,15 +28,18 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from emsbench.api.app import app
+from emsbench.data.registry import SOURCES
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "web" / "app" / "public" / "demo"
-NON_COMMERCIAL_PROFILE_PREFIXES = ("utwente/",)  # licence CC BY-NC-SA 4.0: not republished in the public demo
+# Profile id prefixes of sources whose licence forbids commercial use (e.g. CC BY-NC-SA): not republished in the
+# public demo. Read from the registry so a new source is filtered by its recorded licence, not by a list kept here.
+NON_COMMERCIAL_PROFILE_PREFIXES = tuple(str(s["prefix"]) for s in SOURCES if not s["commercial_use"])
 
 
 def uses_non_commercial_data(site: dict[str, object]) -> bool:
     text = json.dumps(site)
-    return any(prefix in text for prefix in NON_COMMERCIAL_PROFILE_PREFIXES)
+    return any(f'"{prefix}' in text for prefix in NON_COMMERCIAL_PROFILE_PREFIXES)
 
 
 def run_key(preset_id: str, battery: str, forecast: str) -> str:
